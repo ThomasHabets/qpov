@@ -17,6 +17,10 @@ const (
 	Version = 29
 )
 
+var (
+	Verbose = false
+)
+
 type dentry struct {
 	Offset uint32
 	Size   uint32
@@ -231,14 +235,20 @@ func Load(r myReader) (*BSP, error) {
 	for _, f := range fs {
 		var p Polygon
 		first, last := f.LEdge, f.LEdge+uint32(f.LEdgeNum)
-		fmt.Printf("LEdges: %v (%d to %d of %v)\n", f.LEdgeNum, first, last-1, numLEdges)
+		if Verbose {
+		log.Printf("LEdges: %v (%d to %d of %v)\n", f.LEdgeNum, first, last-1, numLEdges)
+		}
 		for i := first; i < last; i++ {
-			fmt.Printf(" LEdge: %v\n", i)
+			if Verbose{
+			log.Printf(" LEdge: %v\n", i)
+			}
 			if i >= numLEdges {
 				log.Fatalf("Index to LEdge OOB")
 			}
 			e := les[i]
-			fmt.Printf("  Edge %d\n", e)
+if Verbose {
+			log.Printf("  Edge %d\n", e)
+}
 			if e == 0 {
 				log.Fatalf("Tried to reference edge 0")
 			}
@@ -260,8 +270,10 @@ func Load(r myReader) (*BSP, error) {
 				Y: vs[vi1].Y,
 				Z: vs[vi1].Z,
 			}
-			fmt.Printf("   Coord: %v\n", v0)
-			fmt.Printf("   Coord: %v\n", v1)
+if Verbose {
+			log.Printf("   Coord: %v\n", v0)
+			log.Printf("   Coord: %v\n", v1)
+}
 			if i == first {
 				p.Vertex = append(p.Vertex, v0)
 			}
@@ -269,7 +281,9 @@ func Load(r myReader) (*BSP, error) {
 		}
 		if len(p.Vertex) > 0 {
 			ret.Polygons = append(ret.Polygons, p)
-			fmt.Printf("Added:  %v\n", p)
+			if Verbose {
+			log.Printf("Added:  %v\n", p)
+			}
 		}
 	}
 	return ret, nil
