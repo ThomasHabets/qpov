@@ -218,7 +218,7 @@ func (d *Demo) Read() error {
 		}
 		//log.Printf("Block: %v", block)
 		d.block = bytes.NewBuffer(block)
-		d.ViewAngle = bh.ViewAngle
+		//d.ViewAngle = bh.ViewAngle
 	}
 	tail := d.block.String()
 	typ, err := readUint8(d.block)
@@ -296,9 +296,10 @@ func (d *Demo) Read() error {
 		readUint8(d.block)
 		readUint8(d.block)
 	case 0x0A: // Camera orientation.
-		readAngle(d.block)
-		readAngle(d.block)
-		readAngle(d.block)
+		x, _ := readAngle(d.block)
+		y, _ := readAngle(d.block)
+		z, _ := readAngle(d.block)
+		log.Printf("Camera orientation changed to %f %f %f", x, y, z)
 	case 0x05: // Camera pos to this entity.
 		d.CameraEnt, _ = readUint16(d.block)
 		log.Printf("Camera object changed to %d", d.CameraEnt)

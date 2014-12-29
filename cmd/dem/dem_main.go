@@ -2,18 +2,17 @@ package main
 
 import (
 	"flag"
-"strings"
 	"fmt"
-	"log"
 	"io"
+	"log"
+	"math"
 	"os"
+	"strings"
 
-	"github.com/ThomasHabets/bsparse/pak"
 	"github.com/ThomasHabets/bsparse/bsp"
 	"github.com/ThomasHabets/bsparse/dem"
+	"github.com/ThomasHabets/bsparse/pak"
 )
-
-
 
 func main() {
 	flag.Parse()
@@ -31,6 +30,7 @@ func main() {
 	df := p.Get(flag.Arg(1))
 	d := dem.Open(df)
 	oldPos := dem.Vertex{}
+	oldView := dem.Vertex{}
 	var level *bsp.BSP
 	var frame int
 	for {
@@ -46,13 +46,15 @@ func main() {
 			if err != nil {
 				log.Fatalf("Level loading %q: %v", d.Level, err)
 			}
+			log.Printf("Level start pos: %s", level.StartPos.String())
 			d.Pos.X = level.StartPos.X
 			d.Pos.Y = level.StartPos.Y
 			d.Pos.Z = level.StartPos.Z
 		}
 		if oldPos != d.Pos {
-			//fmt.Printf("Pos: %v %v\n", oldPos, d.Pos)
+			fmt.Printf("Frame %d: Pos: %v -> %v, viewAngle %v -> %v\n", frame, oldPos, d.Pos, oldView, d.ViewAngle)
 			oldPos = d.Pos
+			oldView = d.ViewAngle
 			writePOV(fmt.Sprintf("render/frame-%08d.pov", frame), level, d)
 			frame++
 		}
@@ -67,9 +69,9 @@ func writePOV(fn string, level *bsp.BSP, d *dem.Demo) {
 	defer fo.Close()
 
 	lookAt := bsp.Vertex{
-		X: d.ViewAngle.X,
-		Y: d.ViewAngle.Y,
-		Z: d.ViewAngle.Z,
+		X: d.Pos.X + float32(math.Sin(float64(d.ViewAngle.Y))),
+		Y: d.Pos.Y + float32(math.Cos(float64(d.ViewAngle.Y))),
+		Z: d.Pos.Z,
 	}
 	pos := bsp.Vertex{
 		X: d.Pos.X,
