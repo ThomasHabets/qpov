@@ -37,7 +37,7 @@ type fileHeader struct {
 	Leaves    dentry
 	Lface     dentry
 	Edges     dentry
-	Ledges    dentry
+	LEdges    dentry
 	Models    dentry
 }
 
@@ -111,9 +111,6 @@ func parseEntities(in string) ([]map[string]string, error) {
 			m := re.FindStringSubmatch(scanner.Text())
 			if len(m) != 3 {
 				return nil, fmt.Errorf("parse error on %q", scanner.Text())
-			}
-			if m[1] == "classname" {
-				fmt.Printf("Class: %q\n", m[2])
 			}
 			ent[m[1]] = m[2]
 		}
@@ -200,6 +197,21 @@ func Load(r myReader) (*BSP, error) {
 		return nil, err
 	}
 
+	// Load ledges.
+	ledgeSize := uint32(4)
+	numLEdges := h.LEdges.Size / ledgeSize
+	if h.LEdges.Size%ledgeSize != 0 {
+		return nil, fmt.Errorf("ledge sizes %v not divisable by %v", h.Edges.Size, ledgeSize)
+	}
+	les := make([]int32, numLEdges, numLEdges)
+	if _, err := r.Seek(int64(h.LEdges.Offset), 0); err != nil {
+		return nil, err
+	}
+	if err := binary.Read(r, binary.LittleEndian, &les); err != nil {
+		return nil, err
+	}
+	//fmt.Printf("LEdges: %v\n", les)
+
 	// Load entities.
 	if _, err := r.Seek(int64(h.Entities.Offset), 0); err != nil {
 		return nil, err
@@ -219,31 +231,45 @@ func Load(r myReader) (*BSP, error) {
 	for _, f := range fs {
 		var p Polygon
 		first, last := f.LEdge, f.LEdge+uint32(f.LEdgeNum)
-		fmt.Printf("Edges: %v (%d to %d of %v)\n", f.LEdgeNum, first, last-1, numEdges)
+		fmt.Printf("LEdges: %v (%d to %d of %v)\n", f.LEdgeNum, first, last-1, numLEdges)
 		for i := first; i < last; i++ {
-			//fmt.Printf(" Edge: %v of %v\n", i, numEdges)
-			if i >= numEdges {
-				continue
+			fmt.Printf(" LEdge: %v\n", i)
+			if i >= numLEdges {
+				log.Fatalf("Index to LEdge OOB")
 			}
-			//fmt.Printf("  Vertex: %v -> %v (of %v)\n", es[i].From, es[i].To, numVertices)
+			e := les[i]
+			fmt.Printf("  Edge %d\n", e)
+			if e == 0 {
+				log.Fatalf("Tried to reference edge 0")
+			}
+			var vi0,vi1 uint16
+			if e < 0 {
+				e = -e
+				vi1,vi0 = es[e].From, es[e].To
+			} else {
+				vi0,vi1 = es[e].From, es[e].To
+			}
+			//fmt.Printf("  Vertex: %v -> %v (of %v)\n", es[e].From, es[e].To, numVertices)
 			v0 := Vertex{
-				X: vs[es[i].From].X,
-				Y: vs[es[i].From].Y,
-				Z: vs[es[i].From].Z,
+				X: vs[vi0].X,
+				Y: vs[vi0].Y,
+				Z: vs[vi0].Z,
 			}
-			//fmt.Printf("   Coord: %v\n", v0)
-			//fmt.Printf("   Coord: %v\n", v1)
-			p.Vertex = append(p.Vertex, v0)
-		}
-		if last < numEdges {
-			p.Vertex = append(p.Vertex, Vertex{
-				X: vs[es[last-1].To].X,
-				Y: vs[es[last-1].To].Y,
-				Z: vs[es[last-1].To].Z,
-			})
+			v1 := Vertex{
+				X: vs[vi1].X,
+				Y: vs[vi1].Y,
+				Z: vs[vi1].Z,
+			}
+			fmt.Printf("   Coord: %v\n", v0)
+			fmt.Printf("   Coord: %v\n", v1)
+			if i == first {
+				p.Vertex = append(p.Vertex, v0)
+			}
+			p.Vertex = append(p.Vertex, v1)
 		}
 		if len(p.Vertex) > 0 {
 			ret.Polygons = append(ret.Polygons, p)
+			fmt.Printf("Added:  %v\n", p)
 		}
 	}
 	return ret, nil

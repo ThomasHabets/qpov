@@ -44,13 +44,17 @@ func main() {
 			Z: 128,
 		}
 	}
+	lookAt := startPos
+	lookAt.Y += 10
+	sky := bsp.Vertex{Z: 1}
 	fmt.Fprintf(fo, `#include "colors.inc"
 light_source { <%s> color White }
 camera {
   location <%s>
-  look_at <-408,-64,128>
+  sky <%s>
+  look_at <%s>
 }
-`, startPos.String(), startPos.String())
+`, startPos.String(), startPos.String(), sky.String(), lookAt.String())
 	fmt.Printf("Polygons: %v\n", len(level.Polygons))
 	for _, p := range level.Polygons {
 		vs := []string{}
@@ -67,7 +71,7 @@ camera {
   pigment { Green }
 }
 `, len(p.Vertex), strings.Join(vs, ",\n  "))
-
+if false {
 		for i, j := 0, len(vs)-1; i < j; i, j = i+1, j-1 {
 			vs[i], vs[j] = vs[j], vs[i]
 		}
@@ -81,5 +85,6 @@ camera {
   pigment { Green }
 }
 `, len(p.Vertex), strings.Join(vs, ",\n  "))
+	}
 	}
 }
