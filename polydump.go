@@ -2,16 +2,14 @@ package main
 
 import (
 	"flag"
-"strings"
-	"os"
-	"log"
 	"fmt"
+	"log"
+	"os"
+	"strings"
 
-	"github.com/ThomasHabets/bsparse/pak"
 	"github.com/ThomasHabets/bsparse/bsp"
+	"github.com/ThomasHabets/bsparse/pak"
 )
-
-
 
 func main() {
 	flag.Parse()
@@ -29,7 +27,7 @@ func main() {
 			fmt.Printf("%s @%v size=%v\n", n, e.Pos, e.Size)
 		}
 	}
-	bsp, err := bsp.Load(p.Get("maps/e1m1.bsp"))
+	level, err := bsp.Load(p.Get("maps/e1m1.bsp"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -37,19 +35,41 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-defer 	fo.Close()
+	defer fo.Close()
+	startPos := level.StartPos
+	if false {
+		startPos = bsp.Vertex{
+			X: -408,
+			Y: -128,
+			Z: 128,
+		}
+	}
 	fmt.Fprintf(fo, `#include "colors.inc"
-light_source { <-408, -128, 128> color White }
+light_source { <%s> color White }
 camera {
-  location <-408,-128,128>
+  location <%s>
   look_at <-408,-64,128>
 }
-`)
-	fmt.Printf("Polygons: %v\n", len(bsp.Polygons))
-	for _, p := range bsp.Polygons {
+`, startPos.String(), startPos.String())
+	fmt.Printf("Polygons: %v\n", len(level.Polygons))
+	for _, p := range level.Polygons {
 		vs := []string{}
 		for _, v := range p.Vertex {
 			vs = append(vs, fmt.Sprintf("<%f,%f,%f>", v.X, v.Y, v.Z))
+		}
+		fmt.Fprintf(fo, `polygon {
+  %d,
+  %s
+  finish {
+    ambient 0.1
+    diffuse 0.6
+  }
+  pigment { Green }
+}
+`, len(p.Vertex), strings.Join(vs, ",\n  "))
+
+		for i, j := 0, len(vs)-1; i < j; i, j = i+1, j-1 {
+			vs[i], vs[j] = vs[j], vs[i]
 		}
 		fmt.Fprintf(fo, `polygon {
   %d,
