@@ -7,11 +7,16 @@ import (
 	"log"
 	"math"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/ThomasHabets/bsparse/bsp"
 	"github.com/ThomasHabets/bsparse/dem"
 	"github.com/ThomasHabets/bsparse/pak"
+)
+
+var (
+	outDir = flag.String("out", "render", "Output directory.")
 )
 
 func main() {
@@ -33,6 +38,7 @@ func main() {
 	oldView := dem.Vertex{}
 	var level *bsp.BSP
 	var frame int
+	var levelfn string
 	for {
 		err := d.Read()
 		if err == io.EOF {
@@ -50,44 +56,25 @@ func main() {
 			d.Pos.X = level.StartPos.X
 			d.Pos.Y = level.StartPos.Y
 			d.Pos.Z = level.StartPos.Z
+			levelfn = fmt.Sprintf("%s.inc", path.Base(d.Level))
+			writeLevel(path.Join(*outDir, levelfn), level)
 		}
 		if oldPos != d.Pos {
 			fmt.Printf("Frame %d: Pos: %v -> %v, viewAngle %v -> %v\n", frame, oldPos, d.Pos, oldView, d.ViewAngle)
 			oldPos = d.Pos
 			oldView = d.ViewAngle
-			writePOV(fmt.Sprintf("render/frame-%08d.pov", frame), level, d)
+			writePOV(path.Join(*outDir, fmt.Sprintf("frame-%08d.pov", frame)), levelfn, level, d)
 			frame++
 		}
 	}
 }
 
-func writePOV(fn string, level *bsp.BSP, d *dem.Demo) {
+func writeLevel(fn string, level *bsp.BSP) {
 	fo, err := os.Create(fn)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer fo.Close()
-
-	lookAt := bsp.Vertex{
-		X: d.Pos.X + float32(math.Sin(float64(d.ViewAngle.Y))),
-		Y: d.Pos.Y + float32(math.Cos(float64(d.ViewAngle.Y))),
-		Z: d.Pos.Z,
-	}
-	pos := bsp.Vertex{
-		X: d.Pos.X,
-		Y: d.Pos.Y,
-		Z: d.Pos.Z,
-	}
-
-	fmt.Fprintf(fo, `#include "colors.inc"
-light_source { <%s> color White }
-camera {
-  location <%s>
-  sky <0,0,1>
-  right <-1,0,0>
-  look_at <%s>
-}
-`, pos.String(), pos.String(), lookAt.String())
 	for _, p := range level.Polygons {
 		vs := []string{}
 		for _, v := range p.Vertex {
@@ -100,8 +87,52 @@ camera {
     ambient 0.1
     diffuse 0.6
   }
-  pigment { Green }
+  pigment { %s }
 }
-`, len(p.Vertex), strings.Join(vs, ",\n  "))
+`, len(p.Vertex), strings.Join(vs, ",\n  "), randColor())
 	}
+}
+
+func writePOV(fn string, levelfn string, level *bsp.BSP, d *dem.Demo) {
+	fo, err := os.Create(fn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer fo.Close()
+
+	lookAt := bsp.Vertex{
+		X: d.Pos.X + float32(math.Sin(float64(d.ViewAngle.Y))),
+		Y: d.Pos.Y + float32(math.Cos(float64(d.ViewAngle.Y))),
+		Z: d.Pos.Z + float32(math.Sin(float64(d.ViewAngle.X))),
+	}
+	pos := bsp.Vertex{
+		X: d.Pos.X,
+		Y: d.Pos.Y,
+		Z: d.Pos.Z,
+	}
+
+	fmt.Fprintf(fo, `#include "colors.inc"
+#include "%s"
+light_source { <%s> color White }
+camera {
+  location <%s>
+  sky <0,0,1>
+  right <-1,0,0>
+  look_at <%s>
+}
+`, levelfn, pos.String(), pos.String(), lookAt.String())
+}
+
+var randColorState int
+
+func randColor() string {
+	randColorState++
+	colors := []string{
+		"Green",
+		"White",
+		"Blue",
+		"Red",
+		"Yellow",
+	}
+	return colors[randColorState%len(colors)]
 }

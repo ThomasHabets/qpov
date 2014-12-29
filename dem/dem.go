@@ -35,12 +35,12 @@ const (
 	U_ORIGIN1    = 0x0002
 	U_ORIGIN2    = 0x0004
 	U_ORIGIN3    = 0x0008
-	U_ANGLE2     = 0x0010 // read coord
+	U_ANGLE2     = 0x0010 // read angle
 	U_NOLERP     = 0x0020 // don't interpolate movement
 	U_FRAME      = 0x0040 // read one more
 	U_SIGNAL     = 0x0080
-	U_ANGLE1     = 0x0100 // read coord
-	U_ANGLE3     = 0x0200 // read coord
+	U_ANGLE1     = 0x0100 // read angle
+	U_ANGLE3     = 0x0200 // read angle
 	U_MODEL      = 0x0400 // read byte
 	U_COLORMAP   = 0x0800
 	U_SKIN       = 0x1000
@@ -193,8 +193,12 @@ func readAngle(r io.Reader) (float32, error) {
 	return float32(t) / 256.0 * 360.0, err
 }
 
-func readFloat(r io.Reader) (uint32, error) {
-	return readUint32(r)
+func readFloat(r io.Reader) (float32, error) {
+	var ret float32
+	if err := binary.Read(r, binary.LittleEndian, &ret); err != nil {
+		return 0, err
+	}
+	return ret, nil
 }
 
 func readUint16(r io.Reader) (uint16, error) {
@@ -211,7 +215,7 @@ func (d *Demo) Read() error {
 		if err := binary.Read(d.r, binary.LittleEndian, &bh); err != nil {
 			return err
 		}
-		//fmt.Printf("Read block of size %d (%x)\n", bh.Blocksize, bh.Blocksize)
+		log.Printf("Read block of size %d (%x)\n", bh.Blocksize, bh.Blocksize)
 		block := make([]byte, bh.Blocksize, bh.Blocksize)
 		if _, err := d.r.Read(block); err != nil {
 			log.Fatalf("Reading block of size %d: %v", bh.Blocksize, err)
@@ -235,6 +239,39 @@ func (d *Demo) Read() error {
 		i, _ := readUint8(d.block)
 		v, _ := readUint32(d.block)
 		log.Printf("Setting %d to %d", i, v)
+	case 0x05: // Camera pos to this entity.
+		d.CameraEnt, _ = readUint16(d.block)
+		log.Printf("Camera object changed to %d", d.CameraEnt)
+	case 0x06: // Play sound.
+		mask, _ := readUint8(d.block)
+		if mask&0x1 != 0 {
+			readUint8(d.block)
+		}
+		if mask&0x2 != 0 {
+			readUint8(d.block)
+		}
+		readUint16(d.block)
+		readUint8(d.block)
+		readCoord(d.block)
+		readCoord(d.block)
+		readCoord(d.block)
+	case 0x07: // time
+		t, _ := readFloat(d.block)
+		if Verbose {
+			log.Printf("Time: %f", t)
+		}
+	case 0x08: // Print
+		s, _ := readString(d.block)
+		log.Printf("Print: %q", s)
+	case 0x09: // Stufftext
+		s, _ := readString(d.block)
+		log.Printf("Stufftext: %q", s)
+	case 0x0b:
+		si, err := parseServerInfo(d.block)
+		if err != nil {
+			log.Fatalf("Serverinfo: %v", err)
+		}
+		d.Level = si.Models[0]
 	case 0x0c: // light style
 		readUint8(d.block)
 		readString(d.block)
@@ -248,12 +285,6 @@ func (d *Demo) Read() error {
 	case 0x11: // set colors
 		readUint8(d.block)
 		readUint8(d.block)
-	case 11:
-		si, err := parseServerInfo(d.block)
-		if err != nil {
-			log.Fatalf("Serverinfo: %v", err)
-		}
-		d.Level = si.Models[0]
 
 	case 0x1d: // spawnstaticsound
 		readCoord(d.block)
@@ -265,8 +296,6 @@ func (d *Demo) Read() error {
 	case 0x19: // This message selects the client state.
 		state, _ := readUint8(d.block)
 		log.Printf("Set state: %v", state)
-	case 0x07: // time
-		readFloat(d.block)
 	case 0x16: // spawnbaseline
 		readUint16(d.block)
 
@@ -300,38 +329,6 @@ func (d *Demo) Read() error {
 		y, _ := readAngle(d.block)
 		z, _ := readAngle(d.block)
 		log.Printf("Camera orientation changed to %f %f %f", x, y, z)
-	case 0x05: // Camera pos to this entity.
-		d.CameraEnt, _ = readUint16(d.block)
-		log.Printf("Camera object changed to %d", d.CameraEnt)
-	case 0x06: // Play sound.
-		mask, _ := readUint8(d.block)
-		if mask&0x1 != 0 {
-			readUint8(d.block)
-		}
-		if mask&0x2 != 0 {
-			readUint8(d.block)
-		}
-		readUint16(d.block)
-		readUint8(d.block)
-		readCoord(d.block)
-		readCoord(d.block)
-		readCoord(d.block)
-	case 0x21: // sell screen
-	case 0x08: // Print
-		s, _ := readString(d.block)
-		log.Printf("Print: %q", s)
-	case 0x09: // Stufftext
-		s, _ := readString(d.block)
-		log.Printf("Stufftext: %q", s)
-	case 0x1a: // centerprint
-		readString(d.block)
-	case 0x1b: // killed monster
-	case 0x13: // damage
-		readUint8(d.block)
-		readUint8(d.block)
-		readCoord(d.block)
-		readCoord(d.block)
-		readCoord(d.block)
 	case 0x0F: // client data
 		mask, _ := readUint16(d.block)
 		if Verbose {
@@ -414,6 +411,16 @@ func (d *Demo) Read() error {
 			log.Printf("Weapon: %v", weapon)
 			log.Printf("After clientdata: %v", []byte(d.block.String()))
 		}
+	case 0x21: // sell screen
+	case 0x1a: // centerprint
+		readString(d.block)
+	case 0x1b: // killed monster
+	case 0x13: // damage
+		readUint8(d.block)
+		readUint8(d.block)
+		readCoord(d.block)
+		readCoord(d.block)
+		readCoord(d.block)
 	default:
 		if typ < 0x80 {
 			d.block = nil
@@ -452,6 +459,10 @@ func (d *Demo) Read() error {
 		if mask&U_ORIGIN1 != 0 {
 			a, _ := readCoord(d.block)
 			if ent == d.CameraEnt {
+				if Verbose {
+					log.Printf("Camera ent %v X %f", ent, a)
+				}
+				_ = a
 				d.Pos.X = a
 			}
 		}
@@ -464,7 +475,11 @@ func (d *Demo) Read() error {
 		if mask&U_ORIGIN2 != 0 {
 			a, _ := readCoord(d.block)
 			if ent == d.CameraEnt {
+				if Verbose {
+					log.Printf("Camera ent %v Y %f", ent, a)
+				}
 				d.Pos.Y = a
+				_ = a
 			}
 		}
 		if mask&U_ANGLE2 != 0 {
@@ -476,7 +491,11 @@ func (d *Demo) Read() error {
 		if mask&U_ORIGIN3 != 0 {
 			a, _ := readCoord(d.block)
 			if ent == d.CameraEnt {
+				if Verbose {
+					log.Printf("Camera ent %v Z %f", ent, a)
+				}
 				d.Pos.Z = a
+				_ = a
 			}
 		}
 		if mask&U_ANGLE3 != 0 {
