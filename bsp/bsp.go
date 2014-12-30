@@ -35,7 +35,7 @@ type fileHeader struct {
 	Vertices  dentry
 	Visilist  dentry
 	Nodes     dentry
-	Texinfo   dentry
+	TexInfo   dentry
 	Faces     dentry
 	Lightmaps dentry
 	Clipnodes dentry
@@ -60,6 +60,40 @@ type fileFace struct {
 	Lightmap  uint32
 }
 
+const fileTexInfoSize = 3*4 + 4 + 3*4 + 4 + 4 + 4
+
+type fileTexInfo struct {
+	SectorS   Vertex  // S vector, horizontal in texture space)
+	DistS     float32 // horizontal offset in texture space
+	VectorT   Vertex  // T vector, vertical in texture space
+	DistT     float32 // vertical offset in texture space
+	TextureID uint32  // Index of Mip Texture must be in [0,numtex[
+	Animated  uint32  // 0 for ordinary textures, 1 for water
+}
+
+const fileMiptexSize = 16 + 4 + 4 + 4*4
+
+type fileMiptex struct {
+	NameBytes [16]byte // Name of the texture.
+	Width     uint32   // width of picture, must be a multiple of 8
+	Height    uint32   // height of picture, must be a multiple of 8
+	Offset1   uint32   // offset to u_char Pix[width   * height]
+	Offset2   uint32   // offset to u_char Pix[width/2 * height/2]
+	Offset4   uint32   // offset to u_char Pix[width/4 * height/4]
+	Offset8   uint32   // offset to u_char Pix[width/8 * height/8]
+}
+
+func (f *fileMiptex) Name() string {
+	s := ""
+	for _, ch := range f.NameBytes {
+		if ch == 0 {
+			break
+		}
+		s = fmt.Sprintf("%s%c", s, ch)
+	}
+	return s
+}
+
 const fileVertexSize = 4 * 3
 
 type fileVertex struct {
@@ -82,7 +116,8 @@ func (v *Vertex) String() string {
 }
 
 type Polygon struct {
-	Vertex []Vertex
+	Texture string
+	Vertex  []Vertex
 }
 
 type BSP struct {
@@ -206,7 +241,7 @@ func Load(r myReader) (*BSP, error) {
 	ledgeSize := uint32(4)
 	numLEdges := h.LEdges.Size / ledgeSize
 	if h.LEdges.Size%ledgeSize != 0 {
-		return nil, fmt.Errorf("ledge sizes %v not divisable by %v", h.Edges.Size, ledgeSize)
+		return nil, fmt.Errorf("ledge sizes %v not divisable by %v", h.LEdges.Size, ledgeSize)
 	}
 	les := make([]int32, numLEdges, numLEdges)
 	if _, err := r.Seek(int64(h.LEdges.Offset), 0); err != nil {
@@ -216,6 +251,43 @@ func Load(r myReader) (*BSP, error) {
 		return nil, err
 	}
 	//fmt.Printf("LEdges: %v\n", les)
+
+	// Load texinfo.
+	numTexInfos := h.TexInfo.Size / fileTexInfoSize
+	if h.TexInfo.Size%fileTexInfoSize != 0 {
+		return nil, fmt.Errorf("texInfo size %v not divisible by %v", h.TexInfo.Size, fileTexInfoSize)
+	}
+	tes := make([]fileTexInfo, numTexInfos, numTexInfos)
+	if _, err := r.Seek(int64(h.TexInfo.Offset), 0); err != nil {
+		return nil, err
+	}
+	if err := binary.Read(r, binary.LittleEndian, &tes); err != nil {
+		return nil, err
+	}
+
+	// Load miptex.
+	if _, err := r.Seek(int64(h.Miptex.Offset), 0); err != nil {
+		return nil, err
+	}
+	var numMipTex uint32
+	if err := binary.Read(r, binary.LittleEndian, &numMipTex); err != nil {
+		return nil, err
+	}
+	log.Printf("Number of textures: %d", numMipTex)
+	mipTexOfs := make([]uint32, numMipTex, numMipTex)
+	mtes := make([]fileMiptex, numMipTex, numMipTex)
+	if err := binary.Read(r, binary.LittleEndian, &mipTexOfs); err != nil {
+		return nil, err
+	}
+	for n := range mipTexOfs {
+		if _, err := r.Seek(int64(h.Miptex.Offset+mipTexOfs[n]), 0); err != nil {
+			return nil, err
+		}
+		if err := binary.Read(r, binary.LittleEndian, &mtes[n]); err != nil {
+			return nil, err
+		}
+		log.Printf("Miptex %s: %v", mtes[n].Name(), mtes[n])
+	}
 
 	// Load entities.
 	if _, err := r.Seek(int64(h.Entities.Offset), 0); err != nil {
@@ -233,32 +305,35 @@ func Load(r myReader) (*BSP, error) {
 	}
 	ret.StartPos = findStart(ents)
 
+	// Assemble polygons.
 	for _, f := range fs {
-		var p Polygon
+		p := Polygon{
+			Texture: mtes[tes[f.TexinfoID].TextureID].Name(),
+		}
 		first, last := f.LEdge, f.LEdge+uint32(f.LEdgeNum)
 		if Verbose {
-		log.Printf("LEdges: %v (%d to %d of %v)\n", f.LEdgeNum, first, last-1, numLEdges)
+			log.Printf("LEdges: %v (%d to %d of %v)\n", f.LEdgeNum, first, last-1, numLEdges)
 		}
 		for i := first; i < last; i++ {
-			if Verbose{
-			log.Printf(" LEdge: %v\n", i)
+			if Verbose {
+				log.Printf(" LEdge: %v\n", i)
 			}
 			if i >= numLEdges {
 				log.Fatalf("Index to LEdge OOB")
 			}
 			e := les[i]
-if Verbose {
-			log.Printf("  Edge %d\n", e)
-}
+			if Verbose {
+				log.Printf("  Edge %d\n", e)
+			}
 			if e == 0 {
 				log.Fatalf("Tried to reference edge 0")
 			}
-			var vi0,vi1 uint16
+			var vi0, vi1 uint16
 			if e < 0 {
 				e = -e
-				vi1,vi0 = es[e].From, es[e].To
+				vi1, vi0 = es[e].From, es[e].To
 			} else {
-				vi0,vi1 = es[e].From, es[e].To
+				vi0, vi1 = es[e].From, es[e].To
 			}
 			//fmt.Printf("  Vertex: %v -> %v (of %v)\n", es[e].From, es[e].To, numVertices)
 			v0 := Vertex{
@@ -271,10 +346,10 @@ if Verbose {
 				Y: vs[vi1].Y,
 				Z: vs[vi1].Z,
 			}
-if Verbose {
-			log.Printf("   Coord: %v\n", v0)
-			log.Printf("   Coord: %v\n", v1)
-}
+			if Verbose {
+				log.Printf("   Coord: %v\n", v0)
+				log.Printf("   Coord: %v\n", v1)
+			}
 			if i == first {
 				p.Vertex = append(p.Vertex, v0)
 			}
@@ -283,7 +358,7 @@ if Verbose {
 		if len(p.Vertex) > 0 {
 			ret.Polygons = append(ret.Polygons, p)
 			if Verbose {
-			log.Printf("Added:  %v\n", p)
+				log.Printf("Added:  %v\n", p)
 			}
 		}
 	}

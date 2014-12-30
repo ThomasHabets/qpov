@@ -16,7 +16,7 @@ import (
 
 var (
 	outDir = flag.String("out", "render", "Output directory.")
-	demo = flag.String("demo", "", "Demo file inside a pak.")
+	demo   = flag.String("demo", "", "Demo file inside a pak.")
 )
 
 func main() {
@@ -63,7 +63,9 @@ func main() {
 			writeLevel(path.Join(*outDir, levelfn), level)
 		}
 		if oldPos != d.Pos {
-			fmt.Printf("Frame %d: Pos: %v -> %v, viewAngle %v -> %v\n", frame, oldPos, d.Pos, oldView, d.ViewAngle)
+			if false {
+				fmt.Printf("Frame %d: Pos: %v -> %v, viewAngle %v -> %v\n", frame, oldPos, d.Pos, oldView, d.ViewAngle)
+			}
 			oldPos = d.Pos
 			oldView = d.ViewAngle
 			writePOV(path.Join(*outDir, fmt.Sprintf("frame-%08d.pov", frame)), levelfn, level, d)
@@ -79,6 +81,15 @@ func writeLevel(fn string, level *bsp.BSP) {
 	}
 	defer fo.Close()
 	for _, p := range level.Polygons {
+		if p.Texture[0] == '+' {
+			// Animated.
+		}
+		if p.Texture[0] == '*' {
+			// Lava or water.
+		}
+		if p.Texture == "trigger" {
+			continue
+		}
 		vs := []string{}
 		for _, v := range p.Vertex {
 			vs = append(vs, fmt.Sprintf("<%f,%f,%f>", v.X, v.Y, v.Z))
@@ -134,6 +145,7 @@ camera {
 var randColorState int
 
 func randColor() string {
+	return "Green"
 	randColorState++
 	colors := []string{
 		"Green",
