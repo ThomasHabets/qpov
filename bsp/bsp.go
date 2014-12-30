@@ -1,6 +1,7 @@
 package bsp
 
 // https://developer.valvesoftware.com/wiki/Source_BSP_File_Format
+// http://www.gamers.org/dEngine/quake/spec/quake-spec34/qkspec_4.htm
 
 import (
 	"bufio"

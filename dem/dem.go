@@ -1,5 +1,5 @@
 package dem
-
+// http://www.quakewiki.net/archives/demospecs/dem/dem.html
 import (
 	"bytes"
 	"encoding/binary"
@@ -167,6 +167,13 @@ func parseServerInfo(r io.Reader) (serverInfo, error) {
 	return si, nil
 }
 
+func readInt8(r io.Reader) (int8, error) {
+	var ret int8
+	if err := binary.Read(r, binary.LittleEndian, &ret); err != nil {
+		return 0, err
+	}
+	return ret, nil
+}
 func readUint8(r io.Reader) (uint8, error) {
 	typ := make([]byte, 1, 1)
 	if _, err := r.Read(typ); err != nil {
@@ -189,7 +196,7 @@ func readUint32(r io.Reader) (uint32, error) {
 }
 
 func readAngle(r io.Reader) (float32, error) {
-	t, err := readUint8(r)
+	t, err := readInt8(r)
 	return float32(t) / 256.0 * 360.0, err
 }
 
@@ -223,7 +230,7 @@ func (d *Demo) Read() error {
 		if err := binary.Read(d.r, binary.LittleEndian, &bh); err != nil {
 			return err
 		}
-		log.Printf("Read block of size %d (%x)\n", bh.Blocksize, bh.Blocksize)
+		//log.Printf("Read block of size %d (%x)\n", bh.Blocksize, bh.Blocksize)
 		block := make([]byte, bh.Blocksize, bh.Blocksize)
 		if _, err := d.r.Read(block); err != nil {
 			log.Fatalf("Reading block of size %d: %v", bh.Blocksize, err)
@@ -453,11 +460,10 @@ func (d *Demo) Read() error {
 			readUint8(d.block)
 		}
 		if mask&U_FRAME != 0 {
-			f, err := readUint8(d.block)
+			_, err := readUint8(d.block)
 			if err != nil {
 				log.Fatal(err)
 			}
-			log.Printf("Frame %d", f)
 		}
 		if mask&U_COLORMAP != 0 {
 			readUint8(d.block)

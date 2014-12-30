@@ -101,9 +101,9 @@ func writePOV(fn string, levelfn string, level *bsp.BSP, d *dem.Demo) {
 	defer fo.Close()
 
 	lookAt := bsp.Vertex{
-		X: d.Pos.X + float32(math.Sin(float64(d.ViewAngle.Y))),
-		Y: d.Pos.Y + float32(math.Cos(float64(d.ViewAngle.Y))),
-		Z: d.Pos.Z + float32(math.Sin(float64(d.ViewAngle.X))),
+		X: d.Pos.X + float32(math.Sin(float64(d.ViewAngle.Y*math.Pi/180))),
+		Y: d.Pos.Y + float32(math.Cos(float64(d.ViewAngle.Y*math.Pi/180))),
+		Z: d.Pos.Z + float32(math.Sin(float64(d.ViewAngle.X*math.Pi/180))),
 	}
 	pos := bsp.Vertex{
 		X: d.Pos.X,
