@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"os"
 	"path"
 	"strings"
@@ -101,9 +100,9 @@ func writePOV(fn string, levelfn string, level *bsp.BSP, d *dem.Demo) {
 	defer fo.Close()
 
 	lookAt := bsp.Vertex{
-		X: d.Pos.X + float32(math.Sin(float64(d.ViewAngle.Y*math.Pi/180))),
-		Y: d.Pos.Y + float32(math.Cos(float64(d.ViewAngle.Y*math.Pi/180))),
-		Z: d.Pos.Z + float32(math.Sin(float64(d.ViewAngle.X*math.Pi/180))),
+		X: 1,
+		Y: 0,
+		Z: 0,
 	}
 	pos := bsp.Vertex{
 		X: d.Pos.X,
@@ -115,12 +114,17 @@ func writePOV(fn string, levelfn string, level *bsp.BSP, d *dem.Demo) {
 #include "%s"
 light_source { <%s> color White }
 camera {
-  location <%s>
+  location <0,0,0>
   sky <0,0,1>
   right <-1,0,0>
   look_at <%s>
+  rotate <%f,%f,%f>
+  translate <%s>
 }
-`, levelfn, pos.String(), pos.String(), lookAt.String())
+`, levelfn, pos.String(), lookAt.String(),
+		//d.ViewAngle.Z, d.ViewAngle.Y, d.ViewAngle.X,
+		d.ViewAngle.Z, d.ViewAngle.X, d.ViewAngle.Y,
+		pos.String())
 }
 
 var randColorState int
