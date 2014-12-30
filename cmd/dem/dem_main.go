@@ -16,22 +16,22 @@ import (
 
 var (
 	outDir = flag.String("out", "render", "Output directory.")
+	demo = flag.String("demo", "", "Demo file inside a pak.")
 )
 
 func main() {
 	flag.Parse()
-	fn := flag.Arg(0)
-	f, err := os.Open(fn)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer f.Close()
-	p, err := pak.Open(f)
-	if err != nil {
-		log.Fatal(err)
-	}
 
-	df := p.Get(flag.Arg(1))
+	p, err := pak.MultiOpen(flag.Args()...)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer p.Close()
+
+	df, err := p.Get(*demo)
+	if err != nil {
+		log.Fatal(err)
+	}
 	d := dem.Open(df)
 	oldPos := dem.Vertex{}
 	oldView := dem.Vertex{}
@@ -47,7 +47,11 @@ func main() {
 			continue
 		}
 		if level == nil {
-			level, err = bsp.Load(p.Get(d.Level))
+			bl, err := p.Get(d.Level)
+			if err != nil {
+				log.Fatal(err)
+			}
+			level, err = bsp.Load(bl)
 			if err != nil {
 				log.Fatalf("Level loading %q: %v", d.Level, err)
 			}

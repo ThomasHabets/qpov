@@ -40,12 +40,16 @@ type Pak struct {
 	Entries map[string]Entry
 }
 
-func (p *Pak) Get(fn string) *reader {
+func (p *Pak) Get(fn string) (*reader, error) {
+	entry, found := p.Entries[fn]
+	if !found {
+		return nil, fmt.Errorf("not found")
+	}
 	return &reader{
 		file:   p.File,
-		offset: int64(p.Entries[fn].Pos),
-		size:   int64(p.Entries[fn].Size),
-	}
+		offset: int64(entry.Pos),
+		size:   int64(entry.Size),
+	}, nil
 }
 
 type reader struct {
@@ -78,6 +82,43 @@ func (r *reader) Read(data []byte) (int, error) {
 		}
 	}
 	return n, err
+}
+
+type MultiPak []*Pak
+
+func MultiOpen(fns ...string) (MultiPak, error) {
+	// TODO: don't leak files on error.
+	var ret []*Pak
+	for _, fn := range fns {
+		f, err := os.Open(fn)
+		if err != nil {
+			return nil, err
+		}
+		p, err := Open(f)
+		if err != nil {
+			return nil, err
+		}
+		ret = append(ret, p)
+	}
+	return ret, nil
+}
+
+func (m MultiPak) Get(s string) (*reader, error) {
+	var r *reader
+	var err error
+	for i := len(m); i>0;i-- {
+		r, err = m[i-1].Get(s)
+		if err == nil {
+			return r, nil
+		}
+	}
+	return nil, err
+}
+
+func (m MultiPak) Close() {
+	for _, p := range m {
+		p.File.Close()
+	}
 }
 
 func Open(f *os.File) (*Pak, error) {
