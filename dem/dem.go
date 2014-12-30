@@ -176,7 +176,7 @@ func readUint8(r io.Reader) (uint8, error) {
 }
 
 func readCoord(r io.Reader) (float32, error) {
-	t, err := readUint16(r)
+	t, err := readInt16(r)
 	return float32(t) * 0.125, err
 }
 
@@ -203,6 +203,14 @@ func readFloat(r io.Reader) (float32, error) {
 
 func readUint16(r io.Reader) (uint16, error) {
 	var ret uint16
+	if err := binary.Read(r, binary.LittleEndian, &ret); err != nil {
+		return 0, err
+	}
+	return ret, nil
+}
+
+func readInt16(r io.Reader) (int16, error) {
+	var ret int16
 	if err := binary.Read(r, binary.LittleEndian, &ret); err != nil {
 		return 0, err
 	}
@@ -266,6 +274,11 @@ func (d *Demo) Read() error {
 	case 0x09: // Stufftext
 		s, _ := readString(d.block)
 		log.Printf("Stufftext: %q", s)
+	case 0x0A: // Camera orientation.
+		x, _ := readAngle(d.block)
+		y, _ := readAngle(d.block)
+		z, _ := readAngle(d.block)
+		log.Printf("Camera orientation changed to %f %f %f", x, y, z)
 	case 0x0b:
 		si, err := parseServerInfo(d.block)
 		if err != nil {
@@ -282,53 +295,6 @@ func (d *Demo) Read() error {
 	case 0x0e: // set frags
 		readUint8(d.block)
 		readUint16(d.block)
-	case 0x11: // set colors
-		readUint8(d.block)
-		readUint8(d.block)
-
-	case 0x1d: // spawnstaticsound
-		readCoord(d.block)
-		readCoord(d.block)
-		readCoord(d.block)
-		readUint8(d.block)
-		readUint8(d.block)
-		readUint8(d.block)
-	case 0x19: // This message selects the client state.
-		state, _ := readUint8(d.block)
-		log.Printf("Set state: %v", state)
-	case 0x16: // spawnbaseline
-		readUint16(d.block)
-
-		readUint8(d.block)
-		readUint8(d.block)
-		readUint8(d.block)
-		readUint8(d.block)
-		readCoord(d.block)
-		readAngle(d.block)
-		readCoord(d.block)
-		readAngle(d.block)
-		readCoord(d.block)
-		readAngle(d.block)
-
-	case 0x14: // spawnstatic
-		readUint8(d.block)
-		readUint8(d.block)
-		readUint8(d.block)
-		readUint8(d.block)
-		readCoord(d.block)
-		readAngle(d.block)
-		readCoord(d.block)
-		readAngle(d.block)
-		readCoord(d.block)
-		readAngle(d.block)
-	case 0x20: // CD track
-		readUint8(d.block)
-		readUint8(d.block)
-	case 0x0A: // Camera orientation.
-		x, _ := readAngle(d.block)
-		y, _ := readAngle(d.block)
-		z, _ := readAngle(d.block)
-		log.Printf("Camera orientation changed to %f %f %f", x, y, z)
 	case 0x0F: // client data
 		mask, _ := readUint16(d.block)
 		if Verbose {
@@ -411,20 +377,62 @@ func (d *Demo) Read() error {
 			log.Printf("Weapon: %v", weapon)
 			log.Printf("After clientdata: %v", []byte(d.block.String()))
 		}
-	case 0x21: // sell screen
-	case 0x1a: // centerprint
-		readString(d.block)
-	case 0x1b: // killed monster
+
+	case 0x11: // set colors
+		readUint8(d.block)
+		readUint8(d.block)
+
 	case 0x13: // damage
 		readUint8(d.block)
 		readUint8(d.block)
 		readCoord(d.block)
 		readCoord(d.block)
 		readCoord(d.block)
+	case 0x14: // spawnstatic
+		readUint8(d.block)
+		readUint8(d.block)
+		readUint8(d.block)
+		readUint8(d.block)
+		readCoord(d.block)
+		readAngle(d.block)
+		readCoord(d.block)
+		readAngle(d.block)
+		readCoord(d.block)
+		readAngle(d.block)
+	case 0x16: // spawnbaseline
+		readUint16(d.block)
+
+		readUint8(d.block)
+		readUint8(d.block)
+		readUint8(d.block)
+		readUint8(d.block)
+		readCoord(d.block)
+		readAngle(d.block)
+		readCoord(d.block)
+		readAngle(d.block)
+		readCoord(d.block)
+		readAngle(d.block)
+	case 0x19: // This message selects the client state.
+		state, _ := readUint8(d.block)
+		log.Printf("Set state: %v", state)
+	case 0x1a: // centerprint
+		readString(d.block)
+	case 0x1b: // killed monster
+	case 0x1d: // spawnstaticsound
+		readCoord(d.block)
+		readCoord(d.block)
+		readCoord(d.block)
+		readUint8(d.block)
+		readUint8(d.block)
+		readUint8(d.block)
+	case 0x20: // CD track
+		readUint8(d.block)
+		readUint8(d.block)
+	case 0x21: // sell screen
 	default:
 		if typ < 0x80 {
 			d.block = nil
-			return fmt.Errorf("Unknown type %d (0x%x): %v", typ, typ, []byte(tail))
+			return fmt.Errorf("unknown type %d (0x%x), tail: %v", typ, typ, []byte(tail))
 		}
 		mask := uint16(typ & 0x7F)
 		if mask&U_MOREBITS != 0 {
@@ -445,7 +453,11 @@ func (d *Demo) Read() error {
 			readUint8(d.block)
 		}
 		if mask&U_FRAME != 0 {
-			readUint8(d.block)
+			f, err := readUint8(d.block)
+			if err != nil {
+				log.Fatal(err)
+			}
+			log.Printf("Frame %d", f)
 		}
 		if mask&U_COLORMAP != 0 {
 			readUint8(d.block)
@@ -457,7 +469,10 @@ func (d *Demo) Read() error {
 			readUint8(d.block)
 		}
 		if mask&U_ORIGIN1 != 0 {
-			a, _ := readCoord(d.block)
+			a, err := readCoord(d.block)
+			if err != nil {
+				log.Fatal(err)
+			}
 			if ent == d.CameraEnt {
 				if Verbose {
 					log.Printf("Camera ent %v X %f", ent, a)
