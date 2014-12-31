@@ -14,7 +14,8 @@ import (
 )
 
 var (
-	model = flag.String("model", "progs/ogre.mdl", "Model to read.")
+	model   = flag.String("model", "progs/ogre.mdl", "Model to read.")
+	command = flag.String("c", "show", "Command")
 )
 
 func frameName(mf string, frame int) string {
@@ -22,13 +23,7 @@ func frameName(mf string, frame int) string {
 	return fmt.Sprintf("demprefix_%s_%d", re.ReplaceAllString(mf, "_"), frame)
 }
 
-func main() {
-	flag.Parse()
-	p, err := pak.MultiOpen(flag.Args()...)
-	if err != nil {
-		log.Fatalf("Failed to open pakfiles %q: %v", flag.Args(), err)
-	}
-
+func convert(p pak.MultiPak) {
 	errors := []string{}
 	for _, mf := range p.List() {
 		if path.Ext(mf) != ".mdl" {
@@ -60,6 +55,39 @@ func main() {
 		}()
 	}
 	fmt.Printf("Failed to convert %d models:\n  %s\n", len(errors), strings.Join(errors, "\n  "))
+}
+
+func show(p pak.MultiPak) {
+	h, err := p.Get(*model)
+	if err != nil {
+		log.Fatalf("Unable to get %q: %v", *model, err)
+	}
+
+	m, err := mdl.Load(h)
+	if err != nil {
+		log.Fatalf("Unable to load %q: %v", *model, err)
+	}
+
+	fmt.Printf("Filename: %s\n  Triangles: %v\n", *model, len(m.Triangles))
+	fmt.Printf("  %6s %16s\n", "Frame#", "Name")
+	for n, f := range m.Frames {
+		fmt.Printf("  %6d %16s\n", n, f.Name)
+	}
+}
+
+func main() {
+	flag.Parse()
+	p, err := pak.MultiOpen(flag.Args()...)
+	if err != nil {
+		log.Fatalf("Failed to open pakfiles %q: %v", flag.Args(), err)
+	}
+
+	switch *command {
+	case "convert":
+		convert(p)
+	case "show":
+		show(p)
+	}
 }
 
 var randColorState int
