@@ -86,6 +86,16 @@ func (r *reader) Read(data []byte) (int, error) {
 
 type MultiPak []*Pak
 
+func (m MultiPak) List() []string {
+	var ret []string
+	for _, p := range m {
+		for fn := range p.Entries {
+			ret = append(ret, fn)
+		}
+	}
+	return ret
+}
+
 func MultiOpen(fns ...string) (MultiPak, error) {
 	// TODO: don't leak files on error.
 	var ret []*Pak
@@ -106,7 +116,7 @@ func MultiOpen(fns ...string) (MultiPak, error) {
 func (m MultiPak) Get(s string) (*reader, error) {
 	var r *reader
 	var err error
-	for i := len(m); i>0;i-- {
+	for i := len(m); i > 0; i-- {
 		r, err = m[i-1].Get(s)
 		if err == nil {
 			return r, nil

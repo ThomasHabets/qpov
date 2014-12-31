@@ -14,6 +14,10 @@ const (
 	magic   = 1330660425 // "IDPO"
 )
 
+var (
+	Verbose = false
+)
+
 type Vertex struct {
 	X, Y, Z float32
 }
@@ -102,24 +106,30 @@ type Skin struct {
 
 func Load(r myReader) (*Model, error) {
 	var h fileHeader
-	log.Printf("Loading model...")
+	if Verbose {
+		log.Printf("Loading model...")
+	}
 	if err := binary.Read(r, binary.LittleEndian, &h); err != nil {
 		return nil, err
 	}
 	if h.Ident != magic {
-		return nil, fmt.Errorf("bad magic")
+		return nil, fmt.Errorf("bad magic %08x, want %08x", h.Ident, magic)
 	}
 	if h.Version != version {
 		return nil, fmt.Errorf("bad version %d", h.Version)
 	}
-	log.Printf("Scale: %v", h.Scale)
-	log.Printf("Translate: %v", h.Translate)
-	log.Printf("Eye: %v", h.EyePosition)
+	if Verbose {
+		log.Printf("Scale: %v", h.Scale)
+		log.Printf("Translate: %v", h.Translate)
+		log.Printf("Eye: %v", h.EyePosition)
+	}
 
 	m := &Model{}
 
 	// Load texture data.
-	log.Printf("Skins: %v", h.NumSkins)
+	if Verbose {
+		log.Printf("Skins: %v", h.NumSkins)
+	}
 	for i := uint32(0); i < h.NumSkins; i++ {
 		skin := Skin{
 			Data: make([]byte, h.SkinWidth*h.SkinHeight),
@@ -145,14 +155,20 @@ func Load(r myReader) (*Model, error) {
 	}
 
 	// Load frames.
-	log.Printf("Frames: %v", h.NumFrames)
+	if Verbose {
+		log.Printf("Frames: %v", h.NumFrames)
+	}
 	for i := uint32(0); i < h.NumFrames; i++ {
-		log.Printf("  Frame %d", i)
+		if Verbose {
+			log.Printf("  Frame %d", i)
+		}
 		var typ uint32
 		if err := binary.Read(r, binary.LittleEndian, &typ); err != nil {
 			return nil, err
 		}
-		log.Printf("    Type %d", typ)
+		if Verbose {
+			log.Printf("    Type %d", typ)
+		}
 		if typ == 0 {
 			s := simpleFrame{
 				Verts: make([]modelVertex, h.NumVertices, h.NumVertices),
@@ -169,7 +185,9 @@ func Load(r myReader) (*Model, error) {
 			if err := binary.Read(r, binary.LittleEndian, &s.Verts); err != nil {
 				return nil, err
 			}
-			log.Printf("    Name: %s", s.Name())
+			if Verbose {
+				log.Printf("    Name: %s", s.Name())
+			}
 			sf := SimpleFrame{
 				Name: s.Name(),
 			}
@@ -179,7 +197,9 @@ func Load(r myReader) (*Model, error) {
 					Y: (h.Scale.Y*float32(v.Y) + h.Translate.Y),
 					Z: (h.Scale.Z*float32(v.Z) + h.Translate.Z),
 				})
-				log.Printf("Vert %d: %v -> %v", n, v, sf.Vertices[len(sf.Vertices)-1])
+				if Verbose {
+					log.Printf("Vert %d: %v -> %v", n, v, sf.Vertices[len(sf.Vertices)-1])
+				}
 			}
 			m.Frames = append(m.Frames, sf)
 		} else {

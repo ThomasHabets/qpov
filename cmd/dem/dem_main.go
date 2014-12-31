@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/ThomasHabets/bsparse/bsp"
@@ -107,6 +108,47 @@ func writeLevel(fn string, level *bsp.BSP) {
 	}
 }
 
+func frameName(mf string, frame int) string {
+	s := mf
+
+	re2 := regexp.MustCompile(`progs/h_`)
+	s2 := re2.ReplaceAllString(s, "progs/")
+	if _, err := os.Stat(s2 + ".inc"); err == nil {
+		s = s2
+	}
+	re := regexp.MustCompile(`[/.-]`)
+	s = re.ReplaceAllString(s, "_")
+	return fmt.Sprintf("demprefix_%s_%d", s, frame)
+}
+
+func validModel(m string) bool {
+	if !strings.HasPrefix(m, "progs/") {
+		return false
+	}
+	if !strings.HasSuffix(m, ".mdl") {
+		return false
+	}
+	if strings.Contains(m, "flame.mdl") {
+		return false
+	}
+	if strings.Contains(m, "eyes.mdl") {
+		return false
+	}
+	if strings.Contains(m, "flame2.mdl") {
+		return false
+	}
+	if strings.Contains(m, "soldier.mdl") {
+		return false
+	}
+	if strings.Contains(m, "w_spike.mdl") {
+		return false
+	}
+	if strings.Contains(m, "h_guard.mdl") {
+		return false
+	}
+	return true
+}
+
 func writePOV(fn string, levelfn string, level *bsp.BSP, d *dem.Demo) {
 	fo, err := os.Create(fn)
 	if err != nil {
@@ -125,9 +167,16 @@ func writePOV(fn string, levelfn string, level *bsp.BSP, d *dem.Demo) {
 		Z: d.Pos.Z,
 	}
 
+	models := []string{}
+	for _, m := range d.ServerInfo.Models {
+		if !validModel(m) {
+			continue
+		}
+		models = append(models, fmt.Sprintf(`#include "%s.inc"`, m))
+	}
 	fmt.Fprintf(fo, `#include "colors.inc"
 #include "%s"
-#include "model.pov"
+%s
 light_source { <%s> color White }
 camera {
   location <0,0,0>
@@ -137,7 +186,7 @@ camera {
   rotate <%f,%f,%f>
   translate <%s>
 }
-`, levelfn, pos.String(), lookAt.String(),
+`, levelfn, strings.Join(models, "\n"), pos.String(), lookAt.String(),
 		d.ViewAngle.X, d.ViewAngle.Y, d.ViewAngle.Z,
 		//d.ViewAngle.Z, d.ViewAngle.X, d.ViewAngle.Y,
 		pos.String())
@@ -152,9 +201,9 @@ camera {
 		}
 		log.Printf("Entity %d has model %d of %d", n, e.Model, len(d.ServerInfo.Models))
 		log.Printf("  Name: %q", d.ServerInfo.Models[e.Model])
-		if d.ServerInfo.Models[e.Model] == "progs/h_ogre.mdl" {
+		if validModel(d.ServerInfo.Models[e.Model]) {
 			fmt.Fprintf(fo, "// Entity %d\n", n)
-			fmt.Fprintf(fo, "demprefix_ogre_%d(<%s>,<%s>)\n", e.Frame, e.Pos.String(), e.Angle.String())
+			fmt.Fprintf(fo, "%s(<%s>,<%s>)\n", frameName(d.ServerInfo.Models[e.Model], int(e.Frame)), e.Pos.String(), e.Angle.String())
 		}
 	}
 }
