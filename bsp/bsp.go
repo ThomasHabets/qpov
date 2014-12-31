@@ -177,6 +177,10 @@ func parseEntities(in string) ([]Entity, error) {
 				}
 				ent.Angle.Z = float32(a)
 			}
+
+		}
+		if ent.Data["classname"] == "monster_ogre" {
+			log.Printf("Entity %d is %v", len(ents), ent)
 		}
 		ents = append(ents, ent)
 	}

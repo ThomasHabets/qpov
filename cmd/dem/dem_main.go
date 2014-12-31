@@ -59,7 +59,6 @@ func main() {
 			d.Pos.X = level.StartPos.X
 			d.Pos.Y = level.StartPos.Y
 			d.Pos.Z = level.StartPos.Z
-			d.Entities = level.Entities
 			levelfn = fmt.Sprintf("%s.inc", path.Base(d.Level))
 			writeLevel(path.Join(*outDir, levelfn), level)
 		}
@@ -139,11 +138,22 @@ camera {
   translate <%s>
 }
 `, levelfn, pos.String(), lookAt.String(),
-		//d.ViewAngle.Z, d.ViewAngle.Y, d.ViewAngle.X,
-		d.ViewAngle.Z, d.ViewAngle.X, d.ViewAngle.Y,
+		d.ViewAngle.X, d.ViewAngle.Y, d.ViewAngle.Z,
+		//d.ViewAngle.Z, d.ViewAngle.X, d.ViewAngle.Y,
 		pos.String())
-	for _, e := range level.Entities {
-		if e.Data["classname"] == "monster_ogre" {
+	for n, e := range d.Entities {
+		if e.Model == 0 {
+			// Unused.
+			continue
+		}
+		if int(e.Model) >= len(d.ServerInfo.Models) {
+			// TODO: this is dynamic entities?
+			continue
+		}
+		log.Printf("Entity %d has model %d of %d", n, e.Model, len(d.ServerInfo.Models))
+		log.Printf("  Name: %q", d.ServerInfo.Models[e.Model])
+		if d.ServerInfo.Models[e.Model] == "progs/h_ogre.mdl" {
+			fmt.Fprintf(fo, "// Entity %d\n", n)
 			fmt.Fprintf(fo, "demprefix_ogre_%d(<%s>,<%s>)\n", e.Frame, e.Pos.String(), e.Angle.String())
 		}
 	}

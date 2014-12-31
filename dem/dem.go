@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-
-	"github.com/ThomasHabets/bsparse/bsp"
 )
 
 const (
@@ -49,6 +47,8 @@ const (
 	U_SKIN       = 0x1000
 	U_EFFECTS    = 0x2000
 	U_LONGENTITY = 0x4000
+
+	maxEntities = 1000
 )
 
 var (
@@ -59,6 +59,18 @@ type Vertex struct {
 	X, Y, Z float32
 }
 
+func (v *Vertex) String() string {
+	return fmt.Sprintf("%f,%f,%f", v.X, v.Y, v.Z)
+}
+
+type Entity struct {
+	Pos   Vertex
+	Angle Vertex
+	Model uint8
+	Frame uint8
+	// TODO: skin.
+}
+
 type Demo struct {
 	r     io.Reader
 	block *bytes.Buffer
@@ -67,7 +79,9 @@ type Demo struct {
 	ViewAngle Vertex
 	Pos       Vertex
 	CameraEnt uint16
-	Entities  []bsp.Entity
+
+	ServerInfo ServerInfo
+	Entities   []Entity
 }
 
 type blockHeader struct {
@@ -92,11 +106,12 @@ func Open(r io.Reader) *Demo {
 		}
 	}
 	return &Demo{
-		r: r,
+		r:        r,
+		Entities: make([]Entity, maxEntities, maxEntities),
 	}
 }
 
-type serverInfo struct {
+type ServerInfo struct {
 	// Protocol version of the server. Quake uses the version value 15 and it is not likely, that this will change.
 	ServerVersion uint32
 
@@ -104,10 +119,8 @@ type serverInfo struct {
 
 	GameType uint8
 
-	Level string
-
+	Level  string
 	Models []string
-
 	Sounds []string
 }
 
@@ -125,8 +138,8 @@ func readString(r io.Reader) (string, error) {
 	}
 }
 
-func parseServerInfo(r io.Reader) (serverInfo, error) {
-	var si serverInfo
+func parseServerInfo(r io.Reader) (ServerInfo, error) {
+	var si ServerInfo
 	var err error
 	if err := binary.Read(r, binary.LittleEndian, &si.ServerVersion); err != nil {
 		log.Fatalf("Reading server version: %v", err)
@@ -150,7 +163,7 @@ func parseServerInfo(r io.Reader) (serverInfo, error) {
 	for {
 		s, err := readString(r)
 		if err != nil {
-			log.Fatalf("Failed to read map name: %v", err)
+			log.Fatalf("Failed to read model name: %v", err)
 		}
 		if s == "" {
 			break
@@ -162,11 +175,12 @@ func parseServerInfo(r io.Reader) (serverInfo, error) {
 	for {
 		s, err := readString(r)
 		if err != nil {
-			log.Fatalf("Failed to read map name: %v", err)
+			log.Fatalf("Failed to read sound name: %v", err)
 		}
 		if s == "" {
 			break
 		}
+		si.Sounds = append(si.Sounds, s)
 	}
 	return si, nil
 }
@@ -291,11 +305,13 @@ func (d *Demo) Read() error {
 		z, _ := readAngle(d.block)
 		log.Printf("Camera orientation changed to %f %f %f", x, y, z)
 	case 0x0b:
-		si, err := parseServerInfo(d.block)
+		log.Printf("SERVERINFO")
+		var err error
+		d.ServerInfo, err = parseServerInfo(d.block)
 		if err != nil {
 			log.Fatalf("Serverinfo: %v", err)
 		}
-		d.Level = si.Models[0]
+		d.Level = d.ServerInfo.Models[0]
 	case 0x0c: // light style
 		readUint8(d.block)
 		readString(d.block)
@@ -400,29 +416,40 @@ func (d *Demo) Read() error {
 		readCoord(d.block)
 		readCoord(d.block)
 	case 0x14: // spawnstatic
-		readUint8(d.block)
-		readUint8(d.block)
-		readUint8(d.block)
-		readUint8(d.block)
-		readCoord(d.block)
-		readAngle(d.block)
-		readCoord(d.block)
-		readAngle(d.block)
-		readCoord(d.block)
-		readAngle(d.block)
+		model, _ := readUint8(d.block)
+		frame, _ := readUint8(d.block)
+		color, _ := readUint8(d.block)
+		skin, _ := readUint8(d.block)
+		x, _ := readCoord(d.block)
+		a, _ := readAngle(d.block)
+		y, _ := readCoord(d.block)
+		b, _ := readAngle(d.block)
+		z, _ := readCoord(d.block)
+		c, _ := readAngle(d.block)
+		log.Printf("Spawning static %f,%f,%f: %d %d %d %d %f %f %f", x, y, z, model, frame, color, skin, a, b, c)
 	case 0x16: // spawnbaseline
-		readUint16(d.block)
+		ent, _ := readUint16(d.block)
 
-		readUint8(d.block)
-		readUint8(d.block)
-		readUint8(d.block)
-		readUint8(d.block)
-		readCoord(d.block)
-		readAngle(d.block)
-		readCoord(d.block)
-		readAngle(d.block)
-		readCoord(d.block)
-		readAngle(d.block)
+		model, _ := readUint8(d.block)
+		frame, _ := readUint8(d.block)
+		color, _ := readUint8(d.block)
+		skin, _ := readUint8(d.block)
+
+		x, _ := readCoord(d.block)
+		a, _ := readAngle(d.block)
+		y, _ := readCoord(d.block)
+		b, _ := readAngle(d.block)
+		z, _ := readCoord(d.block)
+		c, _ := readAngle(d.block)
+
+		log.Printf("Spawning baseline %d at <%f,%f,%f>: %d %d %d %d %f %f %f", ent, x, y, z, model, frame, color, skin, a, b, c)
+		if ent == 40 {
+			log.Printf("  Model: %v", d.Entities[model])
+		}
+		d.Entities[ent].Pos.X, d.Entities[ent].Pos.Y, d.Entities[ent].Pos.Z = x, y, z
+		//TODO: why not? d.Entities[ent].Angle.X, d.Entities[ent].Angle.Y, d.Entities[ent].Angle.Z = a, b, c
+		d.Entities[ent].Model = model
+		d.Entities[ent].Frame = frame
 	case 0x19: // This message selects the client state.
 		state, _ := readUint8(d.block)
 		log.Printf("Set state: %v", state)
@@ -460,8 +487,19 @@ func (d *Demo) Read() error {
 			e, _ := readUint8(d.block)
 			ent = uint16(e)
 		}
+		log.Printf("Update to entity %d", ent)
+		debugEnt := false
+		if ent == 40 {
+			debugEnt = true
+		}
 		if mask&U_MODEL != 0 {
-			readUint8(d.block)
+			a, err := readUint8(d.block)
+			if err != nil {
+				log.Fatal(err)
+			}
+			if debugEnt {
+				log.Printf("  Update %d: Model %d", a)
+			}
 		}
 		if mask&U_FRAME != 0 {
 			a, err := readUint8(d.block)
@@ -469,16 +507,25 @@ func (d *Demo) Read() error {
 				log.Fatal(err)
 			}
 			d.Entities[ent].Frame = a
-			log.Printf("Set frame of %d to %d", ent, a)
+			log.Printf("  Set frame of %d to %d", ent, a)
 		}
 		if mask&U_COLORMAP != 0 {
-			readUint8(d.block)
+			a, _ := readUint8(d.block)
+			if debugEnt {
+				log.Printf("  Update %d: Colormap %d", ent, a)
+			}
 		}
 		if mask&U_SKIN != 0 {
-			readUint8(d.block)
+			a, _ := readUint8(d.block)
+			if debugEnt {
+				log.Printf("  Update %d: Skin %d", ent, a)
+			}
 		}
 		if mask&U_EFFECTS != 0 {
-			readUint8(d.block)
+			a, _ := readUint8(d.block)
+			if debugEnt {
+				log.Printf("  Update %d: Effects %d", ent, a)
+			}
 		}
 		if mask&U_ORIGIN1 != 0 {
 			a, err := readCoord(d.block)
@@ -486,29 +533,47 @@ func (d *Demo) Read() error {
 				log.Fatal(err)
 			}
 			d.Entities[ent].Pos.X = a
+			if debugEnt {
+				log.Printf("  Update %d: Pos X %f", ent, a)
+			}
 		}
 		if mask&U_ANGLE1 != 0 {
 			a, _ := readAngle(d.block)
 			d.Entities[ent].Angle.X = a
+			if debugEnt {
+				log.Printf("  Update %d: Angle 1 %f", ent, a)
+			}
 		}
 		if mask&U_ORIGIN2 != 0 {
 			a, _ := readCoord(d.block)
 			d.Entities[ent].Pos.Y = a
+			if debugEnt {
+				log.Printf("  Update %d: Pos Y %f", ent, a)
+			}
 		}
 		if mask&U_ANGLE2 != 0 {
 			a, _ := readAngle(d.block)
-			d.Entities[ent].Angle.Y = a
+			d.Entities[ent].Angle.Z = a
+			if debugEnt {
+				log.Printf("  Update %d: Angle 2 %f", ent, a)
+			}
 		}
 		if mask&U_ORIGIN3 != 0 {
 			a, _ := readCoord(d.block)
 			d.Entities[ent].Pos.Z = a
+			if debugEnt {
+				log.Printf("  Update %d: Pos Z %f", ent, a)
+			}
 		}
 		if mask&U_ANGLE3 != 0 {
 			a, _ := readAngle(d.block)
-			d.Entities[ent].Angle.Z = a
+			d.Entities[ent].Angle.Y = a
+			if debugEnt {
+				log.Printf("  Update %d: Angle 3 %f", ent, a)
+			}
 		}
-		if Verbose {
-			log.Printf("Updating entity %d, remaining: %v", ent, []byte(d.block.String()))
+		if debugEnt {
+			log.Printf("  Data for %d: %v", ent, d.Entities[ent])
 		}
 	}
 	if d.Entities != nil {
