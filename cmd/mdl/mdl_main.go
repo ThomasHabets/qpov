@@ -36,7 +36,9 @@ func main() {
 		log.Fatalf("Model create fail: %v", err)
 	}
 	defer of.Close()
-	fmt.Fprintf(of, "%s\n", m.POVFrameID(0))
+	for n := range m.Frames {
+		fmt.Fprintf(of, "#macro demprefix_ogre_%d(pos, rot)\nunion { %s rotate rot translate pos }\n#end\n", n, m.POVFrameID(n))
+	}
 }
 
 var randColorState int

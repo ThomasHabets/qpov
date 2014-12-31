@@ -1,4 +1,5 @@
 package dem
+
 // http://www.quakewiki.net/archives/demospecs/dem/dem.html
 import (
 	"bytes"
@@ -6,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+
+	"github.com/ThomasHabets/bsparse/bsp"
 )
 
 const (
@@ -64,6 +67,7 @@ type Demo struct {
 	ViewAngle Vertex
 	Pos       Vertex
 	CameraEnt uint16
+	Entities  []bsp.Entity
 }
 
 type blockHeader struct {
@@ -460,10 +464,12 @@ func (d *Demo) Read() error {
 			readUint8(d.block)
 		}
 		if mask&U_FRAME != 0 {
-			_, err := readUint8(d.block)
+			a, err := readUint8(d.block)
 			if err != nil {
 				log.Fatal(err)
 			}
+			d.Entities[ent].Frame = a
+			log.Printf("Set frame of %d to %d", ent, a)
 		}
 		if mask&U_COLORMAP != 0 {
 			readUint8(d.block)
@@ -479,55 +485,39 @@ func (d *Demo) Read() error {
 			if err != nil {
 				log.Fatal(err)
 			}
-			if ent == d.CameraEnt {
-				if Verbose {
-					log.Printf("Camera ent %v X %f", ent, a)
-				}
-				_ = a
-				d.Pos.X = a
-			}
+			d.Entities[ent].Pos.X = a
 		}
 		if mask&U_ANGLE1 != 0 {
 			a, _ := readAngle(d.block)
-			if ent == d.CameraEnt {
-				d.ViewAngle.X = a
-			}
+			d.Entities[ent].Angle.X = a
 		}
 		if mask&U_ORIGIN2 != 0 {
 			a, _ := readCoord(d.block)
-			if ent == d.CameraEnt {
-				if Verbose {
-					log.Printf("Camera ent %v Y %f", ent, a)
-				}
-				d.Pos.Y = a
-				_ = a
-			}
+			d.Entities[ent].Pos.Y = a
 		}
 		if mask&U_ANGLE2 != 0 {
 			a, _ := readAngle(d.block)
-			if ent == d.CameraEnt {
-				d.ViewAngle.Y = a
-			}
+			d.Entities[ent].Angle.Y = a
 		}
 		if mask&U_ORIGIN3 != 0 {
 			a, _ := readCoord(d.block)
-			if ent == d.CameraEnt {
-				if Verbose {
-					log.Printf("Camera ent %v Z %f", ent, a)
-				}
-				d.Pos.Z = a
-				_ = a
-			}
+			d.Entities[ent].Pos.Z = a
 		}
 		if mask&U_ANGLE3 != 0 {
 			a, _ := readAngle(d.block)
-			if ent == d.CameraEnt {
-				d.ViewAngle.Z = a
-			}
+			d.Entities[ent].Angle.Z = a
 		}
 		if Verbose {
 			log.Printf("Updating entity %d, remaining: %v", ent, []byte(d.block.String()))
 		}
+	}
+	if d.Entities != nil {
+		d.Pos.X = d.Entities[d.CameraEnt].Pos.X
+		d.Pos.Y = d.Entities[d.CameraEnt].Pos.Y
+		d.Pos.Z = d.Entities[d.CameraEnt].Pos.Z
+		d.ViewAngle.X = d.Entities[d.CameraEnt].Angle.X
+		d.ViewAngle.Y = d.Entities[d.CameraEnt].Angle.Y
+		d.ViewAngle.Z = d.Entities[d.CameraEnt].Angle.Z
 	}
 	if err != nil {
 		log.Fatal(err)

@@ -123,6 +123,7 @@ type Polygon struct {
 type BSP struct {
 	StartPos Vertex
 	Polygons []Polygon
+	Entities []Entity
 }
 
 type myReader interface {
@@ -130,17 +131,30 @@ type myReader interface {
 	io.Seeker
 }
 
-func parseEntities(in string) ([]map[string]string, error) {
+type Entity struct {
+	EntityID int
+	Data     map[string]string
+	Pos      Vertex
+	Angle    Vertex
+	Frame    uint8
+}
+
+func parseEntities(in string) ([]Entity, error) {
 	buf := bytes.NewBuffer([]byte(in))
 	scanner := bufio.NewScanner(buf)
 	re := regexp.MustCompile(`^ *"([^"]+)" "([^"]+)"$`)
-	var ents []map[string]string
+	var ents []Entity
 	for scanner.Scan() {
-		if scanner.Text() != "{" {
+		if scanner.Text() == "\x00" {
 			break
+		}
+		if scanner.Text() != "{" {
 			return nil, fmt.Errorf("parse error, expected '{', got %q", scanner.Text())
 		}
-		ent := make(map[string]string)
+		ent := Entity{
+			EntityID: len(ents),
+			Data:     make(map[string]string),
+		}
 		for {
 			if !scanner.Scan() {
 				return nil, fmt.Errorf("EOF or error")
@@ -152,7 +166,17 @@ func parseEntities(in string) ([]map[string]string, error) {
 			if len(m) != 3 {
 				return nil, fmt.Errorf("parse error on %q", scanner.Text())
 			}
-			ent[m[1]] = m[2]
+			ent.Data[m[1]] = m[2]
+			switch m[1] {
+			case "origin":
+				ent.Pos = parseVertex(m[2])
+			case "angle":
+				a, err := strconv.ParseFloat(m[2], 64)
+				if err != nil {
+					return nil, fmt.Errorf("bad angle string: %q", m[2])
+				}
+				ent.Angle.Z = float32(a)
+			}
 		}
 		ents = append(ents, ent)
 	}
@@ -162,10 +186,10 @@ func parseEntities(in string) ([]map[string]string, error) {
 	return ents, nil
 }
 
-func findStart(es []map[string]string) Vertex {
+func findStart(es []Entity) Vertex {
 	for _, e := range es {
-		if e["classname"] == "info_player_start" {
-			return parseVertex(e["origin"])
+		if e.Data["classname"] == "info_player_start" {
+			return parseVertex(e.Data["origin"])
 		}
 	}
 	log.Fatal("can't find start")
@@ -299,11 +323,12 @@ func Load(r myReader) (*BSP, error) {
 	} else if uint32(n) != h.Entities.Size {
 		return nil, fmt.Errorf("short read: %d < %d", n, h.Entities.Size)
 	}
-	ents, err := parseEntities(string(entBytes))
+	var err error
+	ret.Entities, err = parseEntities(string(entBytes))
 	if err != nil {
 		return nil, err
 	}
-	ret.StartPos = findStart(ents)
+	ret.StartPos = findStart(ret.Entities)
 
 	// Assemble polygons.
 	for _, f := range fs {

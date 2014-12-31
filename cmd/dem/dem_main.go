@@ -59,6 +59,7 @@ func main() {
 			d.Pos.X = level.StartPos.X
 			d.Pos.Y = level.StartPos.Y
 			d.Pos.Z = level.StartPos.Z
+			d.Entities = level.Entities
 			levelfn = fmt.Sprintf("%s.inc", path.Base(d.Level))
 			writeLevel(path.Join(*outDir, levelfn), level)
 		}
@@ -127,6 +128,7 @@ func writePOV(fn string, levelfn string, level *bsp.BSP, d *dem.Demo) {
 
 	fmt.Fprintf(fo, `#include "colors.inc"
 #include "%s"
+#include "model.pov"
 light_source { <%s> color White }
 camera {
   location <0,0,0>
@@ -140,6 +142,11 @@ camera {
 		//d.ViewAngle.Z, d.ViewAngle.Y, d.ViewAngle.X,
 		d.ViewAngle.Z, d.ViewAngle.X, d.ViewAngle.Y,
 		pos.String())
+	for _, e := range level.Entities {
+		if e.Data["classname"] == "monster_ogre" {
+			fmt.Fprintf(fo, "demprefix_ogre_%d(<%s>,<%s>)\n", e.Frame, e.Pos.String(), e.Angle.String())
+		}
+	}
 }
 
 var randColorState int

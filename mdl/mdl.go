@@ -83,7 +83,7 @@ func (m *Model) POVFrameID(id int) string {
     diffuse 0.6
   }
   pigment {
-    Green
+    Red
   }
 }
 `,
