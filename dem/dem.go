@@ -271,7 +271,9 @@ func (d *Demo) Read() error {
 	case 0x03: // player state
 		i, _ := readUint8(d.block)
 		v, _ := readUint32(d.block)
-		log.Printf("Setting %d to %d", i, v)
+		if Verbose {
+			log.Printf("Setting %d to %d", i, v)
+		}
 	case 0x05: // Camera pos to this entity.
 		d.CameraEnt, _ = readUint16(d.block)
 		log.Printf("Camera object changed to %d", d.CameraEnt)
@@ -426,7 +428,9 @@ func (d *Demo) Read() error {
 		b, _ := readAngle(d.block)
 		z, _ := readCoord(d.block)
 		c, _ := readAngle(d.block)
-		log.Printf("Spawning static %f,%f,%f: %d %d %d %d %f %f %f", x, y, z, model, frame, color, skin, a, b, c)
+		if Verbose {
+			log.Printf("Spawning static %f,%f,%f: %d %d %d %d %f %f %f", x, y, z, model, frame, color, skin, a, b, c)
+		}
 	case 0x16: // spawnbaseline
 		ent, _ := readUint16(d.block)
 
@@ -442,8 +446,10 @@ func (d *Demo) Read() error {
 		z, _ := readCoord(d.block)
 		c, _ := readAngle(d.block)
 
-		log.Printf("Spawning baseline %d at <%f,%f,%f>: %d %d %d %d %f %f %f", ent, x, y, z, model, frame, color, skin, a, b, c)
-		if ent == 40 {
+		if Verbose {
+			log.Printf("Spawning baseline %d at <%f,%f,%f>: %d %d %d %d %f %f %f", ent, x, y, z, model, frame, color, skin, a, b, c)
+		}
+		if Verbose && ent == 40 {
 			log.Printf("  Model: %v", d.Entities[model])
 		}
 		d.Entities[ent].Pos.X, d.Entities[ent].Pos.Y, d.Entities[ent].Pos.Z = x, y, z
@@ -452,7 +458,9 @@ func (d *Demo) Read() error {
 		d.Entities[ent].Frame = frame
 	case 0x19: // This message selects the client state.
 		state, _ := readUint8(d.block)
-		log.Printf("Set state: %v", state)
+		if Verbose {
+			log.Printf("Set state: %v", state)
+		}
 	case 0x1a: // centerprint
 		readString(d.block)
 	case 0x1b: // killed monster
@@ -487,9 +495,11 @@ func (d *Demo) Read() error {
 			e, _ := readUint8(d.block)
 			ent = uint16(e)
 		}
-		log.Printf("Update to entity %d", ent)
+		if Verbose {
+			log.Printf("Update to entity %d", ent)
+		}
 		debugEnt := false
-		if ent == 40 {
+		if Verbose && ent == 40 {
 			debugEnt = true
 		}
 		if mask&U_MODEL != 0 {
@@ -507,7 +517,9 @@ func (d *Demo) Read() error {
 				log.Fatal(err)
 			}
 			d.Entities[ent].Frame = a
-			log.Printf("  Set frame of %d to %d", ent, a)
+			if debugEnt {
+				log.Printf("  Set frame of %d to %d", ent, a)
+			}
 		}
 		if mask&U_COLORMAP != 0 {
 			a, _ := readUint8(d.block)

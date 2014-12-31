@@ -15,7 +15,7 @@ import (
 
 var (
 	model   = flag.String("model", "progs/ogre.mdl", "Model to read.")
-	command = flag.String("c", "show", "Command")
+	command = flag.String("c", "show", "Command (convert, show)")
 )
 
 func frameName(mf string, frame int) string {

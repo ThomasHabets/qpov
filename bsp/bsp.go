@@ -179,7 +179,7 @@ func parseEntities(in string) ([]Entity, error) {
 			}
 
 		}
-		if ent.Data["classname"] == "monster_ogre" {
+		if Verbose && (ent.Data["classname"] == "monster_ogre") {
 			log.Printf("Entity %d is %v", len(ents), ent)
 		}
 		ents = append(ents, ent)
@@ -314,7 +314,9 @@ func Load(r myReader) (*BSP, error) {
 		if err := binary.Read(r, binary.LittleEndian, &mtes[n]); err != nil {
 			return nil, err
 		}
-		log.Printf("Miptex %s: %v", mtes[n].Name(), mtes[n])
+		if Verbose {
+			log.Printf("Miptex %s: %v", mtes[n].Name(), mtes[n])
+		}
 	}
 
 	// Load entities.

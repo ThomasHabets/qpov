@@ -25,13 +25,13 @@ func main() {
 
 	p, err := pak.MultiOpen(flag.Args()...)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("MultiOpen(%q): %v", flag.Args(), err)
 	}
 	defer p.Close()
 
 	df, err := p.Get(*demo)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Getting %q: %v", *demo, err)
 	}
 	d := dem.Open(df)
 	oldPos := dem.Vertex{}
@@ -134,6 +134,12 @@ func validModel(m string) bool {
 	if strings.Contains(m, "eyes.mdl") {
 		return false
 	}
+	if strings.Contains(m, "suit.mdl") {
+		return false
+	}
+	if strings.Contains(m, "light.mdl") {
+		return false
+	}
 	if strings.Contains(m, "flame2.mdl") {
 		return false
 	}
@@ -152,7 +158,7 @@ func validModel(m string) bool {
 func writePOV(fn string, levelfn string, level *bsp.BSP, d *dem.Demo) {
 	fo, err := os.Create(fn)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Creating %q: %v", fn, err)
 	}
 	defer fo.Close()
 
@@ -199,8 +205,8 @@ camera {
 			// TODO: this is dynamic entities?
 			continue
 		}
-		log.Printf("Entity %d has model %d of %d", n, e.Model, len(d.ServerInfo.Models))
-		log.Printf("  Name: %q", d.ServerInfo.Models[e.Model])
+		//log.Printf("Entity %d has model %d of %d", n, e.Model, len(d.ServerInfo.Models))
+		//log.Printf("  Name: %q", d.ServerInfo.Models[e.Model])
 		if validModel(d.ServerInfo.Models[e.Model]) {
 			fmt.Fprintf(fo, "// Entity %d\n", n)
 			fmt.Fprintf(fo, "%s(<%s>,<%s>)\n", frameName(d.ServerInfo.Models[e.Model], int(e.Frame)), e.Pos.String(), e.Angle.String())
