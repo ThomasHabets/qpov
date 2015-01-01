@@ -447,7 +447,7 @@ func (d *Demo) Read() error {
 		c, _ := readAngle(d.block)
 
 		if Verbose {
-			log.Printf("Spawning baseline %d at <%f,%f,%f>: %d %d %d %d %f %f %f", ent, x, y, z, model, frame, color, skin, a, b, c)
+			log.Printf("Spawning baseline %d at <%f,%f,%f>: %d (%s) %d %d %d %f %f %f", ent, x, y, z, model, d.ServerInfo.Models[model], frame, color, skin, a, b, c)
 		}
 		if Verbose && ent == 40 {
 			log.Printf("  Model: %v", d.Entities[model])
@@ -507,9 +507,10 @@ func (d *Demo) Read() error {
 			if err != nil {
 				log.Fatal(err)
 			}
-			if debugEnt {
-				log.Printf("  Update %d: Model %d", a)
+			if Verbose && d.Entities[ent].Model != a {
+				log.Printf("  Update %d: Model %d (%q -> %q)", ent, a, d.ServerInfo.Models[d.Entities[ent].Model], d.ServerInfo.Models[a])
 			}
+			d.Entities[ent].Model = a
 		}
 		if mask&U_FRAME != 0 {
 			a, err := readUint8(d.block)

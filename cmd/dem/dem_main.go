@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"runtime/pprof"
 	"strings"
 
 	"github.com/ThomasHabets/bsparse/bsp"
@@ -16,13 +18,24 @@ import (
 )
 
 var (
-	outDir   = flag.String("out", "render", "Output directory.")
-	demo     = flag.String("demo", "", "Demo file inside a pak.")
-	entities = flag.Bool("entities", true, "Render entities too.")
+	cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+	outDir     = flag.String("out", "render", "Output directory.")
+	demo       = flag.String("demo", "", "Demo file inside a pak.")
+	entities   = flag.Bool("entities", true, "Render entities too.")
 )
 
 func main() {
 	flag.Parse()
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+
 	if len(flag.Args()) == 0 {
 		log.Fatal("Usage")
 	}
@@ -141,11 +154,13 @@ func validModel(m string) bool {
 }
 
 func writePOV(fn string, levelfn string, level *bsp.BSP, d *dem.Demo) {
-	fo, err := os.Create(fn)
+	ufo, err := os.Create(fn)
 	if err != nil {
 		log.Fatal("Creating %q: %v", fn, err)
 	}
-	defer fo.Close()
+	defer ufo.Close()
+	fo := bufio.NewWriter(ufo)
+	defer fo.Flush()
 
 	lookAt := bsp.Vertex{
 		X: 1,
@@ -207,8 +222,7 @@ camera {
 			//log.Printf("Entity %d has model %d of %d", n, e.Model, len(d.ServerInfo.Models))
 			//log.Printf("  Name: %q", d.ServerInfo.Models[e.Model])
 			if validModel(d.ServerInfo.Models[e.Model]) {
-				fmt.Fprintf(fo, "// Entity %d\n", n)
-				fmt.Fprintf(fo, "%s(<%s>,<%s>)\n", frameName(name, frame), e.Pos.String(), e.Angle.String())
+				fmt.Fprintf(fo, "// Entity %d\n%s(<%s>,<%s>)\n", n, frameName(name, frame), e.Pos.String(), e.Angle.String())
 			}
 		}
 	}
