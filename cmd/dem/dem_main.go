@@ -63,6 +63,9 @@ func main() {
 		if err == io.EOF {
 			break
 		}
+		if err != nil {
+			log.Fatalf("Demo error: %v", err)
+		}
 		if d.Level == "" {
 			continue
 		}
@@ -110,7 +113,7 @@ func writeLevel(fn string, level *bsp.BSP) {
 func frameName(mf string, frame int) string {
 	s := mf
 
-	if false {
+	if true {
 		re2 := regexp.MustCompile(`progs/h_`)
 		s2 := re2.ReplaceAllString(s, "progs/")
 		if _, err := os.Stat(s2 + ".inc"); err == nil {
@@ -192,6 +195,7 @@ global_settings {
 %s
 light_source { <%s> color White }
 camera {
+  angle 100
   location <0,0,0>
   sky <0,0,1>
   right <-1,0,0>
@@ -205,6 +209,9 @@ camera {
 		pos.String())
 	if *entities {
 		for n, e := range d.Entities {
+			if int(d.CameraEnt) == n {
+				continue
+			}
 			if e.Model == 0 {
 				// Unused.
 				continue
@@ -218,6 +225,10 @@ camera {
 			if strings.Contains(name, "h_guard.mdl") {
 				// TODO: What's going on here?
 				name = "progs/soldier.mdl"
+			}
+			switch name {
+			case "progs/armor.mdl", "progs/spike.mdl":
+				frame = 0
 			}
 			//log.Printf("Entity %d has model %d of %d", n, e.Model, len(d.ServerInfo.Models))
 			//log.Printf("  Name: %q", d.ServerInfo.Models[e.Model])

@@ -48,6 +48,20 @@ const (
 	U_EFFECTS    = 0x2000
 	U_LONGENTITY = 0x4000
 
+	TE_SPIKE        = 0
+	TE_SUPERSPIKE   = 1
+	TE_GUNSHOT      = 2
+	TE_EXPLOSION    = 3
+	TE_TAREXPLOSION = 4
+	TE_LIGHTNING1   = 5
+	TE_LIGHTNING2   = 6
+	TE_WIZSPIKE     = 7
+	TE_KNIGHTSPIKE  = 8
+	TE_LIGHTNING3   = 9
+	TE_LAVASPLASH   = 10
+	TE_TELEPORT     = 11
+	TE_EXPLOSION2   = 12
+
 	maxEntities = 1000
 )
 
@@ -276,7 +290,9 @@ func (d *Demo) Read() error {
 		}
 	case 0x05: // Camera pos to this entity.
 		d.CameraEnt, _ = readUint16(d.block)
-		log.Printf("Camera object changed to %d", d.CameraEnt)
+		if Verbose {
+			log.Printf("Camera object changed to %d", d.CameraEnt)
+		}
 	case 0x06: // Play sound.
 		mask, _ := readUint8(d.block)
 		if mask&0x1 != 0 {
@@ -410,7 +426,15 @@ func (d *Demo) Read() error {
 	case 0x11: // set colors
 		readUint8(d.block)
 		readUint8(d.block)
-
+	case 0x12: // particle
+		readCoord(d.block)
+		readCoord(d.block)
+		readCoord(d.block)
+		readInt8(d.block)
+		readInt8(d.block)
+		readInt8(d.block)
+		readUint8(d.block)
+		readUint8(d.block)
 	case 0x13: // damage
 		readUint8(d.block)
 		readUint8(d.block)
@@ -456,6 +480,35 @@ func (d *Demo) Read() error {
 		//TODO: why not? d.Entities[ent].Angle.X, d.Entities[ent].Angle.Y, d.Entities[ent].Angle.Z = a, b, c
 		d.Entities[ent].Model = model
 		d.Entities[ent].Frame = frame
+	case 0x17: // temp entity
+		entityType, _ := readUint8(d.block)
+		if Verbose {
+			log.Printf("Temp entity type %d", entityType)
+		}
+		switch entityType {
+		// TE_KNIGHT_SPIKE
+		case TE_SPIKE, TE_SUPERSPIKE, TE_GUNSHOT, TE_EXPLOSION, TE_TAREXPLOSION, TE_WIZSPIKE, TE_LAVASPLASH, TE_TELEPORT:
+			readCoord(d.block)
+			readCoord(d.block)
+			readCoord(d.block)
+
+		case TE_LIGHTNING1, TE_LIGHTNING2, TE_LIGHTNING3: // TE_BEAM
+			readUint16(d.block)
+			readCoord(d.block)
+			readCoord(d.block)
+			readCoord(d.block)
+			readCoord(d.block)
+			readCoord(d.block)
+			readCoord(d.block)
+		case TE_EXPLOSION2:
+			readCoord(d.block)
+			readCoord(d.block)
+			readCoord(d.block)
+			readUint8(d.block)
+			readUint8(d.block)
+		default:
+			return fmt.Errorf("bad temp ent type")
+		}
 	case 0x19: // This message selects the client state.
 		state, _ := readUint8(d.block)
 		if Verbose {
@@ -471,6 +524,8 @@ func (d *Demo) Read() error {
 		readUint8(d.block)
 		readUint8(d.block)
 		readUint8(d.block)
+	case 0x1e: // intermission
+		readString(d.block)
 	case 0x20: // CD track
 		readUint8(d.block)
 		readUint8(d.block)
@@ -510,6 +565,7 @@ func (d *Demo) Read() error {
 			if Verbose && d.Entities[ent].Model != a {
 				log.Printf("  Update %d: Model %d (%q -> %q)", ent, a, d.ServerInfo.Models[d.Entities[ent].Model], d.ServerInfo.Models[a])
 			}
+			d.Entities[ent].Frame = 0
 			d.Entities[ent].Model = a
 		}
 		if mask&U_FRAME != 0 {
