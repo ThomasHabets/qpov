@@ -1,0 +1,190 @@
+package bsp
+
+import (
+	"encoding/binary"
+	"fmt"
+)
+
+type RawVertex struct {
+	X, Y, Z float32
+}
+
+type RawFace struct {
+	PlaneID   uint16
+	Side      uint16
+	LEdge     uint32 // First edge.
+	LEdgeNum  uint16 // Number of edges.
+	TexinfoID uint16
+	TypeLight uint8
+	BaseLight uint8
+	Light     [2]uint8
+	Lightmap  uint32
+}
+
+type RawMipTex struct {
+	NameBytes [16]byte // Name of the texture.
+	Width     uint32   // width of picture, must be a multiple of 8
+	Height    uint32   // height of picture, must be a multiple of 8
+	Offset1   uint32   // offset to u_char Pix[width   * height]
+	Offset2   uint32   // offset to u_char Pix[width/2 * height/2]
+	Offset4   uint32   // offset to u_char Pix[width/4 * height/4]
+	Offset8   uint32   // offset to u_char Pix[width/8 * height/8]
+}
+
+type RawEdge struct {
+	From uint16
+	To   uint16
+}
+
+type RawTexInfo struct {
+	SectorS   Vertex  // S vector, horizontal in texture space)
+	DistS     float32 // horizontal offset in texture space
+	VectorT   Vertex  // T vector, vertical in texture space
+	DistT     float32 // vertical offset in texture space
+	TextureID uint32  // Index of Mip Texture must be in [0,numtex[
+	Animated  uint32  // 0 for ordinary textures, 1 for water
+}
+
+type Raw struct {
+	Header   fileHeader
+	Vertex   []RawVertex
+	Face     []RawFace
+	MipTex   []RawMipTex
+	Entities []Entity
+	Edge     []RawEdge
+	LEdge    []int32
+	TexInfo  []RawTexInfo
+}
+
+func LoadRaw(r myReader) (*Raw, error) {
+	raw := &Raw{}
+
+	// Load file header.
+	if err := binary.Read(r, binary.LittleEndian, &raw.Header); err != nil {
+		return nil, err
+	}
+	if raw.Header.Version != Version {
+		return nil, fmt.Errorf("wrong version %d, only %d supported", raw.Header.Version, Version)
+	}
+
+	// Load vertices.
+	{
+		if raw.Header.Vertices.Size%fileVertexSize != 0 {
+			return nil, fmt.Errorf("vertex sizes %v not divisable by %v", raw.Header.Vertices.Size, fileVertexSize)
+		}
+		numVertices := raw.Header.Vertices.Size / fileVertexSize
+		raw.Vertex = make([]RawVertex, numVertices, numVertices)
+		if _, err := r.Seek(int64(raw.Header.Vertices.Offset), 0); err != nil {
+			return nil, err
+		}
+		if err := binary.Read(r, binary.LittleEndian, &raw.Vertex); err != nil {
+			return nil, err
+		}
+	}
+
+	// Load faces.
+	{
+		if raw.Header.Faces.Size%fileFaceSize != 0 {
+			return nil, fmt.Errorf("face sizes %v not divisable by %v", raw.Header.Faces.Size, fileFaceSize)
+		}
+		numFaces := raw.Header.Faces.Size / fileFaceSize
+		raw.Face = make([]RawFace, numFaces, numFaces)
+		if _, err := r.Seek(int64(raw.Header.Faces.Offset), 0); err != nil {
+			return nil, err
+		}
+		if err := binary.Read(r, binary.LittleEndian, &raw.Face); err != nil {
+			return nil, err
+		}
+	}
+
+	// Load edges.
+	{
+		if raw.Header.Edges.Size%fileEdgeSize != 0 {
+			return nil, fmt.Errorf("edge sizes %v not divisable by %v", raw.Header.Edges.Size, fileEdgeSize)
+		}
+		numEdges := raw.Header.Edges.Size / fileEdgeSize
+		raw.Edge = make([]RawEdge, numEdges, numEdges)
+		if _, err := r.Seek(int64(raw.Header.Edges.Offset), 0); err != nil {
+			return nil, err
+		}
+		if err := binary.Read(r, binary.LittleEndian, &raw.Edge); err != nil {
+			return nil, err
+		}
+	}
+
+	// Load ledges.
+	{
+		ledgeSize := uint32(4)
+		if raw.Header.LEdges.Size%ledgeSize != 0 {
+			return nil, fmt.Errorf("ledge sizes %v not divisable by %v", raw.Header.LEdges.Size, ledgeSize)
+		}
+		numLEdges := raw.Header.LEdges.Size / ledgeSize
+		raw.LEdge = make([]int32, numLEdges, numLEdges)
+		if _, err := r.Seek(int64(raw.Header.LEdges.Offset), 0); err != nil {
+			return nil, err
+		}
+		if err := binary.Read(r, binary.LittleEndian, &raw.LEdge); err != nil {
+			return nil, err
+		}
+		//fmt.Printf("LEdges: %v\n", les)
+	}
+
+	// Load texinfo.
+	{
+		if raw.Header.TexInfo.Size%fileTexInfoSize != 0 {
+			return nil, fmt.Errorf("texInfo size %v not divisible by %v", raw.Header.TexInfo.Size, fileTexInfoSize)
+		}
+		numTexInfos := raw.Header.TexInfo.Size / fileTexInfoSize
+		raw.TexInfo = make([]RawTexInfo, numTexInfos, numTexInfos)
+		if _, err := r.Seek(int64(raw.Header.TexInfo.Offset), 0); err != nil {
+			return nil, err
+		}
+		if err := binary.Read(r, binary.LittleEndian, &raw.TexInfo); err != nil {
+			return nil, err
+		}
+	}
+
+	// Load miptex.
+	{
+		if _, err := r.Seek(int64(raw.Header.Miptex.Offset), 0); err != nil {
+			return nil, err
+		}
+		var numMipTex uint32
+		if err := binary.Read(r, binary.LittleEndian, &numMipTex); err != nil {
+			return nil, err
+		}
+		mipTexOfs := make([]uint32, numMipTex, numMipTex)
+		raw.MipTex = make([]RawMipTex, numMipTex, numMipTex)
+		if err := binary.Read(r, binary.LittleEndian, &mipTexOfs); err != nil {
+			return nil, err
+		}
+		for n := range mipTexOfs {
+			if _, err := r.Seek(int64(raw.Header.Miptex.Offset+mipTexOfs[n]), 0); err != nil {
+				return nil, err
+			}
+			if err := binary.Read(r, binary.LittleEndian, &raw.MipTex[n]); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// Load entities.
+	{
+		if _, err := r.Seek(int64(raw.Header.Entities.Offset), 0); err != nil {
+			return nil, err
+		}
+		entBytes := make([]byte, raw.Header.Entities.Size)
+		if n, err := r.Read(entBytes); err != nil {
+			return nil, err
+		} else if uint32(n) != raw.Header.Entities.Size {
+			return nil, fmt.Errorf("short read: %d < %d", n, raw.Header.Entities.Size)
+		}
+		var err error
+		raw.Entities, err = parseEntities(string(entBytes))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return raw, nil
+}
