@@ -1,12 +1,22 @@
 package bsp
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
+	"log"
+	"regexp"
+	"strconv"
 )
 
 type RawVertex struct {
 	X, Y, Z float32
+}
+
+func (v *RawVertex) String() string {
+	return fmt.Sprintf("%g,%g,%g", v.X, v.Y, v.Z)
 }
 
 type RawFace struct {
@@ -45,8 +55,27 @@ type RawTexInfo struct {
 	Animated  uint32  // 0 for ordinary textures, 1 for water
 }
 
+type RawHeader struct {
+	Version   uint32
+	Entities  dentry
+	Planes    dentry
+	Miptex    dentry
+	Vertices  dentry
+	Visilist  dentry
+	Nodes     dentry
+	TexInfo   dentry
+	Faces     dentry
+	Lightmaps dentry
+	Clipnodes dentry
+	Leaves    dentry
+	Lface     dentry
+	Edges     dentry
+	LEdges    dentry
+	Models    dentry
+}
+
 type Raw struct {
-	Header   fileHeader
+	Header   RawHeader
 	Vertex   []RawVertex
 	Face     []RawFace
 	MipTex   []RawMipTex
@@ -54,6 +83,81 @@ type Raw struct {
 	Edge     []RawEdge
 	LEdge    []int32
 	TexInfo  []RawTexInfo
+}
+
+type myReader interface {
+	io.Reader
+	io.Seeker
+}
+
+func parseVertex(s string) Vertex {
+	re := regexp.MustCompile(`(-?[0-9.]+) (-?[0-9.]+) (-?[0-9.]+)`)
+	m := re.FindStringSubmatch(s)
+	if len(m) != 4 {
+		log.Fatalf("Not a vertex: %q", s)
+	}
+	v := Vertex{}
+	t, err := strconv.ParseFloat(m[1], 64)
+	v.X = float32(t)
+	t, err = strconv.ParseFloat(m[2], 64)
+	v.Y = float32(t)
+	t, err = strconv.ParseFloat(m[3], 64)
+	v.Z = float32(t)
+	if err != nil {
+		log.Fatalf("Not a vertex: %q", s)
+	}
+	return v
+}
+
+func parseEntities(in string) ([]Entity, error) {
+	buf := bytes.NewBuffer([]byte(in))
+	scanner := bufio.NewScanner(buf)
+	re := regexp.MustCompile(`^ *"([^"]+)" "([^"]+)"$`)
+	var ents []Entity
+	for scanner.Scan() {
+		if scanner.Text() == "\x00" {
+			break
+		}
+		if scanner.Text() != "{" {
+			return nil, fmt.Errorf("parse error, expected '{', got %q", scanner.Text())
+		}
+		ent := Entity{
+			EntityID: len(ents),
+			Data:     make(map[string]string),
+		}
+		for {
+			if !scanner.Scan() {
+				return nil, fmt.Errorf("EOF or error")
+			}
+			if scanner.Text() == "}" {
+				break
+			}
+			m := re.FindStringSubmatch(scanner.Text())
+			if len(m) != 3 {
+				return nil, fmt.Errorf("parse error on %q", scanner.Text())
+			}
+			ent.Data[m[1]] = m[2]
+			switch m[1] {
+			case "origin":
+				ent.Pos = parseVertex(m[2])
+			case "angle":
+				a, err := strconv.ParseFloat(m[2], 64)
+				if err != nil {
+					return nil, fmt.Errorf("bad angle string: %q", m[2])
+				}
+				ent.Angle.Z = float32(a)
+			}
+
+		}
+		if Verbose && (ent.Data["classname"] == "monster_ogre") {
+			log.Printf("Entity %d is %v", len(ents), ent)
+		}
+		ents = append(ents, ent)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("reading standard input:", err)
+	}
+	return ents, nil
 }
 
 func LoadRaw(r myReader) (*Raw, error) {

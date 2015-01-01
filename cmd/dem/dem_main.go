@@ -87,54 +87,11 @@ func writeLevel(fn string, level *bsp.BSP) {
 		log.Fatal(err)
 	}
 	defer fo.Close()
-	for _, p := range level.Polygons {
-		if p.Texture[0] == '+' {
-			// Animated.
-		}
-		if p.Texture[0] == '*' {
-			// Lava or water.
-		}
-		if p.Texture == "trigger" {
-			continue
-		}
-		vs := []string{}
-		for _, v := range p.Vertex {
-			vs = append(vs, fmt.Sprintf("<%f,%f,%f>", v.X, v.Y, v.Z))
-		}
-		// Poly.
-		fmt.Fprintf(fo, `polygon {
-  %d,
-  %s
-  finish {
-    ambient 0.1
-    diffuse 0.6
-  }
-  pigment { %s }
-}
-`, len(p.Vertex), strings.Join(vs, ",\n  "), randColor())
-
-		// Reverse poly.
-		if false {
-			v2 := p.Vertex[:]
-			for n := range v2 {
-				p.Vertex[n] = v2[len(v2)-1-n]
-			}
-			vs = nil
-			for _, v := range p.Vertex {
-				vs = append(vs, fmt.Sprintf("<%f,%f,%f>", v.X, v.Y, v.Z))
-			}
-			fmt.Fprintf(fo, `polygon {
-  %d,
-  %s
-  finish {
-    ambient 0.1
-    diffuse 0.6
-  }
-  pigment { %s }
-}
-`, len(p.Vertex), strings.Join(vs, ",\n  "), randColor())
-		}
+	mesh, err := level.POVTriangleMesh()
+	if err != nil {
+		log.Fatal(err)
 	}
+	fmt.Fprintln(fo, mesh)
 }
 
 func frameName(mf string, frame int) string {
