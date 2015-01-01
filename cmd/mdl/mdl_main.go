@@ -50,7 +50,7 @@ func convert(p pak.MultiPak) {
 			defer of.Close()
 			for n := range m.Frames {
 
-				fmt.Fprintf(of, "#macro %s(pos, rot)\nunion { %s rotate rot translate pos }\n#end\n", frameName(mf, n), m.POVFrameID(n))
+				fmt.Fprintf(of, "#macro %s(pos, rot)\n%s\n#end\n", frameName(mf, n), m.POVFrameID(n))
 			}
 		}()
 	}
@@ -75,6 +75,22 @@ func show(p pak.MultiPak) {
 	}
 }
 
+func triangles(p pak.MultiPak) {
+	h, err := p.Get(*model)
+	if err != nil {
+		log.Fatalf("Unable to get %q: %v", *model, err)
+	}
+
+	m, err := mdl.Load(h)
+	if err != nil {
+		log.Fatalf("Unable to load %q: %v", *model, err)
+	}
+
+	for n, _ := range m.Frames {
+		fmt.Printf("#macro %s(pos, rot)\n%s\n#end\n", frameName(*model, n), m.POVFrameID(n))
+	}
+}
+
 func main() {
 	flag.Parse()
 	p, err := pak.MultiOpen(flag.Args()...)
@@ -85,6 +101,8 @@ func main() {
 	switch *command {
 	case "convert":
 		convert(p)
+	case "pov-tri":
+		triangles(p)
 	case "show":
 		show(p)
 	}

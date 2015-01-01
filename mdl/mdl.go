@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strings"
 )
 
 const (
@@ -22,8 +23,16 @@ type Vertex struct {
 	X, Y, Z float32
 }
 
+type ModelVertex struct {
+	Vertex      Vertex
+	NormalIndex int
+}
+
 func (v *Vertex) String() string {
-	return fmt.Sprintf("%f, %f, %f", v.X, v.Y, v.Z)
+	return fmt.Sprintf("%g,%g,%g", v.X, v.Y, v.Z)
+}
+func (v *ModelVertex) String() string {
+	return v.Vertex.String()
 }
 
 type myReader interface {
@@ -65,7 +74,7 @@ type Triangle struct {
 
 type SimpleFrame struct {
 	Name     string
-	Vertices []Vertex
+	Vertices []ModelVertex
 }
 
 type Model struct {
@@ -74,28 +83,61 @@ type Model struct {
 }
 
 func (m *Model) POVFrameID(id int) string {
+	const useNormals = true
+
 	var ret string
-	frame := m.Frames[id]
-	for _, tri := range m.Triangles {
-		ret += fmt.Sprintf(`polygon {
-  3,
-  <%v>,
-  <%v>,
-  <%v>
-  finish {
-    ambient 0.1
-    diffuse 0.6
-  }
-  pigment {
-    Red
-  }
-}
-`,
-			frame.Vertices[tri.VertexIndex[0]].String(),
-			frame.Vertices[tri.VertexIndex[1]].String(),
-			frame.Vertices[tri.VertexIndex[2]].String(),
-		)
+	ret = "mesh2 {\n"
+
+	// Add vertices.
+	{
+		vs := []string{}
+		for _, v := range m.Frames[id].Vertices {
+			vs = append(vs, fmt.Sprintf("<%s>", v.String()))
+		}
+		ret += fmt.Sprintf("  vertex_vectors { %d, %s }\n", len(vs), strings.Join(vs, ","))
 	}
+
+	// Add normals.
+	if useNormals {
+		ns := []string{}
+		for _, v := range anorms {
+			ns = append(ns, fmt.Sprintf("<%g,%g,%g>", v[0], v[1], v[2]))
+		}
+		ret += fmt.Sprintf("  normal_vectors { %d, %s }\n", len(ns), strings.Join(ns, ","))
+	}
+
+	// Add textures.
+	{
+		ret += "  texture_list { 1,\n"
+		ret += `
+    texture {
+      pigment { rgb<1,0,0> }
+      finish { phong 0.9 phong_size 60 }
+    }
+`
+		ret += "  }\n"
+	}
+
+	// Add faces.
+	{
+		tris := []string{}
+		for _, tri := range m.Triangles {
+			texture := 0
+			tris = append(tris, fmt.Sprintf("<%d,%d,%d>,%d", tri.VertexIndex[0], tri.VertexIndex[1], tri.VertexIndex[2], texture))
+		}
+		ret += fmt.Sprintf("  face_indices { %d, %s }\n", len(tris), strings.Join(tris, ","))
+	}
+
+	// Add normal indices.
+	if useNormals {
+		vs := []string{}
+		for _, v := range m.Frames[id].Vertices {
+			vs = append(vs, fmt.Sprintf("%d", v.NormalIndex))
+		}
+		ret += fmt.Sprintf("  normal_indices { %d, %s }\n", len(vs), strings.Join(vs, ","))
+	}
+
+	ret += "rotate rot translate pos}\n"
 	return ret
 }
 
@@ -192,10 +234,13 @@ func Load(r myReader) (*Model, error) {
 				Name: s.Name(),
 			}
 			for n, v := range s.Verts {
-				sf.Vertices = append(sf.Vertices, Vertex{
-					X: (h.Scale.X*float32(v.X) + h.Translate.X),
-					Y: (h.Scale.Y*float32(v.Y) + h.Translate.Y),
-					Z: (h.Scale.Z*float32(v.Z) + h.Translate.Z),
+				sf.Vertices = append(sf.Vertices, ModelVertex{
+					Vertex: Vertex{
+						X: (h.Scale.X*float32(v.X) + h.Translate.X),
+						Y: (h.Scale.Y*float32(v.Y) + h.Translate.Y),
+						Z: (h.Scale.Z*float32(v.Z) + h.Translate.Z),
+					},
+					NormalIndex: int(v.NormalIndex),
 				})
 				if Verbose {
 					log.Printf("Vert %d: %v -> %v", n, v, sf.Vertices[len(sf.Vertices)-1])
