@@ -108,7 +108,18 @@ func (bsp *BSP) POVTriangleMesh() (string, error) {
 	}
 
 	// Add textures.
-	ret += "  texture_list { 2, texture{pigment{rgb<1,1,1>}} texture{pigment{rgbf<0,0,1,0.9>}} }\n"
+	ret += "  texture_list { 2,\n"
+	ret += "    texture{pigment{rgb<1,1,1>}}"
+	ret += `
+    texture {
+      normal { bumps 0.08 scale <1,0.25,0.35>*1 turbulence 0.6 }
+      pigment { rgbf<0,0,1,0.2> }
+      finish {
+        reflection 0.3
+        diffuse 0.55
+      }
+    }`
+	ret += "  }\n"
 
 	// Add faces.
 	{

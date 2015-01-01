@@ -132,9 +132,6 @@ func validModel(m string) bool {
 	if strings.Contains(m, "w_spike.mdl") {
 		return false
 	}
-	if strings.Contains(m, "h_guard.mdl") {
-		return false
-	}
 	if strings.Contains(m, "missile.mdl") {
 		return false
 	}
@@ -198,11 +195,16 @@ camera {
 				// TODO: this is dynamic entities?
 				continue
 			}
+			frame := int(e.Frame)
+			if strings.Contains(d.ServerInfo.Models[e.Model], "h_guard.mdl") {
+				// TODO: the guard model seems to be broken.
+				frame = 0
+			}
 			//log.Printf("Entity %d has model %d of %d", n, e.Model, len(d.ServerInfo.Models))
 			//log.Printf("  Name: %q", d.ServerInfo.Models[e.Model])
 			if validModel(d.ServerInfo.Models[e.Model]) {
 				fmt.Fprintf(fo, "// Entity %d\n", n)
-				fmt.Fprintf(fo, "%s(<%s>,<%s>)\n", frameName(d.ServerInfo.Models[e.Model], int(e.Frame)), e.Pos.String(), e.Angle.String())
+				fmt.Fprintf(fo, "%s(<%s>,<%s>)\n", frameName(d.ServerInfo.Models[e.Model], frame), e.Pos.String(), e.Angle.String())
 			}
 		}
 	}
