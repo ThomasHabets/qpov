@@ -14,6 +14,7 @@ import (
 var (
 	povray      = flag.String("povray", "/usr/bin/povray", "Path to povray.")
 	concurrency = flag.Int("concurrency", 4, "Run this many povrays in parallel.")
+	fast        = flag.Bool("fast", false, "Fast rendering.")
 
 	mutex                  sync.Mutex
 	totalUser, totalSystem time.Duration
@@ -40,14 +41,21 @@ func doRender(files []string, done chan<- int) {
 			}
 			defer stderr.Close()
 
-			cmd := exec.Command(*povray, "-D", path.Base(f))
+			args := []string{
+				"-D",
+			}
+			if *fast {
+				args = append(args, "+Q0")
+			}
+			args = append(args, path.Base(f))
+			cmd := exec.Command(*povray, args...)
 			cmd.Stdout = stdout
 			cmd.Stderr = stderr
 			cmd.Dir = path.Dir(f)
 
 			st := time.Now()
 			if err := cmd.Run(); err != nil {
-				log.Fatalf("Failed to render: %v", err)
+				log.Fatalf("Failed to render %q: %v", f, err)
 			}
 			fmt.Fprintf(stats, "Sys: %+v\n", cmd.ProcessState.Sys())
 			fmt.Fprintf(stats, "SysUsage: %+v\n", cmd.ProcessState.SysUsage())
@@ -72,10 +80,10 @@ func main() {
 	total := len(flag.Args())
 	step := total / *concurrency
 	st := time.Now()
-	go doRender(flag.Args()[:step], done)
-	go doRender(flag.Args()[step:2*step], done)
-	go doRender(flag.Args()[2*step:3*step], done)
-	go doRender(flag.Args()[3*step:], done)
+	for i := 0; i < *concurrency-1; i++ {
+		go doRender(flag.Args()[i*step:(i+1)*step], done)
+	}
+	go doRender(flag.Args()[(*concurrency-1)*step:], done)
 
 	finished := 0
 	for _ = range done {

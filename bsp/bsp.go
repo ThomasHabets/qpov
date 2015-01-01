@@ -220,6 +220,7 @@ func parseVertex(s string) Vertex {
 }
 
 func Load(r myReader) (*BSP, error) {
+	// Load file header.
 	var h fileHeader
 	if err := binary.Read(r, binary.LittleEndian, &h); err != nil {
 		return nil, err
@@ -230,126 +231,149 @@ func Load(r myReader) (*BSP, error) {
 	ret := &BSP{}
 
 	// Load vertices.
-	numVertices := h.Vertices.Size / fileVertexSize
-	vs := make([]fileVertex, numVertices, numVertices)
-	if _, err := r.Seek(int64(h.Vertices.Offset), 0); err != nil {
-		return nil, err
-	}
-	if err := binary.Read(r, binary.LittleEndian, &vs); err != nil {
-		return nil, err
+	var vs []fileVertex
+	{
+		if h.Vertices.Size%fileVertexSize != 0 {
+			return nil, fmt.Errorf("vertex sizes %v not divisable by %v", h.Vertices.Size, fileVertexSize)
+		}
+		numVertices := h.Vertices.Size / fileVertexSize
+		vs = make([]fileVertex, numVertices, numVertices)
+		if _, err := r.Seek(int64(h.Vertices.Offset), 0); err != nil {
+			return nil, err
+		}
+		if err := binary.Read(r, binary.LittleEndian, &vs); err != nil {
+			return nil, err
+		}
 	}
 
 	// Load faces.
-	if h.Faces.Size%fileFaceSize != 0 {
-		return nil, fmt.Errorf("face sizes %v not divisable by %v", h.Faces.Size, fileFaceSize)
-	}
-	numFaces := h.Faces.Size / fileFaceSize
-	fs := make([]fileFace, numFaces, numFaces)
-	if _, err := r.Seek(int64(h.Faces.Offset), 0); err != nil {
-		return nil, err
-	}
-	if err := binary.Read(r, binary.LittleEndian, &fs); err != nil {
-		return nil, err
+	var fs []fileFace
+	{
+		if h.Faces.Size%fileFaceSize != 0 {
+			return nil, fmt.Errorf("face sizes %v not divisable by %v", h.Faces.Size, fileFaceSize)
+		}
+		numFaces := h.Faces.Size / fileFaceSize
+		fs = make([]fileFace, numFaces, numFaces)
+		if _, err := r.Seek(int64(h.Faces.Offset), 0); err != nil {
+			return nil, err
+		}
+		if err := binary.Read(r, binary.LittleEndian, &fs); err != nil {
+			return nil, err
+		}
 	}
 
 	// Load edges.
-	numEdges := h.Edges.Size / fileEdgeSize
-	if h.Edges.Size%fileEdgeSize != 0 {
-		return nil, fmt.Errorf("edge sizes %v not divisable by %v", h.Edges.Size, fileEdgeSize)
-	}
-	es := make([]fileEdge, numEdges, numEdges)
-	if _, err := r.Seek(int64(h.Edges.Offset), 0); err != nil {
-		return nil, err
-	}
-	if err := binary.Read(r, binary.LittleEndian, &es); err != nil {
-		return nil, err
+	var es []fileEdge
+	{
+		if h.Edges.Size%fileEdgeSize != 0 {
+			return nil, fmt.Errorf("edge sizes %v not divisable by %v", h.Edges.Size, fileEdgeSize)
+		}
+		numEdges := h.Edges.Size / fileEdgeSize
+		es = make([]fileEdge, numEdges, numEdges)
+		if _, err := r.Seek(int64(h.Edges.Offset), 0); err != nil {
+			return nil, err
+		}
+		if err := binary.Read(r, binary.LittleEndian, &es); err != nil {
+			return nil, err
+		}
 	}
 
 	// Load ledges.
-	ledgeSize := uint32(4)
-	numLEdges := h.LEdges.Size / ledgeSize
-	if h.LEdges.Size%ledgeSize != 0 {
-		return nil, fmt.Errorf("ledge sizes %v not divisable by %v", h.LEdges.Size, ledgeSize)
+	var les []int32
+	{
+		ledgeSize := uint32(4)
+		if h.LEdges.Size%ledgeSize != 0 {
+			return nil, fmt.Errorf("ledge sizes %v not divisable by %v", h.LEdges.Size, ledgeSize)
+		}
+		numLEdges := h.LEdges.Size / ledgeSize
+		les = make([]int32, numLEdges, numLEdges)
+		if _, err := r.Seek(int64(h.LEdges.Offset), 0); err != nil {
+			return nil, err
+		}
+		if err := binary.Read(r, binary.LittleEndian, &les); err != nil {
+			return nil, err
+		}
+		//fmt.Printf("LEdges: %v\n", les)
 	}
-	les := make([]int32, numLEdges, numLEdges)
-	if _, err := r.Seek(int64(h.LEdges.Offset), 0); err != nil {
-		return nil, err
-	}
-	if err := binary.Read(r, binary.LittleEndian, &les); err != nil {
-		return nil, err
-	}
-	//fmt.Printf("LEdges: %v\n", les)
 
 	// Load texinfo.
-	numTexInfos := h.TexInfo.Size / fileTexInfoSize
-	if h.TexInfo.Size%fileTexInfoSize != 0 {
-		return nil, fmt.Errorf("texInfo size %v not divisible by %v", h.TexInfo.Size, fileTexInfoSize)
-	}
-	tes := make([]fileTexInfo, numTexInfos, numTexInfos)
-	if _, err := r.Seek(int64(h.TexInfo.Offset), 0); err != nil {
-		return nil, err
-	}
-	if err := binary.Read(r, binary.LittleEndian, &tes); err != nil {
-		return nil, err
+	var tes []fileTexInfo
+	{
+		if h.TexInfo.Size%fileTexInfoSize != 0 {
+			return nil, fmt.Errorf("texInfo size %v not divisible by %v", h.TexInfo.Size, fileTexInfoSize)
+		}
+		numTexInfos := h.TexInfo.Size / fileTexInfoSize
+		tes = make([]fileTexInfo, numTexInfos, numTexInfos)
+		if _, err := r.Seek(int64(h.TexInfo.Offset), 0); err != nil {
+			return nil, err
+		}
+		if err := binary.Read(r, binary.LittleEndian, &tes); err != nil {
+			return nil, err
+		}
 	}
 
 	// Load miptex.
-	if _, err := r.Seek(int64(h.Miptex.Offset), 0); err != nil {
-		return nil, err
-	}
-	var numMipTex uint32
-	if err := binary.Read(r, binary.LittleEndian, &numMipTex); err != nil {
-		return nil, err
-	}
-	log.Printf("Number of textures: %d", numMipTex)
-	mipTexOfs := make([]uint32, numMipTex, numMipTex)
-	mtes := make([]fileMiptex, numMipTex, numMipTex)
-	if err := binary.Read(r, binary.LittleEndian, &mipTexOfs); err != nil {
-		return nil, err
-	}
-	for n := range mipTexOfs {
-		if _, err := r.Seek(int64(h.Miptex.Offset+mipTexOfs[n]), 0); err != nil {
+	var mtes []fileMiptex
+	{
+		if _, err := r.Seek(int64(h.Miptex.Offset), 0); err != nil {
 			return nil, err
 		}
-		if err := binary.Read(r, binary.LittleEndian, &mtes[n]); err != nil {
+		var numMipTex uint32
+		if err := binary.Read(r, binary.LittleEndian, &numMipTex); err != nil {
 			return nil, err
 		}
-		if Verbose {
-			log.Printf("Miptex %s: %v", mtes[n].Name(), mtes[n])
+		log.Printf("Number of textures: %d", numMipTex)
+		mipTexOfs := make([]uint32, numMipTex, numMipTex)
+		mtes = make([]fileMiptex, numMipTex, numMipTex)
+		if err := binary.Read(r, binary.LittleEndian, &mipTexOfs); err != nil {
+			return nil, err
+		}
+		for n := range mipTexOfs {
+			if _, err := r.Seek(int64(h.Miptex.Offset+mipTexOfs[n]), 0); err != nil {
+				return nil, err
+			}
+			if err := binary.Read(r, binary.LittleEndian, &mtes[n]); err != nil {
+				return nil, err
+			}
+			if Verbose {
+				log.Printf("Miptex %s: %v", mtes[n].Name(), mtes[n])
+			}
 		}
 	}
 
 	// Load entities.
-	if _, err := r.Seek(int64(h.Entities.Offset), 0); err != nil {
-		return nil, err
+	{
+		if _, err := r.Seek(int64(h.Entities.Offset), 0); err != nil {
+			return nil, err
+		}
+		entBytes := make([]byte, h.Entities.Size)
+		if n, err := r.Read(entBytes); err != nil {
+			return nil, err
+		} else if uint32(n) != h.Entities.Size {
+			return nil, fmt.Errorf("short read: %d < %d", n, h.Entities.Size)
+		}
+		var err error
+		ret.Entities, err = parseEntities(string(entBytes))
+		if err != nil {
+			return nil, err
+		}
+		ret.StartPos = findStart(ret.Entities)
 	}
-	entBytes := make([]byte, h.Entities.Size)
-	if n, err := r.Read(entBytes); err != nil {
-		return nil, err
-	} else if uint32(n) != h.Entities.Size {
-		return nil, fmt.Errorf("short read: %d < %d", n, h.Entities.Size)
-	}
-	var err error
-	ret.Entities, err = parseEntities(string(entBytes))
-	if err != nil {
-		return nil, err
-	}
-	ret.StartPos = findStart(ret.Entities)
 
 	// Assemble polygons.
-	for _, f := range fs {
+	for faceIndex, f := range fs {
 		p := Polygon{
 			Texture: mtes[tes[f.TexinfoID].TextureID].Name(),
 		}
 		first, last := f.LEdge, f.LEdge+uint32(f.LEdgeNum)
 		if Verbose {
-			log.Printf("LEdges: %v (%d to %d of %v)\n", f.LEdgeNum, first, last-1, numLEdges)
+			log.Printf("LEdges: %v (%d to %d of %v)\n", f.LEdgeNum, first, last-1, len(les))
 		}
 		for i := first; i < last; i++ {
 			if Verbose {
 				log.Printf(" LEdge: %v\n", i)
 			}
-			if i >= numLEdges {
+			if i >= uint32(len(les)) {
 				log.Fatalf("Index to LEdge OOB")
 			}
 			e := les[i]
@@ -378,15 +402,58 @@ func Load(r myReader) (*BSP, error) {
 				Z: vs[vi1].Z,
 			}
 			if Verbose {
-				log.Printf("   Coord: %v\n", v0)
-				log.Printf("   Coord: %v\n", v1)
+				log.Printf("   Edge coord: %v -> %v\n", v0, v1)
 			}
 			if i == first {
 				p.Vertex = append(p.Vertex, v0)
 			}
 			p.Vertex = append(p.Vertex, v1)
 		}
-		if len(p.Vertex) > 0 {
+		if f.Side != 0 {
+			for n := range p.Vertex {
+				n2 := len(p.Vertex) - n - 1
+				p.Vertex[n], p.Vertex[n2] = p.Vertex[n2], p.Vertex[n]
+			}
+		}
+		if true {
+			blah := false
+			if faceIndex == 3942 {
+				blah = true
+			}
+			if blah {
+				log.Printf("Face %v (%v) became triangle %v", faceIndex, p, len(ret.Polygons))
+			}
+			for i := 0; i < len(p.Vertex)-2; i++ {
+				ret.Polygons = append(ret.Polygons, Polygon{
+					Texture: p.Texture,
+					Vertex: []Vertex{
+						Vertex{
+							X: p.Vertex[0].X,
+							Y: p.Vertex[0].Y,
+							Z: p.Vertex[0].Z,
+						},
+						Vertex{
+							X: p.Vertex[i+1].X,
+							Y: p.Vertex[i+1].Y,
+							Z: p.Vertex[i+1].Z,
+						},
+						Vertex{
+							X: p.Vertex[i+2].X,
+							Y: p.Vertex[i+2].Y,
+							Z: p.Vertex[i+2].Z,
+						},
+						Vertex{
+							X: p.Vertex[0].X,
+							Y: p.Vertex[0].Y,
+							Z: p.Vertex[0].Z,
+						},
+					},
+				})
+				if blah {
+					log.Printf("  Triangle: %v", ret.Polygons[len(ret.Polygons)-1])
+				}
+			}
+		} else {
 			ret.Polygons = append(ret.Polygons, p)
 			if Verbose {
 				log.Printf("Added:  %v\n", p)

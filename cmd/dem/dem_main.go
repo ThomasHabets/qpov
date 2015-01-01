@@ -16,13 +16,19 @@ import (
 )
 
 var (
-	outDir = flag.String("out", "render", "Output directory.")
-	demo   = flag.String("demo", "", "Demo file inside a pak.")
+	outDir   = flag.String("out", "render", "Output directory.")
+	demo     = flag.String("demo", "", "Demo file inside a pak.")
+	entities = flag.Bool("entities", true, "Render entities too.")
 )
 
 func main() {
 	flag.Parse()
-
+	if len(flag.Args()) == 0 {
+		log.Fatal("Usage")
+	}
+	if *demo == "" {
+		log.Fatal("Usage")
+	}
 	p, err := pak.MultiOpen(flag.Args()...)
 	if err != nil {
 		log.Fatalf("MultiOpen(%q): %v", flag.Args(), err)
@@ -95,6 +101,7 @@ func writeLevel(fn string, level *bsp.BSP) {
 		for _, v := range p.Vertex {
 			vs = append(vs, fmt.Sprintf("<%f,%f,%f>", v.X, v.Y, v.Z))
 		}
+		// Poly.
 		fmt.Fprintf(fo, `polygon {
   %d,
   %s
@@ -105,6 +112,28 @@ func writeLevel(fn string, level *bsp.BSP) {
   pigment { %s }
 }
 `, len(p.Vertex), strings.Join(vs, ",\n  "), randColor())
+
+		// Reverse poly.
+		if false {
+			v2 := p.Vertex[:]
+			for n := range v2 {
+				p.Vertex[n] = v2[len(v2)-1-n]
+			}
+			vs = nil
+			for _, v := range p.Vertex {
+				vs = append(vs, fmt.Sprintf("<%f,%f,%f>", v.X, v.Y, v.Z))
+			}
+			fmt.Fprintf(fo, `polygon {
+  %d,
+  %s
+  finish {
+    ambient 0.1
+    diffuse 0.6
+  }
+  pigment { %s }
+}
+`, len(p.Vertex), strings.Join(vs, ",\n  "), randColor())
+		}
 	}
 }
 
@@ -143,13 +172,13 @@ func validModel(m string) bool {
 	if strings.Contains(m, "flame2.mdl") {
 		return false
 	}
-	if strings.Contains(m, "soldier.mdl") {
-		return false
-	}
 	if strings.Contains(m, "w_spike.mdl") {
 		return false
 	}
 	if strings.Contains(m, "h_guard.mdl") {
+		return false
+	}
+	if strings.Contains(m, "missile.mdl") {
 		return false
 	}
 	return true
@@ -174,13 +203,19 @@ func writePOV(fn string, levelfn string, level *bsp.BSP, d *dem.Demo) {
 	}
 
 	models := []string{}
-	for _, m := range d.ServerInfo.Models {
-		if !validModel(m) {
-			continue
+	if *entities {
+		for _, m := range d.ServerInfo.Models {
+			if !validModel(m) {
+				continue
+			}
+			models = append(models, fmt.Sprintf(`#include "%s.inc"`, m))
 		}
-		models = append(models, fmt.Sprintf(`#include "%s.inc"`, m))
 	}
-	fmt.Fprintf(fo, `#include "colors.inc"
+	fmt.Fprintf(fo, `#version 3.7;
+global_settings {
+  assumed_gamma 2.2
+}
+#include "colors.inc"
 #include "%s"
 %s
 light_source { <%s> color White }
@@ -196,20 +231,22 @@ camera {
 		d.ViewAngle.X, d.ViewAngle.Y, d.ViewAngle.Z,
 		//d.ViewAngle.Z, d.ViewAngle.X, d.ViewAngle.Y,
 		pos.String())
-	for n, e := range d.Entities {
-		if e.Model == 0 {
-			// Unused.
-			continue
-		}
-		if int(e.Model) >= len(d.ServerInfo.Models) {
-			// TODO: this is dynamic entities?
-			continue
-		}
-		//log.Printf("Entity %d has model %d of %d", n, e.Model, len(d.ServerInfo.Models))
-		//log.Printf("  Name: %q", d.ServerInfo.Models[e.Model])
-		if validModel(d.ServerInfo.Models[e.Model]) {
-			fmt.Fprintf(fo, "// Entity %d\n", n)
-			fmt.Fprintf(fo, "%s(<%s>,<%s>)\n", frameName(d.ServerInfo.Models[e.Model], int(e.Frame)), e.Pos.String(), e.Angle.String())
+	if *entities {
+		for n, e := range d.Entities {
+			if e.Model == 0 {
+				// Unused.
+				continue
+			}
+			if int(e.Model) >= len(d.ServerInfo.Models) {
+				// TODO: this is dynamic entities?
+				continue
+			}
+			//log.Printf("Entity %d has model %d of %d", n, e.Model, len(d.ServerInfo.Models))
+			//log.Printf("  Name: %q", d.ServerInfo.Models[e.Model])
+			if validModel(d.ServerInfo.Models[e.Model]) {
+				fmt.Fprintf(fo, "// Entity %d\n", n)
+				fmt.Fprintf(fo, "%s(<%s>,<%s>)\n", frameName(d.ServerInfo.Models[e.Model], int(e.Frame)), e.Pos.String(), e.Angle.String())
+			}
 		}
 	}
 }
@@ -217,14 +254,23 @@ camera {
 var randColorState int
 
 func randColor() string {
-	return "Green"
+	return "White"
 	randColorState++
+
+	// qdqr e1m4 frame 200, polygon 3942 not being drawn correctly.
+	if randColorState < 15506 { // 31010 {
+		return "White"
+	}
+	if randColorState > 15510 { // 31021 {
+		return "Red"
+	}
 	colors := []string{
 		"Green",
-		"White",
+		//"White",
 		"Blue",
-		"Red",
+		//		"Red",
 		"Yellow",
+		//"Brown",
 	}
 	return colors[randColorState%len(colors)]
 }
