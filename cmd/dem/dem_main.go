@@ -97,10 +97,12 @@ func writeLevel(fn string, level *bsp.BSP) {
 func frameName(mf string, frame int) string {
 	s := mf
 
-	re2 := regexp.MustCompile(`progs/h_`)
-	s2 := re2.ReplaceAllString(s, "progs/")
-	if _, err := os.Stat(s2 + ".inc"); err == nil {
-		s = s2
+	if false {
+		re2 := regexp.MustCompile(`progs/h_`)
+		s2 := re2.ReplaceAllString(s, "progs/")
+		if _, err := os.Stat(s2 + ".inc"); err == nil {
+			s = s2
+		}
 	}
 	re := regexp.MustCompile(`[/.-]`)
 	s = re.ReplaceAllString(s, "_")
@@ -170,6 +172,7 @@ global_settings {
   assumed_gamma 2.2
 }
 #include "colors.inc"
+#include "progs/soldier.mdl.inc"
 #include "%s"
 %s
 light_source { <%s> color White }
@@ -195,16 +198,17 @@ camera {
 				// TODO: this is dynamic entities?
 				continue
 			}
+			name := d.ServerInfo.Models[e.Model]
 			frame := int(e.Frame)
-			if strings.Contains(d.ServerInfo.Models[e.Model], "h_guard.mdl") {
-				// TODO: the guard model seems to be broken.
-				frame = 0
+			if strings.Contains(name, "h_guard.mdl") {
+				// TODO: What's going on here?
+				name = "progs/soldier.mdl"
 			}
 			//log.Printf("Entity %d has model %d of %d", n, e.Model, len(d.ServerInfo.Models))
 			//log.Printf("  Name: %q", d.ServerInfo.Models[e.Model])
 			if validModel(d.ServerInfo.Models[e.Model]) {
 				fmt.Fprintf(fo, "// Entity %d\n", n)
-				fmt.Fprintf(fo, "%s(<%s>,<%s>)\n", frameName(d.ServerInfo.Models[e.Model], frame), e.Pos.String(), e.Angle.String())
+				fmt.Fprintf(fo, "%s(<%s>,<%s>)\n", frameName(name, frame), e.Pos.String(), e.Angle.String())
 			}
 		}
 	}
