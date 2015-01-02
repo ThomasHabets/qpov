@@ -227,13 +227,17 @@ camera {
 			}
 			name := d.ServerInfo.Models[e.Model]
 			frame := int(e.Frame)
-			if strings.Contains(name, "h_guard.mdl") {
-				// TODO: What's going on here?
-				name = "progs/soldier.mdl"
-			}
+
+			// TODO: What's going on here?
 			switch name {
+			case "progs/h_guard.mdl":
+				name = "progs/soldier.mdl"
 			case "progs/armor.mdl", "progs/spike.mdl", "progs/h_shams.mdl":
 				frame = 0
+			case "progs/playernl.mdl":
+				if frame > 18 {
+					frame = 0
+				}
 			}
 			//log.Printf("Entity %d has model %d of %d", n, e.Model, len(d.ServerInfo.Models))
 			//log.Printf("  Name: %q", d.ServerInfo.Models[e.Model])

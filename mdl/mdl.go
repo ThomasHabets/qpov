@@ -103,19 +103,15 @@ func (m *Model) POVFrameID(id int, skin string) string {
 	}
 
 	// Add texture coordinates.
-	{
+	if skin != "" {
 		vs := []string{}
 		for _, v := range m.TextureCoords {
-			if false {
-				vs = append(vs, fmt.Sprintf("<0,0>"))
-			} else {
-				vs = append(vs, fmt.Sprintf("<%v,%v>",
-					float64(v.S)/float64(m.Header.SkinWidth),
-					float64(v.T)/float64(m.Header.SkinHeight),
-				))
-
-			}
-
+			// Add every texture coordinate twice. Once for normal vertices,
+			// and once for backfacing onseam.
+			s := (float64(v.S)) / float64(m.Header.SkinWidth)
+			t := (float64(v.T)) / float64(m.Header.SkinHeight)
+			vs = append(vs, fmt.Sprintf("<%v,%v>", s, t),
+				fmt.Sprintf("<%v,%v>", s+0.5, t))
 		}
 		ret += fmt.Sprintf("  uv_vectors { %d, %s }\n", len(vs), strings.Join(vs, ","))
 	}
@@ -130,7 +126,7 @@ func (m *Model) POVFrameID(id int, skin string) string {
 	}
 
 	// Add textures.
-	{
+	if skin != "" {
 		ret += "  texture_list { 1,\n"
 		ret += fmt.Sprintf(`
     texture {
@@ -146,6 +142,8 @@ func (m *Model) POVFrameID(id int, skin string) string {
     }
 `, skin)
 		ret += "  }\n"
+	} else {
+		ret += "  texture_list { 1, texture { pigment { rgb<1,0,0> } } }\n"
 	}
 
 	// Add faces.
@@ -168,10 +166,19 @@ func (m *Model) POVFrameID(id int, skin string) string {
 	}
 
 	// Add texture indeces indices.
-	{
+	if skin != "" {
 		vs := []string{}
 		for _, tri := range m.Triangles {
-			vs = append(vs, fmt.Sprintf("<%v,%v,%v>", tri.VertexIndex[0], tri.VertexIndex[1], tri.VertexIndex[2]))
+			ind := []int{0, 0, 0}
+			for i := 0; i < 3; i++ {
+				ind[i] = int(tri.VertexIndex[i] * 2)
+				if tri.FacesFront == 0 {
+					if m.TextureCoords[tri.VertexIndex[i]].Onseam > 0 {
+						ind[i]++
+					}
+				}
+			}
+			vs = append(vs, fmt.Sprintf("<%v,%v,%v>", ind[0], ind[1], ind[2]))
 			//_ = tri
 			//vs = append(vs, "<0,0,0>")
 		}

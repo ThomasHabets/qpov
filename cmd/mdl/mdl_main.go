@@ -14,18 +14,16 @@ import (
 	"github.com/ThomasHabets/bsparse/pak"
 )
 
-var (
-	model   = flag.String("model", "progs/ogre.mdl", "Model to read.")
-	command = flag.String("c", "show", "Command (convert, show)")
-	outDir  = flag.String("out", ".", "Output directory.")
-)
-
 func frameName(mf string, frame int) string {
 	re := regexp.MustCompile(`[/.-]`)
 	return fmt.Sprintf("demprefix_%s_%d", re.ReplaceAllString(mf, "_"), frame)
 }
 
-func convert(p pak.MultiPak) {
+func convert(p pak.MultiPak, args ...string) {
+	fs := flag.NewFlagSet("convert", flag.ExitOnError)
+	outDir := fs.String("out", ".", "Output directory.")
+	fs.Parse(args)
+
 	errors := []string{}
 	os.Mkdir(*outDir, 0755)
 	for _, mf := range p.List() {
@@ -76,18 +74,22 @@ func convert(p pak.MultiPak) {
 	fmt.Printf("Failed to convert %d models:\n  %s\n", len(errors), strings.Join(errors, "\n  "))
 }
 
-func show(p pak.MultiPak) {
-	h, err := p.Get(*model)
+func show(p pak.MultiPak, args ...string) {
+	fs := flag.NewFlagSet("show", flag.ExitOnError)
+	fs.Parse(args)
+	model := fs.Arg(0)
+
+	h, err := p.Get(model)
 	if err != nil {
-		log.Fatalf("Unable to get %q: %v", *model, err)
+		log.Fatalf("Unable to get %q: %v", model, err)
 	}
 
 	m, err := mdl.Load(h)
 	if err != nil {
-		log.Fatalf("Unable to load %q: %v", *model, err)
+		log.Fatalf("Unable to load %q: %v", model, err)
 	}
 
-	fmt.Printf("Filename: %s\n  Triangles: %v\n", *model, len(m.Triangles))
+	fmt.Printf("Filename: %s\n  Triangles: %v\n", model, len(m.Triangles))
 	fmt.Printf("Skins: %v\n", len(m.Skins))
 	fmt.Printf("  %6s %16s\n", "Frame#", "Name")
 	for n, f := range m.Frames {
@@ -95,36 +97,49 @@ func show(p pak.MultiPak) {
 	}
 }
 
-func triangles(p pak.MultiPak) {
-	h, err := p.Get(*model)
+func triangles(p pak.MultiPak, args ...string) {
+	fs := flag.NewFlagSet("pov", flag.ExitOnError)
+	rotate := fs.String("rotate", "0,0,0", "Rotate model.")
+	useSkin := fs.Bool("skin", true, "Use texture.")
+	fs.Parse(args)
+
+	model := fs.Arg(0)
+
+	h, err := p.Get(model)
 	if err != nil {
-		log.Fatalf("Unable to get %q: %v", *model, err)
+		log.Fatalf("Unable to get %q: %v", model, err)
 	}
 
 	m, err := mdl.Load(h)
 	if err != nil {
-		log.Fatalf("Unable to load %q: %v", *model, err)
+		log.Fatalf("Unable to load %q: %v", model, err)
 	}
 
 	for n, _ := range m.Frames {
-		fmt.Printf("#macro %s(pos, rot)\n%s\n#end\n", frameName(*model, n), m.POVFrameID(n, "blaha"))
+		skin := "\"" + path.Join(model, "skin_0.png") + "\""
+		if !*useSkin {
+			skin = ""
+		}
+		fmt.Printf("#macro %s(pos, rot)\nobject { %s rotate <%s>}\n#end\n", frameName(model, n), m.POVFrameID(n, skin), *rotate)
 	}
 }
 
 func main() {
 	flag.Parse()
-	p, err := pak.MultiOpen(flag.Args()...)
+	p, err := pak.MultiOpen(flag.Arg(0))
 	if err != nil {
 		log.Fatalf("Failed to open pakfiles %q: %v", flag.Args(), err)
 	}
 
-	switch *command {
+	switch flag.Arg(1) {
 	case "convert":
-		convert(p)
-	case "pov-tri":
-		triangles(p)
+		convert(p, flag.Args()[2:]...)
+	case "pov":
+		triangles(p, flag.Args()[2:]...)
 	case "show":
-		show(p)
+		show(p, flag.Args()[2:]...)
+	default:
+		log.Fatalf("Unknown command %q", flag.Arg(1))
 	}
 }
 
