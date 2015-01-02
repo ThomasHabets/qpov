@@ -116,7 +116,7 @@ func frameName(mf string, frame int) string {
 	if true {
 		re2 := regexp.MustCompile(`progs/h_`)
 		s2 := re2.ReplaceAllString(s, "progs/")
-		if _, err := os.Stat(s2 + ".inc"); err == nil {
+		if _, err := os.Stat(s2 + "/model.inc"); err == nil {
 			s = s2
 		}
 	}
