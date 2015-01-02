@@ -269,7 +269,9 @@ func (d *Demo) Read() error {
 		}
 		//log.Printf("Block: %v", block)
 		d.block = bytes.NewBuffer(block)
-		log.Printf("Block viewangle: %v", bh.ViewAngle)
+		if Verbose {
+			log.Printf("Block viewangle: %v", bh.ViewAngle)
+		}
 		d.viewAngle = bh.ViewAngle
 	}
 	tail := d.block.String()

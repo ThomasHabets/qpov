@@ -86,7 +86,7 @@ func main() {
 			writeLevel(path.Join(*outDir, levelfn), level)
 		}
 		if oldPos != d.Pos() {
-			if true {
+			if false {
 				fmt.Printf("Frame %d: Pos: %v -> %v, viewAngle %v -> %v\n", frame, oldPos, d.Pos(), oldView, d.ViewAngle())
 			}
 			oldPos = d.Pos()
