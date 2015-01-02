@@ -525,6 +525,7 @@ func (d *Demo) Read() error {
 	case 0x1a: // centerprint
 		readString(d.block)
 	case 0x1b: // killed monster
+	case 0x1c: // found secret
 	case 0x1d: // spawnstaticsound
 		readCoord(d.block)
 		readCoord(d.block)
@@ -533,6 +534,8 @@ func (d *Demo) Read() error {
 		readUint8(d.block)
 		readUint8(d.block)
 	case 0x1e: // intermission
+		readString(d.block)
+	case 0x1f: // finale - end screen
 		readString(d.block)
 	case 0x20: // CD track
 		readUint8(d.block)
@@ -652,7 +655,7 @@ func (d *Demo) Read() error {
 		}
 	}
 	if d.Entities != nil {
-		log.Printf("Camera %v %v", d.Entities[d.CameraEnt].Pos, d.Entities[d.CameraEnt].Angle)
+		//log.Printf("Camera %v %v", d.Entities[d.CameraEnt].Pos, d.Entities[d.CameraEnt].Angle)
 	}
 	if err != nil {
 		log.Fatal(err)
