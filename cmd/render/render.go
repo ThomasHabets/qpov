@@ -16,6 +16,7 @@ var (
 	schedtool   = flag.String("schedtool", "/usr/bin/schedtool", "Path to schedtool.")
 	concurrency = flag.Int("concurrency", 4, "Run this many povrays in parallel.")
 	fast        = flag.Bool("fast", false, "Fast rendering.")
+	hq          = flag.Bool("hq", true, "High quality.")
 
 	mutex                  sync.Mutex
 	totalUser, totalSystem time.Duration
@@ -48,7 +49,11 @@ func doRender(files []string, done chan<- int) {
 				"-D",
 			}
 			if *fast {
-				args = append(args, "+Q0")
+				args = append(args, "+Q0", "+W800", "+H450")
+			} else if *hq {
+				args = append(args, "+Q11", "+A0.1", "+R4", "+W1600", "+H900")
+			} else {
+				args = append(args, "+W1600", "+H900")
 			}
 			args = append(args, path.Base(f))
 			cmd := exec.Command(*schedtool, args...)

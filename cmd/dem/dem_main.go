@@ -198,7 +198,8 @@ camera {
   angle 100
   location <0,0,0>
   sky <0,0,1>
-  right <-1,0,0>
+  up <0,0,9>
+  right <-16,0,0>
   look_at <%s>
   rotate <%f,0,0>
   rotate <0,%f,0>
@@ -207,7 +208,7 @@ camera {
 }
 `, levelfn, strings.Join(models, "\n"), pos.String(), lookAt.String(),
 		d.ViewAngle().Z,
-		d.ViewAngle().X, // should always be close to 0.
+		d.ViewAngle().X,
 		d.ViewAngle().Y,
 		//d.ViewAngle.Z, d.ViewAngle.X, d.ViewAngle.Y,
 		pos.String())

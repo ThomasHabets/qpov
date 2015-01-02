@@ -138,6 +138,7 @@ func (m *Model) POVFrameID(id int, skin string) string {
       pigment {
         image_map {
           png %s
+          // TODO: interpolate 2
         }
         rotate <180,0,0>
       }

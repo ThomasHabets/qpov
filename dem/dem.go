@@ -325,6 +325,7 @@ func (d *Demo) Read() error {
 		y, _ := readAngle(d.block)
 		z, _ := readAngle(d.block)
 		log.Printf("Camera orientation changed to %f %f %f", x, y, z)
+		// TODO: set viewangle.
 		d.Entities[d.CameraEnt].Angle.X = x
 		d.Entities[d.CameraEnt].Angle.Y = y
 		d.Entities[d.CameraEnt].Angle.Z = z
