@@ -91,9 +91,10 @@ type Demo struct {
 	r     io.Reader
 	block *bytes.Buffer
 
-	Level     string
-	CameraEnt uint16
-	viewAngle Vertex
+	Level      string
+	CameraEnt  uint16
+	viewAngle  Vertex
+	BlockCount int
 
 	ServerInfo ServerInfo
 	Entities   []Entity
@@ -275,6 +276,7 @@ func (d *Demo) Read() error {
 		}
 		//log.Printf("Block: %v", block)
 		d.block = bytes.NewBuffer(block)
+		d.BlockCount++
 		if Verbose {
 			log.Printf("Block viewangle: %v", bh.ViewAngle)
 		}

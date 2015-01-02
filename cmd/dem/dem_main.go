@@ -18,40 +18,52 @@ import (
 )
 
 var (
-	cpuprofile  = flag.String("cpuprofile", "", "write cpu profile to file")
-	outDir      = flag.String("out", "render", "Output directory.")
-	demo        = flag.String("demo", "", "Demo file inside a pak.")
-	entities    = flag.Bool("entities", true, "Render entities too.")
-	useTextures = flag.Bool("textures", true, "Render textures.")
+	cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+	entities   = flag.Bool("entities", true, "Render entities too.")
 )
 
-func main() {
-	flag.Parse()
+func info(p pak.MultiPak, args ...string) {
+	fs := flag.NewFlagSet("info", flag.ExitOnError)
+	fs.Parse(args)
+	demo := fs.Arg(0)
+	df, err := p.Get(demo)
+	if err != nil {
+		log.Fatalf("Getting %q: %v", demo, err)
+	}
+	d := dem.Open(df)
 
-	if *cpuprofile != "" {
-		f, err := os.Create(*cpuprofile)
-		if err != nil {
-			log.Fatal(err)
+	oldTime := float32(-1)
+	timeUpdates := 0
+	messages := 0
+	for {
+		err := d.Read()
+		messages++
+		if err == io.EOF {
+			break
 		}
-		pprof.StartCPUProfile(f)
-		defer pprof.StopCPUProfile()
+		if err != nil {
+			log.Fatalf("Demo error: %v", err)
+		}
+		if oldTime != d.Time {
+			timeUpdates++
+			oldTime = d.Time
+		}
 	}
+	fmt.Printf("Blocks: %d\n", d.BlockCount)
+	fmt.Printf("Messages: %d\n", messages)
+	fmt.Printf("Time updates: %d\n", timeUpdates)
+}
 
-	if len(flag.Args()) == 0 {
-		log.Fatal("Usage")
-	}
-	if *demo == "" {
-		log.Fatal("Usage")
-	}
-	p, err := pak.MultiOpen(flag.Args()...)
-	if err != nil {
-		log.Fatalf("MultiOpen(%q): %v", flag.Args(), err)
-	}
-	defer p.Close()
+func convert(p pak.MultiPak, args ...string) {
+	fs := flag.NewFlagSet("convert", flag.ExitOnError)
+	useTextures := fs.Bool("textures", true, "Render textures.")
+	outDir := fs.String("out", "render", "Output directory.")
+	fs.Parse(args)
+	demo := fs.Arg(0)
 
-	df, err := p.Get(*demo)
+	df, err := p.Get(demo)
 	if err != nil {
-		log.Fatalf("Getting %q: %v", *demo, err)
+		log.Fatalf("Getting %q: %v", demo, err)
 	}
 	d := dem.Open(df)
 	oldTime := float32(-1.0)
@@ -91,9 +103,37 @@ func main() {
 			oldView = d.ViewAngle()
 			oldPos = d.Pos()
 			oldTime = d.Time
-			writePOV(path.Join(*outDir, fmt.Sprintf("frame-%08d.pov", frame)), d.Level, level, d)
+			writePOV(path.Join(*outDir, fmt.Sprintf("frame-%08d.pov", frame)), d.Level, level, d, *useTextures)
 			frame++
 		}
+	}
+}
+
+func main() {
+	flag.Parse()
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+
+	p, err := pak.MultiOpen(strings.Split(flag.Arg(0), ",")...)
+	if err != nil {
+		log.Fatalf("MultiOpen(%q): %v", flag.Arg(0), err)
+	}
+	defer p.Close()
+
+	switch flag.Arg(1) {
+	case "convert":
+		convert(p, flag.Args()[2:]...)
+	case "info":
+		info(p, flag.Args()[2:]...)
+	default:
+		log.Fatalf("Unknown command %q", flag.Arg(0))
 	}
 }
 
@@ -143,7 +183,7 @@ func validModel(m string) bool {
 	return true
 }
 
-func writePOV(fn string, levelfn string, level *bsp.BSP, d *dem.Demo) {
+func writePOV(fn string, levelfn string, level *bsp.BSP, d *dem.Demo, useTextures bool) {
 	ufo, err := os.Create(fn)
 	if err != nil {
 		log.Fatal("Creating %q: %v", fn, err)
@@ -237,7 +277,7 @@ camera {
 
 				// TODO: skin is broken sometimes, just use first one.
 				e.Skin = 0
-				if *useTextures {
+				if useTextures {
 					skinName := path.Join(name, fmt.Sprintf("skin_%v.png", e.Skin))
 					fmt.Fprintf(fo, "// Entity %d\n%s(<%s>,<%s>,\"%s\")\n", n, frameName(name, frame), e.Pos.String(), a.String(), skinName)
 				} else {
