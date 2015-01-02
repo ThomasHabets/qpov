@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+
+	"github.com/ThomasHabets/bsparse/bsp"
 )
 
 const (
@@ -67,7 +69,7 @@ const (
 
 var (
 	Verbose  = false
-	debugEnt = uint16(123)
+	debugEnt = uint16(0)
 )
 
 type Vertex struct {
@@ -101,12 +103,9 @@ type Demo struct {
 	Time       float32
 }
 
-type blockHeader struct {
+type BlockHeader struct {
 	Blocksize uint32
 	ViewAngle Vertex
-}
-
-type Message struct {
 }
 
 func Open(r io.Reader) *Demo {
@@ -185,7 +184,9 @@ func parseServerInfo(r io.Reader) (ServerInfo, error) {
 		if s == "" {
 			break
 		}
-		log.Printf("  ----> Loading model %d: %q", len(si.Models), s)
+		if Verbose {
+			log.Printf("  ----> Loading model %d: %q", len(si.Models), s)
+		}
 		si.Models = append(si.Models, s)
 		if len(si.Models) == 1 {
 			si.Models = append(si.Models, s)
@@ -263,27 +264,165 @@ func readInt16(r io.Reader) (int16, error) {
 	return ret, nil
 }
 
-func (d *Demo) Read() error {
-	if d.block == nil || len(d.block.String()) == 0 {
-		var bh blockHeader
-		if err := binary.Read(d.r, binary.LittleEndian, &bh); err != nil {
-			return err
-		}
-		//log.Printf("Read block of size %d (%x)\n", bh.Blocksize, bh.Blocksize)
-		block := make([]byte, bh.Blocksize, bh.Blocksize)
-		if _, err := d.r.Read(block); err != nil {
-			log.Fatalf("Reading block of size %d: %v", bh.Blocksize, err)
-		}
-		//log.Printf("Block: %v", block)
-		d.block = bytes.NewBuffer(block)
-		d.BlockCount++
-		if Verbose {
-			log.Printf("Block viewangle: %v", bh.ViewAngle)
-		}
-		d.viewAngle = bh.ViewAngle
+type State struct {
+	Time     float64
+	Entities []Entity
+
+	CameraEnt  int
+	ViewAngle  Vertex
+	ServerInfo ServerInfo
+	Level      *bsp.BSP
+}
+
+func NewState() *State {
+	return &State{
+		Entities: make([]Entity, 1000, 1000),
 	}
-	tail := d.block.String()
-	typ, err := readUint8(d.block)
+}
+
+type Message interface {
+	Apply(*State)
+}
+
+type MsgNop struct{}
+
+func (m MsgNop) Apply(s *State) {}
+
+type MsgUpdate struct {
+	Entity                             uint16
+	X, Y, Z                            *float32
+	A, B, C                            *float32
+	Model, Skin, Color, Effects, Frame *uint8
+}
+
+func (m MsgUpdate) Apply(s *State) {
+	if m.X != nil {
+		s.Entities[m.Entity].Pos.X = *m.X
+	}
+	if m.Y != nil {
+		s.Entities[m.Entity].Pos.Y = *m.Y
+	}
+	if m.Z != nil {
+		s.Entities[m.Entity].Pos.Z = *m.Z
+	}
+	if m.A != nil {
+		s.Entities[m.Entity].Angle.X = *m.A
+	}
+	if m.B != nil {
+		s.Entities[m.Entity].Angle.Y = *m.B
+	}
+	if m.C != nil {
+		s.Entities[m.Entity].Angle.Z = *m.C
+	}
+
+	if m.Model != nil {
+		s.Entities[m.Entity].Model = *m.Model
+		s.Entities[m.Entity].Skin = 0
+		s.Entities[m.Entity].Color = 0
+		s.Entities[m.Entity].Frame = 0
+	}
+	if m.Skin != nil {
+		s.Entities[m.Entity].Skin = *m.Skin
+	}
+	if m.Color != nil {
+		s.Entities[m.Entity].Color = int(*m.Color)
+	}
+	if m.Effects != nil {
+		// TODO s.Entities[m.Entity].Effects = int(*m.Effects)
+	}
+	if m.Frame != nil {
+		s.Entities[m.Entity].Frame = *m.Frame
+	}
+
+	if false {
+		if int(m.Entity) == s.CameraEnt {
+			s.ViewAngle = s.Entities[m.Entity].Angle
+		}
+	}
+}
+
+type MsgSpawnBaseline struct {
+	Entity                    uint16
+	X, Y, Z                   float32
+	A, B, C                   float32
+	Model, Frame, Color, Skin uint8
+}
+
+func (m MsgSpawnBaseline) Apply(s *State) {
+	s.Entities[m.Entity].Pos.X = m.X
+	s.Entities[m.Entity].Pos.Y = m.Y
+	s.Entities[m.Entity].Pos.Z = m.Z
+	s.Entities[m.Entity].Angle.X = m.A
+	s.Entities[m.Entity].Angle.Y = m.B
+	s.Entities[m.Entity].Angle.Z = m.C
+	s.Entities[m.Entity].Model = m.Model
+	s.Entities[m.Entity].Frame = m.Frame
+	s.Entities[m.Entity].Color = int(m.Color)
+	s.Entities[m.Entity].Skin = m.Skin
+}
+
+type MsgDisconnect struct{}
+
+func (m MsgDisconnect) Apply(s *State) {}
+
+type MsgPlayerState struct {
+	Key   uint8
+	Value uint32
+}
+
+func (m MsgPlayerState) Apply(s *State) {}
+
+type MsgPlaySound struct{}
+
+func (m MsgPlaySound) Apply(s *State) {}
+
+type MsgCameraPos struct {
+	Entity uint16
+}
+
+func (m MsgCameraPos) Apply(s *State) {
+	s.CameraEnt = int(m.Entity)
+}
+
+type MsgCameraOrientation struct {
+	X, Y, Z float32
+}
+
+func (m MsgCameraOrientation) Apply(s *State) {
+	s.ViewAngle.X = m.X
+	s.ViewAngle.Y = m.Y
+	s.ViewAngle.Z = m.Z
+}
+
+func (si *ServerInfo) Apply(s *State) {
+	s.ServerInfo = ServerInfo(*si)
+}
+
+type MsgTime float32
+
+func (m *MsgTime) Apply(s *State) { s.Time = float64(*m) }
+
+type Block struct {
+	Header BlockHeader
+	buf    *bytes.Buffer
+}
+
+func (block *Block) Messages() ([]Message, error) {
+	messages := []Message{}
+	for {
+		if len(block.buf.String()) == 0 {
+			return messages, nil
+		}
+		m, err := block.DecodeMessage()
+		if err != nil {
+			return nil, err
+		}
+		messages = append(messages, m)
+	}
+}
+
+func (block *Block) DecodeMessage() (Message, error) {
+	typ, err := readUint8(block.buf)
 	if err != nil {
 		log.Fatalf("reading type: %v", err)
 	}
@@ -292,103 +431,115 @@ func (d *Demo) Read() error {
 	}
 	switch typ {
 	case 0x01: // NOP
+		return &MsgNop{}, nil
 	case 0x02: // disconnect
+		return &MsgDisconnect{}, nil
 	case 0x03: // player state
-		i, _ := readUint8(d.block)
-		v, _ := readUint32(d.block)
-		if Verbose {
-			log.Printf("Setting %d to %d", i, v)
-		}
+		r := &MsgPlayerState{}
+		r.Key, _ = readUint8(block.buf)
+		r.Value, _ = readUint32(block.buf)
+		return r, nil
 	case 0x05: // Camera pos to this entity.
-		d.CameraEnt, _ = readUint16(d.block)
-		if true || Verbose {
-			log.Printf("Camera object changed to %d", d.CameraEnt)
-		}
+		r := &MsgCameraPos{}
+		r.Entity, _ = readUint16(block.buf)
+		return r, nil
 	case 0x06: // Play sound.
-		mask, _ := readUint8(d.block)
+		mask, _ := readUint8(block.buf)
 		if mask&0x1 != 0 {
-			readUint8(d.block) // vol
+			readUint8(block.buf) // vol
 		}
 		if mask&0x2 != 0 {
-			readUint8(d.block) // attenuation
+			readUint8(block.buf) // attenuation
 		}
-		entity_channel, _ := readUint16(d.block)
+		entity_channel, _ := readUint16(block.buf)
 		channel := entity_channel & 0x07
 		_ = channel
 		ent := (entity_channel >> 3) & 0x1FFF
 		if debugEnt == ent {
 			log.Printf("Entity %d made a sound", ent)
 		}
-		readUint8(d.block) // channel
-		readCoord(d.block) // origin...
-		readCoord(d.block)
-		readCoord(d.block)
+		readUint8(block.buf) // channel
+		readCoord(block.buf) // origin...
+		readCoord(block.buf)
+		readCoord(block.buf)
+		return &MsgPlaySound{}, nil
+
 	case 0x07: // time
-		d.Time, _ = readFloat(d.block)
-		if Verbose {
-			log.Printf("Time: %f", d.Time)
-		}
+		t, _ := readFloat(block.buf)
+		t2 := MsgTime(t)
+		return &t2, nil
+
 	case 0x08: // Print
-		s, _ := readString(d.block)
-		log.Printf("Print: %q", s)
+		s, _ := readString(block.buf)
+		if Verbose {
+			log.Printf("Print: %q", s)
+		}
 	case 0x09: // Stufftext
-		s, _ := readString(d.block)
-		log.Printf("Stufftext: %q", s)
+		s, _ := readString(block.buf)
+		if Verbose {
+			log.Printf("Stufftext: %q", s)
+		}
 	case 0x0A: // Camera orientation.
-		x, _ := readAngle(d.block)
-		y, _ := readAngle(d.block)
-		z, _ := readAngle(d.block)
-		log.Printf("Camera orientation changed to %f %f %f", x, y, z)
-		// TODO: set viewangle.
-		d.Entities[d.CameraEnt].Angle.X = x
-		d.Entities[d.CameraEnt].Angle.Y = y
-		d.Entities[d.CameraEnt].Angle.Z = z
+		x, _ := readAngle(block.buf)
+		y, _ := readAngle(block.buf)
+		z, _ := readAngle(block.buf)
+		if Verbose {
+			log.Printf("Camera orientation changed to %f %f %f", x, y, z)
+		}
+		return &MsgCameraOrientation{
+			X: x,
+			Y: y,
+			Z: z,
+		}, nil
 	case 0x0b: // serverinfo
-		log.Printf("SERVERINFO")
-		var err error
-		d.ServerInfo, err = parseServerInfo(d.block)
+		if Verbose {
+			log.Printf("SERVERINFO")
+		}
+		si, err := parseServerInfo(block.buf)
 		if err != nil {
 			log.Fatalf("Serverinfo: %v", err)
 		}
-		d.Level = d.ServerInfo.Models[0]
+		return &si, nil
 	case 0x0c: // light style
-		readUint8(d.block)
-		readString(d.block)
+		readUint8(block.buf)
+		readString(block.buf)
 	case 0x0d: // set player name
-		i, _ := readUint8(d.block)
-		name, _ := readString(d.block)
-		log.Printf("Setting player %d name to %q", i, name)
+		i, _ := readUint8(block.buf)
+		name, _ := readString(block.buf)
+		if false {
+			log.Printf("Setting player %d name to %q", i, name)
+		}
 	case 0x0e: // set frags
-		readUint8(d.block)
-		readUint16(d.block)
+		readUint8(block.buf)
+		readUint16(block.buf)
 	case 0x0F: // client data
-		mask, _ := readUint16(d.block)
+		mask, _ := readUint16(block.buf)
 		if Verbose {
 			log.Printf("Mask: %04x", mask)
 		}
 		if mask&SU_VIEWHEIGHT != 0 {
-			readUint8(d.block)
+			readUint8(block.buf)
 		}
 		if mask&SU_IDEALPITCH != 0 {
-			readUint8(d.block)
+			readUint8(block.buf)
 		}
 		if mask&SU_PUNCH1 != 0 {
-			readUint8(d.block)
+			readUint8(block.buf)
 		}
 		if mask&SU_VELOCITY1 != 0 {
-			readUint8(d.block)
+			readUint8(block.buf)
 		}
 		if mask&SU_PUNCH2 != 0 {
-			readUint8(d.block)
+			readUint8(block.buf)
 		}
 		if mask&SU_VELOCITY2 != 0 {
-			readUint8(d.block)
+			readUint8(block.buf)
 		}
 		if mask&SU_PUNCH3 != 0 {
-			readUint8(d.block)
+			readUint8(block.buf)
 		}
 		if mask&SU_VELOCITY3 != 0 {
-			readUint8(d.block)
+			readUint8(block.buf)
 		}
 		if mask&SU_AIMENT != 0 {
 		}
@@ -398,292 +549,246 @@ func (d *Demo) Read() error {
 			// TODO: blend some blue.
 		}
 		if mask&SU_ITEMS != 0 {
-			readUint32(d.block)
+			readUint32(block.buf)
 		}
 		if mask&SU_WEAPONFRAME != 0 {
-			readUint8(d.block)
+			readUint8(block.buf)
 		}
 		if mask&SU_ARMOR != 0 {
-			readUint8(d.block)
+			readUint8(block.buf)
 		}
 		if mask&SU_WEAPON != 0 {
-			readUint8(d.block)
+			readUint8(block.buf)
 		}
-		health, _ := readUint16(d.block)
+		health, _ := readUint16(block.buf)
 		if Verbose {
 			log.Printf("Health: %v", health)
 		}
 
-		ammo, _ := readUint8(d.block)
+		ammo, _ := readUint8(block.buf)
 		if Verbose {
 			log.Printf("Ammo: %v", ammo)
 		}
 
-		shells, _ := readUint8(d.block)
+		shells, _ := readUint8(block.buf)
 		if Verbose {
 			log.Printf("Shells: %v", shells)
 		}
 
-		ammo_nails, _ := readUint8(d.block)
+		ammo_nails, _ := readUint8(block.buf)
 		if Verbose {
 			log.Printf("Nails: %v", ammo_nails)
 		}
 
-		ammo_rockets, _ := readUint8(d.block)
+		ammo_rockets, _ := readUint8(block.buf)
 		if Verbose {
 			log.Printf("Rockets: %v", ammo_rockets)
 		}
 
-		ammo_cells, _ := readUint8(d.block)
+		ammo_cells, _ := readUint8(block.buf)
 		if Verbose {
 			log.Printf("Cells: %v", ammo_cells)
 		}
 
-		weapon, _ := readUint8(d.block)
+		weapon, _ := readUint8(block.buf)
 		if Verbose {
 			log.Printf("Weapon: %v", weapon)
 		}
 
 	case 0x11: // set colors
-		readUint8(d.block)
-		readUint8(d.block)
+		readUint8(block.buf)
+		readUint8(block.buf)
 	case 0x12: // particle
-		readCoord(d.block) // origin...
-		readCoord(d.block)
-		readCoord(d.block)
-		readInt8(d.block) // velocity...
-		readInt8(d.block)
-		readInt8(d.block)
-		readUint8(d.block) // count
-		readUint8(d.block) // color (chunk 0, blood 73, barrel 75 and thunderbolt 225)
+		readCoord(block.buf) // origin...
+		readCoord(block.buf)
+		readCoord(block.buf)
+		readInt8(block.buf) // velocity...
+		readInt8(block.buf)
+		readInt8(block.buf)
+		readUint8(block.buf) // count
+		readUint8(block.buf) // color (chunk 0, blood 73, barrel 75 and thunderbolt 225)
 	case 0x13: // damage
-		readUint8(d.block) // armor
-		readUint8(d.block) // health
-		readCoord(d.block) // origin of hit...
-		readCoord(d.block)
-		readCoord(d.block)
+		readUint8(block.buf) // armor
+		readUint8(block.buf) // health
+		readCoord(block.buf) // origin of hit...
+		readCoord(block.buf)
+		readCoord(block.buf)
 	case 0x14: // spawnstatic
-		model, _ := readUint8(d.block)
-		frame, _ := readUint8(d.block)
-		color, _ := readUint8(d.block)
-		skin, _ := readUint8(d.block)
-		x, _ := readCoord(d.block)
-		a, _ := readAngle(d.block)
-		y, _ := readCoord(d.block)
-		b, _ := readAngle(d.block)
-		z, _ := readCoord(d.block)
-		c, _ := readAngle(d.block)
+		model, _ := readUint8(block.buf)
+		frame, _ := readUint8(block.buf)
+		color, _ := readUint8(block.buf)
+		skin, _ := readUint8(block.buf)
+		x, _ := readCoord(block.buf)
+		a, _ := readAngle(block.buf)
+		y, _ := readCoord(block.buf)
+		b, _ := readAngle(block.buf)
+		z, _ := readCoord(block.buf)
+		c, _ := readAngle(block.buf)
 		if Verbose {
 			log.Printf("Spawning static %f,%f,%f: %d %d %d %d %f %f %f", x, y, z, model, frame, color, skin, a, b, c)
 		}
 	case 0x16: // spawnbaseline
-		ent, _ := readUint16(d.block)
+		r := &MsgSpawnBaseline{}
+		r.Entity, _ = readUint16(block.buf)
 
-		model, _ := readUint8(d.block)
-		frame, _ := readUint8(d.block)
-		color, _ := readUint8(d.block)
-		skin, _ := readUint8(d.block)
+		r.Model, _ = readUint8(block.buf)
+		r.Frame, _ = readUint8(block.buf)
+		r.Color, _ = readUint8(block.buf)
+		r.Skin, _ = readUint8(block.buf)
 
-		x, _ := readCoord(d.block)
-		a, _ := readAngle(d.block)
-		y, _ := readCoord(d.block)
-		b, _ := readAngle(d.block)
-		z, _ := readCoord(d.block)
-		c, _ := readAngle(d.block)
+		r.X, _ = readCoord(block.buf)
+		r.A, _ = readAngle(block.buf)
+		r.Y, _ = readCoord(block.buf)
+		r.B, _ = readAngle(block.buf)
+		r.Z, _ = readCoord(block.buf)
+		r.C, _ = readAngle(block.buf)
+		return r, nil
 
-		if debugEnt == ent || Verbose {
-			log.Printf("Spawning baseline %d at <%f,%f,%f>: %d (%s) %d %d %d %f %f %f", ent, x, y, z, model, d.ServerInfo.Models[model], frame, color, skin, a, b, c)
-			log.Printf("  Model: %v", d.Entities[model])
-		}
-		d.Entities[ent].Pos.X, d.Entities[ent].Pos.Y, d.Entities[ent].Pos.Z = x, y, z
-		d.Entities[ent].Angle.X, d.Entities[ent].Angle.Y, d.Entities[ent].Angle.Z = a, b, c
-		d.Entities[ent].Model = model
-		d.Entities[ent].Frame = frame
-		d.Entities[ent].Skin = skin
-		d.Entities[ent].Color = int(color)
 	case 0x17: // temp entity
-		entityType, _ := readUint8(d.block)
+		entityType, _ := readUint8(block.buf)
 		if Verbose {
 			log.Printf("Temp entity type %d", entityType)
 		}
 		switch entityType {
 		// TE_KNIGHT_SPIKE
 		case TE_SPIKE, TE_SUPERSPIKE, TE_GUNSHOT, TE_EXPLOSION, TE_TAREXPLOSION, TE_WIZSPIKE, TE_LAVASPLASH, TE_TELEPORT:
-			readCoord(d.block) // origin...
-			readCoord(d.block)
-			readCoord(d.block)
+			readCoord(block.buf) // origin...
+			readCoord(block.buf)
+			readCoord(block.buf)
 
 		// TE_BEAM
 		case TE_LIGHTNING1, TE_LIGHTNING2, TE_LIGHTNING3:
-			ent, _ := readUint16(d.block)
+			ent, _ := readUint16(block.buf)
 			if debugEnt == ent {
 				log.Printf("Lightning from ent %d", ent)
 			}
-			readCoord(d.block) // from...
-			readCoord(d.block)
-			readCoord(d.block)
-			readCoord(d.block) // to...
-			readCoord(d.block)
-			readCoord(d.block)
+			readCoord(block.buf) // from...
+			readCoord(block.buf)
+			readCoord(block.buf)
+			readCoord(block.buf) // to...
+			readCoord(block.buf)
+			readCoord(block.buf)
 		case TE_EXPLOSION2:
-			readCoord(d.block) // origin...
-			readCoord(d.block)
-			readCoord(d.block)
-			readUint8(d.block) // color
-			readUint8(d.block) // range
+			readCoord(block.buf) // origin...
+			readCoord(block.buf)
+			readCoord(block.buf)
+			readUint8(block.buf) // color
+			readUint8(block.buf) // range
 		default:
-			return fmt.Errorf("bad temp ent type")
+			return nil, fmt.Errorf("bad temp ent type")
 		}
 	case 0x19: // This message selects the client state.
 		// TODO: only start rendering after state 2.
-		state, _ := readUint8(d.block)
+		state, _ := readUint8(block.buf)
 		if Verbose {
 			log.Printf("Set state: %v", state)
 		}
 	case 0x1a: // centerprint
-		readString(d.block)
+		readString(block.buf)
 	case 0x1b: // killed monster
 	case 0x1c: // found secret
 	case 0x1d: // spawnstaticsound
-		readCoord(d.block) // origin
-		readCoord(d.block)
-		readCoord(d.block)
-		readUint8(d.block) // num
-		readUint8(d.block) // vol
-		readUint8(d.block) // attenuation
+		readCoord(block.buf) // origin
+		readCoord(block.buf)
+		readCoord(block.buf)
+		readUint8(block.buf) // num
+		readUint8(block.buf) // vol
+		readUint8(block.buf) // attenuation
 	case 0x1e: // intermission
-		readString(d.block)
+		readString(block.buf)
 	case 0x1f: // finale - end screen
-		readString(d.block)
+		readString(block.buf)
 	case 0x20: // CD track
-		readUint8(d.block) // from track
-		readUint8(d.block) // to track
+		readUint8(block.buf) // from track
+		readUint8(block.buf) // to track
 	case 0x21: // sell screen
 	default:
+		m := &MsgUpdate{}
 		if typ < 0x80 {
-			d.block = nil
-			return fmt.Errorf("unknown type %d (0x%x), tail: %v", typ, typ, []byte(tail))
+			block.buf = nil
+			return nil, fmt.Errorf("unknown type %d (0x%x), tail: %v", typ, typ, []byte(block.buf.String()))
 		}
 		mask := uint16(typ & 0x7F)
 		if mask&U_MOREBITS != 0 {
-			t, _ := readUint8(d.block)
+			t, _ := readUint8(block.buf)
 			mask |= uint16(t) << 8
 		}
 		if Verbose {
-			log.Printf("Update packet mask %04x: %v", mask, []byte(d.block.String()))
+			log.Printf("Update packet mask %04x: %v", mask, []byte(block.buf.String()))
 		}
-		var ent uint16
 		if mask&U_LONGENTITY != 0 {
-			ent, _ = readUint16(d.block)
+			m.Entity, _ = readUint16(block.buf)
 		} else {
-			e, _ := readUint8(d.block)
-			ent = uint16(e)
-		}
-		if debugEnt == ent || Verbose {
-			log.Printf("Update to entity %d", ent)
+			e, _ := readUint8(block.buf)
+			m.Entity = uint16(e)
 		}
 		if mask&U_MODEL != 0 {
-			a, err := readUint8(d.block)
+			a, err := readUint8(block.buf)
 			if err != nil {
 				log.Fatal(err)
 			}
-			if debugEnt == ent || (Verbose && d.Entities[ent].Model != a) {
-				log.Printf("  Update %d: Model %d (%q -> %q)", ent, a, d.ServerInfo.Models[d.Entities[ent].Model], d.ServerInfo.Models[a])
-			}
-			d.Entities[ent].Model = a
-			d.Entities[ent].Frame = 0
-			d.Entities[ent].Skin = 0
+			m.Model = &a
 		}
 		if mask&U_FRAME != 0 {
-			a, err := readUint8(d.block)
+			a, err := readUint8(block.buf)
 			if err != nil {
 				log.Fatal(err)
 			}
-			d.Entities[ent].Frame = a
-			if debugEnt == ent {
-				log.Printf("  Set frame of %d to %d", ent, a)
-			}
+			m.Frame = &a
 		}
 		if mask&U_COLORMAP != 0 {
-			a, _ := readUint8(d.block)
-			if debugEnt == ent {
-				log.Printf("  Update %d: Colormap %d", ent, a)
-			}
+			a, _ := readUint8(block.buf)
+			m.Color = &a
 		}
 		if mask&U_SKIN != 0 {
-			a, _ := readUint8(d.block)
-			if debugEnt == ent {
-				log.Printf("  Update %d: Skin %d", ent, a)
-			}
-			d.Entities[ent].Skin = a
+			a, _ := readUint8(block.buf)
+			m.Skin = &a
 		}
 		if mask&U_EFFECTS != 0 {
-			a, _ := readUint8(d.block)
-			if debugEnt == ent {
-				log.Printf("  Update %d: Effects %d", ent, a)
-			}
+			a, _ := readUint8(block.buf)
+			m.Effects = &a
 		}
 		if mask&U_ORIGIN1 != 0 {
-			a, err := readCoord(d.block)
+			a, err := readCoord(block.buf)
 			if err != nil {
 				log.Fatal(err)
 			}
-			d.Entities[ent].Pos.X = a
-			if debugEnt == ent {
-				log.Printf("  Update %d: Pos X %f", ent, a)
-			}
+			m.X = &a
 		}
 		if mask&U_ANGLE1 != 0 {
-			a, _ := readAngle(d.block)
-			d.Entities[ent].Angle.X = a
-			if debugEnt == ent {
-				log.Printf("  Update %d: Angle 1 %f", ent, a)
-			}
+			a, _ := readAngle(block.buf)
+			m.A = &a
 		}
 		if mask&U_ORIGIN2 != 0 {
-			a, _ := readCoord(d.block)
-			d.Entities[ent].Pos.Y = a
-			if debugEnt == ent {
-				log.Printf("  Update %d: Pos Y %f", ent, a)
-			}
+			a, _ := readCoord(block.buf)
+			m.Y = &a
 		}
 		if mask&U_ANGLE2 != 0 {
-			a, _ := readAngle(d.block)
-			d.Entities[ent].Angle.Y = a
-			if debugEnt == ent {
-				log.Printf("  Update %d: Angle 2 %f", ent, a)
-			}
+			a, _ := readAngle(block.buf)
+			m.B = &a
 		}
 		if mask&U_ORIGIN3 != 0 {
-			a, _ := readCoord(d.block)
-			d.Entities[ent].Pos.Z = a
-			if debugEnt == ent {
-				log.Printf("  Update %d: Pos Z %f", ent, a)
-			}
+			a, _ := readCoord(block.buf)
+			m.Z = &a
 		}
 		if mask&U_ANGLE3 != 0 {
-			a, _ := readAngle(d.block)
-			d.Entities[ent].Angle.Z = a
-			if debugEnt == ent {
-				log.Printf("  Update %d: Angle 3 %f", ent, a)
-			}
+			a, _ := readAngle(block.buf)
+			m.C = &a
 		}
-		if debugEnt == ent {
-			log.Printf("  Data for %d: %v", ent, d.Entities[ent])
-		}
+		return m, nil
 	}
-	if d.Entities != nil {
-		//log.Printf("Camera %v %v", d.Entities[d.CameraEnt].Pos, d.Entities[d.CameraEnt].Angle)
-	}
-	if err != nil {
-		log.Fatal(err)
-	}
-	return nil
-}
-func (d *Demo) ViewAngle() Vertex {
-	return d.viewAngle
+	return &MsgNop{}, nil
 }
 
-func (d *Demo) Pos() Vertex {
-	return d.Entities[d.CameraEnt].Pos
+func (d *Demo) ReadBlock() (*Block, error) {
+	block := &Block{}
+	if err := binary.Read(d.r, binary.LittleEndian, &block.Header); err != nil {
+		return nil, err
+	}
+	data := make([]byte, block.Header.Blocksize, block.Header.Blocksize)
+	if _, err := d.r.Read(data); err != nil {
+		return nil, fmt.Errorf("Reading block of size %d: %v", block.Header.Blocksize, err)
+	}
+	block.buf = bytes.NewBuffer(data)
+	return block, nil
 }

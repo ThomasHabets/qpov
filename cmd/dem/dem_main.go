@@ -23,40 +23,59 @@ var (
 )
 
 func info(p pak.MultiPak, args ...string) {
-	fs := flag.NewFlagSet("info", flag.ExitOnError)
-	fs.Parse(args)
-	demo := fs.Arg(0)
-	df, err := p.Get(demo)
-	if err != nil {
-		log.Fatalf("Getting %q: %v", demo, err)
-	}
-	d := dem.Open(df)
-
-	oldTime := float32(-1)
-	timeUpdates := 0
-	messages := 0
-	for {
-		err := d.Read()
-		messages++
-		if err == io.EOF {
-			break
-		}
+	/*
+		fs := flag.NewFlagSet("info", flag.ExitOnError)
+		fs.Parse(args)
+		demo := fs.Arg(0)
+		df, err := p.Get(demo)
 		if err != nil {
-			log.Fatalf("Demo error: %v", err)
+			log.Fatalf("Getting %q: %v", demo, err)
 		}
-		if oldTime != d.Time {
-			timeUpdates++
-			oldTime = d.Time
+		d := dem.Open(df)
+
+		oldTime := float32(-1)
+		timeUpdates := 0
+		messages := 0
+		for {
+			err := d.Read()
+			messages++
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				log.Fatalf("Demo error: %v", err)
+			}
+			if oldTime != d.Time {
+				timeUpdates++
+				oldTime = d.Time
+			}
 		}
+		fmt.Printf("Blocks: %d\n", d.BlockCount)
+		fmt.Printf("Messages: %d\n", messages)
+		fmt.Printf("Time updates: %d\n", timeUpdates)
+	*/
+}
+
+func genTimeFrames(from, to, fps float64) []float64 {
+	frames := []float64{}
+	frameTime := 1.0 / fps
+	frame := int(from / frameTime)
+	for {
+		frameTime := float64(frame) / fps
+		if frameTime >= to {
+			return frames
+		}
+		if frameTime >= from {
+			frames = append(frames, frameTime)
+		}
+		frame++
 	}
-	fmt.Printf("Blocks: %d\n", d.BlockCount)
-	fmt.Printf("Messages: %d\n", messages)
-	fmt.Printf("Time updates: %d\n", timeUpdates)
 }
 
 func convert(p pak.MultiPak, args ...string) {
 	fs := flag.NewFlagSet("convert", flag.ExitOnError)
-	useTextures := fs.Bool("textures", true, "Render textures.")
+	//useTextures := fs.Bool("textures", true, "Render textures.")
+	fps := fs.Float64("fps", 25.0, "Frames per second.")
 	outDir := fs.String("out", "render", "Output directory.")
 	fs.Parse(args)
 	demo := fs.Arg(0)
@@ -66,75 +85,127 @@ func convert(p pak.MultiPak, args ...string) {
 		log.Fatalf("Getting %q: %v", demo, err)
 	}
 	d := dem.Open(df)
-	oldTime := float32(-1.0)
-	oldPos := dem.Vertex{}
-	oldView := dem.Vertex{}
-	var level *bsp.BSP
-	var frame int
+
+	var oldState *dem.State
+	newState := dem.NewState()
+	frameNum := 0
 	for {
-		err := d.Read()
+		block, err := d.ReadBlock()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			log.Fatalf("Demo error: %v", err)
 		}
-		if d.Level == "" {
-			continue
+		newState.ViewAngle = block.Header.ViewAngle
+
+		seenTime := false
+		msgs, err := block.Messages()
+		if err != nil {
+			log.Fatalf("Getting messages: %v", err)
 		}
-		if level == nil {
-			bl, err := p.Get(d.Level)
-			if err != nil {
-				log.Fatal(err)
+		for _, msg := range msgs {
+			msg.Apply(newState)
+			if _, ok := msg.(*dem.MsgTime); ok {
+				seenTime = true
+			} else if m, ok := msg.(*dem.MsgCameraPos); ok {
+				if false {
+					fmt.Printf("Camera set to %d\n", m.Entity)
+				}
+			} else if m, ok := msg.(*dem.MsgUpdate); ok {
+				if false {
+					if m.Entity == 449 {
+						fmt.Printf("Camera ent %d moved to %v %v\n", m.Entity, newState.Entities[m.Entity].Pos, newState.Entities[m.Entity].Angle)
+					}
+				}
 			}
-			level, err = bsp.Load(bl)
-			if err != nil {
-				log.Fatalf("Level loading %q: %v", d.Level, err)
-			}
-			log.Printf("Level start pos: %s", level.StartPos.String())
-			//d.Pos().X = level.StartPos.X
-			//d.Pos().Y = level.StartPos.Y
-			//d.Pos().Z = level.StartPos.Z
 		}
-		if oldTime != d.Time {
-			if false {
-				fmt.Printf("Frame %d (t=%g): Pos: %v -> %v, viewAngle %v -> %v\n", frame, d.Time, oldPos, d.Pos(), oldView, d.ViewAngle())
+
+		if seenTime {
+			anyFrame := false
+			if oldState != nil {
+				fmt.Printf("Saw time, outputting frames between %g and %g\n",
+					oldState.Time,
+					newState.Time,
+				)
+				for _, t := range genTimeFrames(float64(oldState.Time), float64(newState.Time), *fps) {
+					generateFrame(p, *outDir, oldState, newState, frameNum, t)
+					anyFrame = true
+					frameNum++
+				}
 			}
-			oldView = d.ViewAngle()
-			oldPos = d.Pos()
-			oldTime = d.Time
-			writePOV(path.Join(*outDir, fmt.Sprintf("frame-%08d.pov", frame)), d.Level, level, d, *useTextures)
-			frame++
+
+			// Only wipe old state if we generate any frame at all.
+			if oldState == nil || anyFrame {
+				t := *newState
+				oldState = &t
+			}
 		}
 	}
 }
 
-func main() {
-	flag.Parse()
+func interpolate(v0, v1 dem.Vertex, t float64) dem.Vertex {
+	return dem.Vertex{
+		X: float32(float64(v0.X) + t*float64(v1.X-v0.X)),
+		Y: float32(float64(v0.Y) + t*float64(v1.Y-v0.Y)),
+		Z: float32(float64(v0.Z) + t*float64(v1.Z-v0.Z)),
+	}
+}
 
-	if *cpuprofile != "" {
-		f, err := os.Create(*cpuprofile)
+func generateFrame(p pak.MultiPak, outDir string, oldState, newState *dem.State, frameNum int, t float64) {
+	if newState.ServerInfo.Models == nil {
+		return
+	}
+	if newState.Level == nil {
+
+		bl, err := p.Get(newState.ServerInfo.Models[0])
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalf("Looking up %q: %v", newState.ServerInfo.Models[0], err)
 		}
-		pprof.StartCPUProfile(f)
-		defer pprof.StopCPUProfile()
+		newState.Level, err = bsp.Load(bl)
+		if err != nil {
+			log.Fatalf("Level loading %q: %v", newState.ServerInfo.Models[0], err)
+		}
+		// TODO
+		log.Printf("Level start pos: %s", newState.Level.StartPos.String())
+		//d.Pos().X = level.StartPos.X
+		//d.Pos().Y = level.StartPos.Y
+		//d.Pos().Z = level.StartPos.Z
 	}
-
-	p, err := pak.MultiOpen(strings.Split(flag.Arg(0), ",")...)
-	if err != nil {
-		log.Fatalf("MultiOpen(%q): %v", flag.Arg(0), err)
+	ival := float64(t-oldState.Time) / float64(newState.Time-oldState.Time)
+	curState := &dem.State{
+		Time:       t,
+		CameraEnt:  newState.CameraEnt,
+		ViewAngle:  interpolate(oldState.ViewAngle, newState.ViewAngle, ival),
+		ServerInfo: newState.ServerInfo,
+		Level:      newState.Level,
+		Entities:   make([]dem.Entity, len(newState.Entities), len(newState.Entities)),
 	}
-	defer p.Close()
-
-	switch flag.Arg(1) {
-	case "convert":
-		convert(p, flag.Args()[2:]...)
-	case "info":
-		info(p, flag.Args()[2:]...)
-	default:
-		log.Fatalf("Unknown command %q", flag.Arg(0))
+	for n := range oldState.Entities {
+		if oldState.Entities[n].Model != newState.Entities[n].Model {
+			// If model has changed, choose nearest and stop.
+			if ival < 0.5 {
+				curState.Entities[n] = oldState.Entities[n]
+			} else {
+				curState.Entities[n] = newState.Entities[n]
+			}
+			continue
+		}
+		curState.Entities[n].Model = curState.Entities[n].Model
+		curState.Entities[n].Pos = interpolate(oldState.Entities[n].Pos, newState.Entities[n].Pos, ival)
+		curState.Entities[n].Angle = interpolate(oldState.Entities[n].Angle, newState.Entities[n].Angle, ival)
+		if ival < 0.5 {
+			curState.Entities[n].Frame = curState.Entities[n].Frame
+			curState.Entities[n].Skin = curState.Entities[n].Skin
+			curState.Entities[n].Color = curState.Entities[n].Color
+		} else {
+			curState.Entities[n].Frame = curState.Entities[n].Frame
+			curState.Entities[n].Skin = curState.Entities[n].Skin
+			curState.Entities[n].Color = curState.Entities[n].Color
+		}
 	}
+	fmt.Printf("Frame %d (t=%g): Pos: %v, viewAngle %v\n", frameNum, curState.Time, curState.Entities[curState.CameraEnt].Pos, curState.ViewAngle)
+	writePOV(path.Join(outDir, fmt.Sprintf("frame-%08d.pov", frameNum)), oldState)
 }
 
 func frameName(mf string, frame int) string {
@@ -165,10 +236,10 @@ func validModel(m string) bool {
 	return true
 }
 
-func writePOV(fn string, levelfn string, level *bsp.BSP, d *dem.Demo, useTextures bool) {
+func writePOV(fn string, state *dem.State) {
 	ufo, err := os.Create(fn)
 	if err != nil {
-		log.Fatal("Creating %q: %v", fn, err)
+		log.Fatalf("Creating %q: %v", fn, err)
 	}
 	defer ufo.Close()
 	fo := bufio.NewWriter(ufo)
@@ -180,14 +251,14 @@ func writePOV(fn string, levelfn string, level *bsp.BSP, d *dem.Demo, useTexture
 		Z: 0,
 	}
 	pos := bsp.Vertex{
-		X: d.Pos().X,
-		Y: d.Pos().Y,
-		Z: d.Pos().Z,
+		X: state.Entities[state.CameraEnt].Pos.X,
+		Y: state.Entities[state.CameraEnt].Pos.Y,
+		Z: state.Entities[state.CameraEnt].Pos.Z,
 	}
 
 	models := []string{}
 	if *entities {
-		for _, m := range d.ServerInfo.Models {
+		for _, m := range state.ServerInfo.Models {
 			if !validModel(m) {
 				continue
 			}
@@ -215,49 +286,37 @@ camera {
   rotate <0,0,%f>
   translate <%s>
 }
-`, levelfn, strings.Join(models, "\n"), pos.String(), lookAt.String(),
-		d.ViewAngle().Z,
-		d.ViewAngle().X,
-		d.ViewAngle().Y,
+`, state.ServerInfo.Models[0], strings.Join(models, "\n"), pos.String(), lookAt.String(),
+		state.ViewAngle.Z,
+		state.ViewAngle.X,
+		state.ViewAngle.Y,
 		//d.ViewAngle.Z, d.ViewAngle.X, d.ViewAngle.Y,
 		pos.String())
 	if *entities {
-		for n, e := range d.Entities {
-			if int(d.CameraEnt) == n {
+		for n, e := range state.Entities {
+			if int(state.CameraEnt) == n {
 				continue
 			}
 			if e.Model == 0 {
 				// Unused.
 				continue
 			}
-			if int(e.Model) >= len(d.ServerInfo.Models) {
+			if int(e.Model) >= len(state.ServerInfo.Models) {
 				// TODO: this is dynamic entities?
 				continue
 			}
-			name := d.ServerInfo.Models[e.Model]
+			name := state.ServerInfo.Models[e.Model]
 			frame := int(e.Frame)
 
-			// TODO: What's going on here?
-			if false {
-				switch name {
-				case "progs/h_guard.mdl":
-					name = "progs/soldier.mdl"
-				case "progs/armor.mdl", "progs/spike.mdl", "progs/h_shams.mdl":
-					frame = 0
-				case "progs/playernl.mdl":
-					if frame > 18 {
-						frame = 0
-					}
-				}
-			}
 			//log.Printf("Entity %d has model %d of %d", n, e.Model, len(d.ServerInfo.Models))
 			//log.Printf("  Name: %q", d.ServerInfo.Models[e.Model])
-			if validModel(d.ServerInfo.Models[e.Model]) {
+			if validModel(state.ServerInfo.Models[e.Model]) {
 				a := e.Angle
 				a.X, a.Y, a.Z = a.Z, a.X, a.Y
 
 				// TODO: skin is broken sometimes, just use first one.
 				e.Skin = 0
+				useTextures := true // TODO
 				if useTextures {
 					skinName := path.Join(name, fmt.Sprintf("skin_%v.png", e.Skin))
 					fmt.Fprintf(fo, "// Entity %d\n%s(<%s>,<%s>,\"%s\")\n", n, frameName(name, frame), e.Pos.String(), a.String(), skinName)
@@ -291,4 +350,32 @@ func randColor() string {
 		//"Brown",
 	}
 	return colors[randColorState%len(colors)]
+}
+
+func main() {
+	flag.Parse()
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+
+	p, err := pak.MultiOpen(strings.Split(flag.Arg(0), ",")...)
+	if err != nil {
+		log.Fatalf("MultiOpen(%q): %v", flag.Arg(0), err)
+	}
+	defer p.Close()
+
+	switch flag.Arg(1) {
+	case "convert":
+		convert(p, flag.Args()[2:]...)
+	case "info":
+		info(p, flag.Args()[2:]...)
+	default:
+		log.Fatalf("Unknown command %q", flag.Arg(0))
+	}
 }
