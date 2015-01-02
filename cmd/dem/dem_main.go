@@ -237,7 +237,9 @@ camera {
 			//log.Printf("Entity %d has model %d of %d", n, e.Model, len(d.ServerInfo.Models))
 			//log.Printf("  Name: %q", d.ServerInfo.Models[e.Model])
 			if validModel(d.ServerInfo.Models[e.Model]) {
-				fmt.Fprintf(fo, "// Entity %d\n%s(<%s>,<%s>)\n", n, frameName(name, frame), e.Pos.String(), e.Angle.String())
+				a := e.Angle
+				a.X, a.Y, a.Z = a.Z, a.X, a.Y
+				fmt.Fprintf(fo, "// Entity %d\n%s(<%s>,<%s>)\n", n, frameName(name, frame), e.Pos.String(), a.String())
 			}
 		}
 	}

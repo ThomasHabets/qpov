@@ -625,7 +625,7 @@ func (d *Demo) Read() error {
 		}
 		if mask&U_ANGLE2 != 0 {
 			a, _ := readAngle(d.block)
-			d.Entities[ent].Angle.Z = a
+			d.Entities[ent].Angle.Y = a
 			if debugEnt == ent {
 				log.Printf("  Update %d: Angle 2 %f", ent, a)
 			}
@@ -639,7 +639,7 @@ func (d *Demo) Read() error {
 		}
 		if mask&U_ANGLE3 != 0 {
 			a, _ := readAngle(d.block)
-			d.Entities[ent].Angle.Y = a
+			d.Entities[ent].Angle.Z = a
 			if debugEnt == ent {
 				log.Printf("  Update %d: Angle 3 %f", ent, a)
 			}
