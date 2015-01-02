@@ -139,14 +139,6 @@ func main() {
 
 func frameName(mf string, frame int) string {
 	s := mf
-
-	if true {
-		re2 := regexp.MustCompile(`progs/h_`)
-		s2 := re2.ReplaceAllString(s, "progs/")
-		if _, err := os.Stat(s2 + "/model.inc"); err == nil {
-			s = s2
-		}
-	}
 	re := regexp.MustCompile(`[/.-]`)
 	s = re.ReplaceAllString(s, "_")
 	return fmt.Sprintf("demprefix_%s_%d", s, frame)
@@ -159,25 +151,15 @@ func validModel(m string) bool {
 	if !strings.HasSuffix(m, ".mdl") {
 		return false
 	}
+
+	// These have grouped frames. Not yet handled.
 	if strings.Contains(m, "flame.mdl") {
-		return false
-	}
-	if strings.Contains(m, "eyes.mdl") {
-		return false
-	}
-	if strings.Contains(m, "suit.mdl") {
-		return false
-	}
-	if strings.Contains(m, "light.mdl") {
 		return false
 	}
 	if strings.Contains(m, "flame2.mdl") {
 		return false
 	}
 	if strings.Contains(m, "w_spike.mdl") {
-		return false
-	}
-	if strings.Contains(m, "missile.mdl") {
 		return false
 	}
 	return true
