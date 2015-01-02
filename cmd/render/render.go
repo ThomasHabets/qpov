@@ -49,7 +49,7 @@ func doRender(files []string, done chan<- int) {
 				"-D",
 			}
 			if *fast {
-				args = append(args, "+Q0", "+W800", "+H450")
+				args = append(args, "+Q2", "+W400", "+H225")
 			} else if *hq {
 				args = append(args, "+Q11", "+A0.1", "+R4", "+W1600", "+H900")
 			} else {

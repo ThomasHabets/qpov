@@ -134,7 +134,7 @@ func (m *Model) POVFrameID(id int, skin string) string {
       pigment {
         image_map {
           png %s
-          // TODO: interpolate 2
+          interpolate 2
         }
         rotate <180,0,0>
       }
@@ -165,7 +165,7 @@ func (m *Model) POVFrameID(id int, skin string) string {
 		ret += fmt.Sprintf("  normal_indices { %d, %s }\n", len(vs), strings.Join(vs, ","))
 	}
 
-	// Add texture indeces indices.
+	// Add texture coord indices.
 	if skin != "" {
 		vs := []string{}
 		for _, tri := range m.Triangles {

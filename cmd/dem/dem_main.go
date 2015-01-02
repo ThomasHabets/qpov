@@ -18,10 +18,11 @@ import (
 )
 
 var (
-	cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
-	outDir     = flag.String("out", "render", "Output directory.")
-	demo       = flag.String("demo", "", "Demo file inside a pak.")
-	entities   = flag.Bool("entities", true, "Render entities too.")
+	cpuprofile  = flag.String("cpuprofile", "", "write cpu profile to file")
+	outDir      = flag.String("out", "render", "Output directory.")
+	demo        = flag.String("demo", "", "Demo file inside a pak.")
+	entities    = flag.Bool("entities", true, "Render entities too.")
+	useTextures = flag.Bool("textures", true, "Render textures.")
 )
 
 func main() {
@@ -53,11 +54,11 @@ func main() {
 		log.Fatalf("Getting %q: %v", *demo, err)
 	}
 	d := dem.Open(df)
+	oldTime := float32(-1.0)
 	oldPos := dem.Vertex{}
 	oldView := dem.Vertex{}
 	var level *bsp.BSP
 	var frame int
-	var levelfn string
 	for {
 		err := d.Read()
 		if err == io.EOF {
@@ -82,32 +83,18 @@ func main() {
 			//d.Pos().X = level.StartPos.X
 			//d.Pos().Y = level.StartPos.Y
 			//d.Pos().Z = level.StartPos.Z
-			levelfn = fmt.Sprintf("%s.inc", path.Base(d.Level))
-			writeLevel(path.Join(*outDir, levelfn), level)
 		}
-		if oldPos != d.Pos() {
+		if oldTime != d.Time {
 			if false {
-				fmt.Printf("Frame %d: Pos: %v -> %v, viewAngle %v -> %v\n", frame, oldPos, d.Pos(), oldView, d.ViewAngle())
+				fmt.Printf("Frame %d (t=%g): Pos: %v -> %v, viewAngle %v -> %v\n", frame, d.Time, oldPos, d.Pos(), oldView, d.ViewAngle())
 			}
-			oldPos = d.Pos()
 			oldView = d.ViewAngle()
-			writePOV(path.Join(*outDir, fmt.Sprintf("frame-%08d.pov", frame)), levelfn, level, d)
+			oldPos = d.Pos()
+			oldTime = d.Time
+			writePOV(path.Join(*outDir, fmt.Sprintf("frame-%08d.pov", frame)), d.Level, level, d)
 			frame++
 		}
 	}
-}
-
-func writeLevel(fn string, level *bsp.BSP) {
-	fo, err := os.Create(fn)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer fo.Close()
-	mesh, err := level.POVTriangleMesh()
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Fprintln(fo, mesh)
 }
 
 func frameName(mf string, frame int) string {
@@ -191,7 +178,7 @@ global_settings {
 }
 #include "colors.inc"
 #include "progs/soldier.mdl/model.inc"
-#include "%s"
+#include "%s/level.inc"
 %s
 light_source { <%s> color White }
 camera {
@@ -227,16 +214,19 @@ camera {
 			}
 			name := d.ServerInfo.Models[e.Model]
 			frame := int(e.Frame)
+			frame = 0
 
 			// TODO: What's going on here?
-			switch name {
-			case "progs/h_guard.mdl":
-				name = "progs/soldier.mdl"
-			case "progs/armor.mdl", "progs/spike.mdl", "progs/h_shams.mdl":
-				frame = 0
-			case "progs/playernl.mdl":
-				if frame > 18 {
+			if false {
+				switch name {
+				case "progs/h_guard.mdl":
+					name = "progs/soldier.mdl"
+				case "progs/armor.mdl", "progs/spike.mdl", "progs/h_shams.mdl":
 					frame = 0
+				case "progs/playernl.mdl":
+					if frame > 18 {
+						frame = 0
+					}
 				}
 			}
 			//log.Printf("Entity %d has model %d of %d", n, e.Model, len(d.ServerInfo.Models))
@@ -247,8 +237,12 @@ camera {
 
 				// TODO: skin is broken sometimes, just use first one.
 				e.Skin = 0
-				fmt.Fprintf(fo, "// Entity %d\n%s(<%s>,<%s>,\"%s\")\n", n, frameName(name, frame), e.Pos.String(), a.String(),
-					path.Join(name, fmt.Sprintf("skin_%v.png", e.Skin)))
+				if *useTextures {
+					skinName := path.Join(name, fmt.Sprintf("skin_%v.png", e.Skin))
+					fmt.Fprintf(fo, "// Entity %d\n%s(<%s>,<%s>,\"%s\")\n", n, frameName(name, frame), e.Pos.String(), a.String(), skinName)
+				} else {
+					fmt.Fprintf(fo, "// Entity %d\n%s(<%s>,<%s>)\n", n, frameName(name, frame), e.Pos.String(), a.String())
+				}
 			}
 		}
 	}

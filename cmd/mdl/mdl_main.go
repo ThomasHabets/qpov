@@ -22,6 +22,7 @@ func frameName(mf string, frame int) string {
 func convert(p pak.MultiPak, args ...string) {
 	fs := flag.NewFlagSet("convert", flag.ExitOnError)
 	outDir := fs.String("out", ".", "Output directory.")
+	skins := fs.Bool("skins", true, "Use skins.")
 	fs.Parse(args)
 
 	errors := []string{}
@@ -56,7 +57,11 @@ func convert(p pak.MultiPak, args ...string) {
 			}
 			defer of.Close()
 			for n := range m.Frames {
-				fmt.Fprintf(of, "#macro %s(pos, rot, skin)\n%s\n#end\n", frameName(mf, n), m.POVFrameID(n, "skin"))
+				if *skins {
+					fmt.Fprintf(of, "#macro %s(pos, rot, skin)\n%s\n#end\n", frameName(mf, n), m.POVFrameID(n, "skin"))
+				} else {
+					fmt.Fprintf(of, "#macro %s(pos, rot)\n%s\n#end\n", frameName(mf, n), m.POVFrameID(n, ""))
+				}
 			}
 
 			for n, skin := range m.Skins {

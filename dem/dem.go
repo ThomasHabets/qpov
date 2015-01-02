@@ -67,7 +67,7 @@ const (
 
 var (
 	Verbose  = false
-	debugEnt = uint16(449)
+	debugEnt = uint16(123)
 )
 
 type Vertex struct {
@@ -84,6 +84,7 @@ type Entity struct {
 	Model uint8
 	Frame uint8
 	Skin  uint8
+	Color int
 }
 
 type Demo struct {
@@ -96,6 +97,7 @@ type Demo struct {
 
 	ServerInfo ServerInfo
 	Entities   []Entity
+	Time       float32
 }
 
 type blockHeader struct {
@@ -182,7 +184,11 @@ func parseServerInfo(r io.Reader) (ServerInfo, error) {
 		if s == "" {
 			break
 		}
+		log.Printf("  ----> Loading model %d: %q", len(si.Models), s)
 		si.Models = append(si.Models, s)
+		if len(si.Models) == 1 {
+			si.Models = append(si.Models, s)
+		}
 	}
 
 	// Read sound list.
@@ -299,20 +305,26 @@ func (d *Demo) Read() error {
 	case 0x06: // Play sound.
 		mask, _ := readUint8(d.block)
 		if mask&0x1 != 0 {
-			readUint8(d.block)
+			readUint8(d.block) // vol
 		}
 		if mask&0x2 != 0 {
-			readUint8(d.block)
+			readUint8(d.block) // attenuation
 		}
-		readUint16(d.block)
-		readUint8(d.block)
-		readCoord(d.block)
+		entity_channel, _ := readUint16(d.block)
+		channel := entity_channel & 0x07
+		_ = channel
+		ent := (entity_channel >> 3) & 0x1FFF
+		if debugEnt == ent {
+			log.Printf("Entity %d made a sound", ent)
+		}
+		readUint8(d.block) // channel
+		readCoord(d.block) // origin...
 		readCoord(d.block)
 		readCoord(d.block)
 	case 0x07: // time
-		t, _ := readFloat(d.block)
+		d.Time, _ = readFloat(d.block)
 		if Verbose {
-			log.Printf("Time: %f", t)
+			log.Printf("Time: %f", d.Time)
 		}
 	case 0x08: // Print
 		s, _ := readString(d.block)
@@ -428,25 +440,24 @@ func (d *Demo) Read() error {
 		weapon, _ := readUint8(d.block)
 		if Verbose {
 			log.Printf("Weapon: %v", weapon)
-			log.Printf("After clientdata: %v", []byte(d.block.String()))
 		}
 
 	case 0x11: // set colors
 		readUint8(d.block)
 		readUint8(d.block)
 	case 0x12: // particle
+		readCoord(d.block) // origin...
 		readCoord(d.block)
 		readCoord(d.block)
-		readCoord(d.block)
+		readInt8(d.block) // velocity...
 		readInt8(d.block)
 		readInt8(d.block)
-		readInt8(d.block)
-		readUint8(d.block)
-		readUint8(d.block)
+		readUint8(d.block) // count
+		readUint8(d.block) // color (chunk 0, blood 73, barrel 75 and thunderbolt 225)
 	case 0x13: // damage
-		readUint8(d.block)
-		readUint8(d.block)
-		readCoord(d.block)
+		readUint8(d.block) // armor
+		readUint8(d.block) // health
+		readCoord(d.block) // origin of hit...
 		readCoord(d.block)
 		readCoord(d.block)
 	case 0x14: // spawnstatic
@@ -480,8 +491,6 @@ func (d *Demo) Read() error {
 
 		if debugEnt == ent || Verbose {
 			log.Printf("Spawning baseline %d at <%f,%f,%f>: %d (%s) %d %d %d %f %f %f", ent, x, y, z, model, d.ServerInfo.Models[model], frame, color, skin, a, b, c)
-		}
-		if debugEnt == ent || Verbose {
 			log.Printf("  Model: %v", d.Entities[model])
 		}
 		d.Entities[ent].Pos.X, d.Entities[ent].Pos.Y, d.Entities[ent].Pos.Z = x, y, z
@@ -489,6 +498,7 @@ func (d *Demo) Read() error {
 		d.Entities[ent].Model = model
 		d.Entities[ent].Frame = frame
 		d.Entities[ent].Skin = skin
+		d.Entities[ent].Color = int(color)
 	case 0x17: // temp entity
 		entityType, _ := readUint8(d.block)
 		if Verbose {
@@ -497,25 +507,28 @@ func (d *Demo) Read() error {
 		switch entityType {
 		// TE_KNIGHT_SPIKE
 		case TE_SPIKE, TE_SUPERSPIKE, TE_GUNSHOT, TE_EXPLOSION, TE_TAREXPLOSION, TE_WIZSPIKE, TE_LAVASPLASH, TE_TELEPORT:
-			readCoord(d.block)
+			readCoord(d.block) // origin...
 			readCoord(d.block)
 			readCoord(d.block)
 
 		// TE_BEAM
 		case TE_LIGHTNING1, TE_LIGHTNING2, TE_LIGHTNING3:
-			readUint16(d.block)
+			ent, _ := readUint16(d.block)
+			if debugEnt == ent {
+				log.Printf("Lightning from ent %d", ent)
+			}
+			readCoord(d.block) // from...
 			readCoord(d.block)
 			readCoord(d.block)
-			readCoord(d.block)
-			readCoord(d.block)
+			readCoord(d.block) // to...
 			readCoord(d.block)
 			readCoord(d.block)
 		case TE_EXPLOSION2:
+			readCoord(d.block) // origin...
 			readCoord(d.block)
 			readCoord(d.block)
-			readCoord(d.block)
-			readUint8(d.block)
-			readUint8(d.block)
+			readUint8(d.block) // color
+			readUint8(d.block) // range
 		default:
 			return fmt.Errorf("bad temp ent type")
 		}
@@ -530,19 +543,19 @@ func (d *Demo) Read() error {
 	case 0x1b: // killed monster
 	case 0x1c: // found secret
 	case 0x1d: // spawnstaticsound
+		readCoord(d.block) // origin
 		readCoord(d.block)
 		readCoord(d.block)
-		readCoord(d.block)
-		readUint8(d.block)
-		readUint8(d.block)
-		readUint8(d.block)
+		readUint8(d.block) // num
+		readUint8(d.block) // vol
+		readUint8(d.block) // attenuation
 	case 0x1e: // intermission
 		readString(d.block)
 	case 0x1f: // finale - end screen
 		readString(d.block)
 	case 0x20: // CD track
-		readUint8(d.block)
-		readUint8(d.block)
+		readUint8(d.block) // from track
+		readUint8(d.block) // to track
 	case 0x21: // sell screen
 	default:
 		if typ < 0x80 {
@@ -572,7 +585,7 @@ func (d *Demo) Read() error {
 			if err != nil {
 				log.Fatal(err)
 			}
-			if debugEnt == ent || Verbose && d.Entities[ent].Model != a {
+			if debugEnt == ent || (Verbose && d.Entities[ent].Model != a) {
 				log.Printf("  Update %d: Model %d (%q -> %q)", ent, a, d.ServerInfo.Models[d.Entities[ent].Model], d.ServerInfo.Models[a])
 			}
 			d.Entities[ent].Model = a

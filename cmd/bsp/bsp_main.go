@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
+	"strings"
 
 	"github.com/ThomasHabets/bsparse/bsp"
 	"github.com/ThomasHabets/bsparse/pak"
@@ -12,29 +14,100 @@ import (
 
 var (
 	pakFile = flag.String("pak", "", "Pakfile to use.")
-	command = flag.String("c", "", "Command (pov-tri, info)")
 )
+
+func mkdirP(base, mf string) {
+	var cparts []string
+	for _, part := range strings.Split(mf, "/") {
+		cparts = append(cparts, part)
+		if err := os.Mkdir(path.Join(base, strings.Join(cparts, "/")), 0755); err != nil {
+			//log.Printf("Creating model subdir: %v, continuing...", err)
+		}
+	}
+}
+
+func convert(p pak.MultiPak, args ...string) {
+	fs := flag.NewFlagSet("convert", flag.ExitOnError)
+	outDir := fs.String("out", ".", "Output directory.")
+	textures := fs.Bool("textures", false, "Use textures.")
+	fs.Parse(args)
+
+	//errors := []string{}
+	os.Mkdir(*outDir, 0755)
+	for _, mf := range p.List() {
+		if path.Ext(mf) != ".bsp" {
+			continue
+		}
+		func() {
+			o, err := p.Get(mf)
+			if err != nil {
+				log.Fatalf("Getting %q: %v", mf, err)
+			}
+
+			b, err := bsp.Load(o)
+			if err != nil {
+				log.Fatalf("Loading %q: %v", mf, err)
+			}
+
+			mkdirP(*outDir, mf)
+			fn := fmt.Sprintf(path.Join(mf, "level.inc"))
+			of, err := os.Create(path.Join(*outDir, fn))
+			if err != nil {
+				log.Fatalf("Model create of %q fail: %v", fn, err)
+			}
+			defer of.Close()
+			m, err := b.POVTriangleMesh(*textures)
+			if err != nil {
+				log.Fatalf("Making mesh of %q: %v", mf, err)
+			}
+			fmt.Fprintln(of, m)
+		}()
+	}
+}
+
+func pov(p pak.MultiPak, args ...string) {
+	fs := flag.NewFlagSet("pov", flag.ExitOnError)
+	//outDir := fs.String("out", ".", "Output directory.")
+	//maps := fs.String("maps", ".*", "Regex of maps to convert.")
+	fs.Parse(args)
+	maps := fs.Arg(0)
+
+	res, err := p.Get(maps)
+	if err != nil {
+		log.Fatalf("Finding %q: %v", maps, err)
+	}
+
+	m, err := bsp.Load(res)
+
+	mesh, err := m.POVTriangleMesh(true)
+	if err != nil {
+		log.Fatalf("Error getting mesh: %v", err)
+	}
+	fmt.Println(mesh)
+}
 
 func main() {
 	flag.Parse()
 
-	p, err := pak.MultiOpen(*pakFile)
+	pakFile := flag.Arg(0)
+
+	p, err := pak.MultiOpen(pakFile)
 	if err != nil {
-		log.Fatalf("Opening pakfile %q: %v", *pakFile, err)
+		log.Fatalf("Opening pakfile %q: %v", pakFile, err)
 	}
 
-	mapName := flag.Arg(0)
-	b, err := p.Get(mapName)
-	if err != nil {
-		log.Fatalf("Finding map %q: %v", mapName, err)
-	}
-
-	m, err := bsp.Load(b)
-	if err != nil {
-		log.Fatalf("Loading map: %v", err)
-	}
-	switch *command {
+	switch flag.Arg(1) {
 	case "info":
+		mapName := flag.Arg(0)
+		b, err := p.Get(mapName)
+		if err != nil {
+			log.Fatalf("Finding map %q: %v", mapName, err)
+		}
+
+		m, err := bsp.Load(b)
+		if err != nil {
+			log.Fatalf("Loading map: %v", err)
+		}
 		fmt.Fprintf(os.Stderr, "Vertices: %v\n", len(m.Raw.Vertex))
 		fmt.Fprintf(os.Stderr, "Faces: %v\n", len(m.Raw.Face))
 		fmt.Fprintf(os.Stderr, "Edges: %v\n", len(m.Raw.Edge))
@@ -42,13 +115,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Vertices: %v\n", len(m.Raw.Entities))
 		fmt.Fprintf(os.Stderr, "MipTexes: %v\n", len(m.Raw.MipTex))
 		fmt.Fprintf(os.Stderr, "TexInfos: %v\n", len(m.Raw.TexInfo))
-	case "pov-tri":
-		mesh, err := m.POVTriangleMesh()
-		if err != nil {
-			log.Fatalf("Error getting mesh: %v", err)
-		}
-		fmt.Println(mesh)
+	case "pov":
+		pov(p, flag.Args()[2:]...)
+	case "convert":
+		convert(p, flag.Args()[2:]...)
 	default:
-		log.Fatalf("Unknown command %q", *command)
+		log.Fatalf("Unknown command %q", flag.Arg(1))
 	}
 }
