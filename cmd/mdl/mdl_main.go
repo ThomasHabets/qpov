@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"image/png"
 	"log"
 	"os"
 	"path"
@@ -41,16 +42,28 @@ func convert(p pak.MultiPak) {
 				errors = append(errors, mf)
 				return
 			}
-
-			fn := fmt.Sprintf("%s.inc", mf)
+			if err := os.Mkdir(mf, 0755); err != nil {
+				//log.Printf("Creating model subdir: %v, continuing...", err)
+			}
+			fn := fmt.Sprintf(path.Join(mf, "model.inc"))
 			of, err := os.Create(fn)
 			if err != nil {
 				log.Fatalf("Model create of %q fail: %v", fn, err)
 			}
 			defer of.Close()
 			for n := range m.Frames {
+				fmt.Fprintf(of, "#macro %s(pos, rot, skin)\n%s\n#end\n", frameName(mf, n), m.POVFrameID(n, "skin"))
+			}
 
-				fmt.Fprintf(of, "#macro %s(pos, rot)\n%s\n#end\n", frameName(mf, n), m.POVFrameID(n))
+			for n, skin := range m.Skins {
+				of, err := os.Create(path.Join(mf, fmt.Sprintf("skin_%d.png", n)))
+				if err != nil {
+					log.Fatalf("Skin create of %q fail: %v", fn, err)
+				}
+				defer of.Close()
+				if err := (&png.Encoder{}).Encode(of, skin); err != nil {
+					log.Fatalf("Encoding skin to png: %v", err)
+				}
 			}
 		}()
 	}
@@ -69,6 +82,7 @@ func show(p pak.MultiPak) {
 	}
 
 	fmt.Printf("Filename: %s\n  Triangles: %v\n", *model, len(m.Triangles))
+	fmt.Printf("Skins: %v\n", len(m.Skins))
 	fmt.Printf("  %6s %16s\n", "Frame#", "Name")
 	for n, f := range m.Frames {
 		fmt.Printf("  %6d %16s\n", n, f.Name)
@@ -87,7 +101,7 @@ func triangles(p pak.MultiPak) {
 	}
 
 	for n, _ := range m.Frames {
-		fmt.Printf("#macro %s(pos, rot)\n%s\n#end\n", frameName(*model, n), m.POVFrameID(n))
+		fmt.Printf("#macro %s(pos, rot)\n%s\n#end\n", frameName(*model, n), m.POVFrameID(n, "blaha"))
 	}
 }
 

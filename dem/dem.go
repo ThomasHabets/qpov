@@ -83,7 +83,7 @@ type Entity struct {
 	Angle Vertex
 	Model uint8
 	Frame uint8
-	// TODO: skin.
+	Skin  uint8
 }
 
 type Demo struct {
@@ -485,6 +485,7 @@ func (d *Demo) Read() error {
 		d.Entities[ent].Angle.X, d.Entities[ent].Angle.Y, d.Entities[ent].Angle.Z = a, b, c
 		d.Entities[ent].Model = model
 		d.Entities[ent].Frame = frame
+		d.Entities[ent].Skin = skin
 	case 0x17: // temp entity
 		entityType, _ := readUint8(d.block)
 		if Verbose {
@@ -568,8 +569,9 @@ func (d *Demo) Read() error {
 			if debugEnt == ent || Verbose && d.Entities[ent].Model != a {
 				log.Printf("  Update %d: Model %d (%q -> %q)", ent, a, d.ServerInfo.Models[d.Entities[ent].Model], d.ServerInfo.Models[a])
 			}
-			d.Entities[ent].Frame = 0
 			d.Entities[ent].Model = a
+			d.Entities[ent].Frame = 0
+			d.Entities[ent].Skin = 0
 		}
 		if mask&U_FRAME != 0 {
 			a, err := readUint8(d.block)
@@ -592,6 +594,7 @@ func (d *Demo) Read() error {
 			if debugEnt == ent {
 				log.Printf("  Update %d: Skin %d", ent, a)
 			}
+			d.Entities[ent].Skin = a
 		}
 		if mask&U_EFFECTS != 0 {
 			a, _ := readUint8(d.block)

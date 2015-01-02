@@ -6,10 +6,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"image"
-	"image/png"
 	"io"
 	"log"
-	"os"
 	"strings"
 )
 
@@ -83,12 +81,13 @@ type SimpleFrame struct {
 
 type Model struct {
 	Header        RawHeader
+	Skins         []image.Image
 	Triangles     []Triangle
 	TextureCoords []TexCoords
 	Frames        []SimpleFrame
 }
 
-func (m *Model) POVFrameID(id int) string {
+func (m *Model) POVFrameID(id int, skin string) string {
 	const useNormals = true
 
 	var ret string
@@ -133,18 +132,18 @@ func (m *Model) POVFrameID(id int) string {
 	// Add textures.
 	{
 		ret += "  texture_list { 1,\n"
-		ret += `
+		ret += fmt.Sprintf(`
     texture {
       uv_mapping
       pigment {
         image_map {
-          png "test.png"
+          png %s
         }
         rotate <180,0,0>
       }
       //finish { specular 0.1 phong_size 60 }
     }
-`
+`, skin)
 		ret += "  }\n"
 	}
 
@@ -227,14 +226,7 @@ func Load(r myReader) (*Model, error) {
 		for n, b := range skin.Data {
 			img.SetColorIndex(n%int(m.Header.SkinWidth), n/int(m.Header.SkinWidth), b)
 		}
-		fo, err := os.Create("test.png")
-		if err != nil {
-			return nil, err
-		}
-		if err := (&png.Encoder{}).Encode(fo, img); err != nil {
-			return nil, err
-		}
-		fo.Close()
+		m.Skins = append(m.Skins, img)
 	}
 
 	// Load texcoords.

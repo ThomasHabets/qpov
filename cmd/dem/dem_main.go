@@ -182,7 +182,7 @@ func writePOV(fn string, levelfn string, level *bsp.BSP, d *dem.Demo) {
 			if !validModel(m) {
 				continue
 			}
-			models = append(models, fmt.Sprintf(`#include "%s.inc"`, m))
+			models = append(models, fmt.Sprintf(`#include "%s/model.inc"`, m))
 		}
 	}
 	fmt.Fprintf(fo, `#version 3.7;
@@ -190,7 +190,7 @@ global_settings {
   assumed_gamma 2.2
 }
 #include "colors.inc"
-#include "progs/soldier.mdl.inc"
+#include "progs/soldier.mdl/model.inc"
 #include "%s"
 %s
 light_source { <%s> color White }
@@ -239,7 +239,11 @@ camera {
 			if validModel(d.ServerInfo.Models[e.Model]) {
 				a := e.Angle
 				a.X, a.Y, a.Z = a.Z, a.X, a.Y
-				fmt.Fprintf(fo, "// Entity %d\n%s(<%s>,<%s>)\n", n, frameName(name, frame), e.Pos.String(), a.String())
+
+				// TODO: skin is broken sometimes, just use first one.
+				e.Skin = 0
+				fmt.Fprintf(fo, "// Entity %d\n%s(<%s>,<%s>,\"%s\")\n", n, frameName(name, frame), e.Pos.String(), a.String(),
+					path.Join(name, fmt.Sprintf("skin_%v.png", e.Skin)))
 			}
 		}
 	}
