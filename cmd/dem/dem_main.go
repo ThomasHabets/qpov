@@ -232,7 +232,7 @@ camera {
 				name = "progs/soldier.mdl"
 			}
 			switch name {
-			case "progs/armor.mdl", "progs/spike.mdl":
+			case "progs/armor.mdl", "progs/spike.mdl", "progs/h_shams.mdl":
 				frame = 0
 			}
 			//log.Printf("Entity %d has model %d of %d", n, e.Model, len(d.ServerInfo.Models))
