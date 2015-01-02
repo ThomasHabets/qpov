@@ -254,7 +254,6 @@ camera {
 			}
 			name := d.ServerInfo.Models[e.Model]
 			frame := int(e.Frame)
-			frame = 0
 
 			// TODO: What's going on here?
 			if false {
