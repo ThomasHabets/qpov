@@ -66,7 +66,8 @@ const (
 )
 
 var (
-	Verbose = false
+	Verbose  = false
+	debugEnt = uint16(449)
 )
 
 type Vertex struct {
@@ -90,9 +91,8 @@ type Demo struct {
 	block *bytes.Buffer
 
 	Level     string
-	ViewAngle Vertex
-	Pos       Vertex
 	CameraEnt uint16
+	viewAngle Vertex
 
 	ServerInfo ServerInfo
 	Entities   []Entity
@@ -269,7 +269,8 @@ func (d *Demo) Read() error {
 		}
 		//log.Printf("Block: %v", block)
 		d.block = bytes.NewBuffer(block)
-		//d.ViewAngle = bh.ViewAngle
+		log.Printf("Block viewangle: %v", bh.ViewAngle)
+		d.viewAngle = bh.ViewAngle
 	}
 	tail := d.block.String()
 	typ, err := readUint8(d.block)
@@ -290,7 +291,7 @@ func (d *Demo) Read() error {
 		}
 	case 0x05: // Camera pos to this entity.
 		d.CameraEnt, _ = readUint16(d.block)
-		if Verbose {
+		if true || Verbose {
 			log.Printf("Camera object changed to %d", d.CameraEnt)
 		}
 	case 0x06: // Play sound.
@@ -322,7 +323,10 @@ func (d *Demo) Read() error {
 		y, _ := readAngle(d.block)
 		z, _ := readAngle(d.block)
 		log.Printf("Camera orientation changed to %f %f %f", x, y, z)
-	case 0x0b:
+		d.Entities[d.CameraEnt].Angle.X = x
+		d.Entities[d.CameraEnt].Angle.Y = y
+		d.Entities[d.CameraEnt].Angle.Z = z
+	case 0x0b: // serverinfo
 		log.Printf("SERVERINFO")
 		var err error
 		d.ServerInfo, err = parseServerInfo(d.block)
@@ -374,6 +378,7 @@ func (d *Demo) Read() error {
 		if mask&SU_ONGROUND != 0 {
 		}
 		if mask&SU_INWATER != 0 {
+			// TODO: blend some blue.
 		}
 		if mask&SU_ITEMS != 0 {
 			readUint32(d.block)
@@ -470,14 +475,14 @@ func (d *Demo) Read() error {
 		z, _ := readCoord(d.block)
 		c, _ := readAngle(d.block)
 
-		if Verbose {
+		if debugEnt == ent || Verbose {
 			log.Printf("Spawning baseline %d at <%f,%f,%f>: %d (%s) %d %d %d %f %f %f", ent, x, y, z, model, d.ServerInfo.Models[model], frame, color, skin, a, b, c)
 		}
-		if Verbose && ent == 40 {
+		if debugEnt == ent || Verbose {
 			log.Printf("  Model: %v", d.Entities[model])
 		}
 		d.Entities[ent].Pos.X, d.Entities[ent].Pos.Y, d.Entities[ent].Pos.Z = x, y, z
-		//TODO: why not? d.Entities[ent].Angle.X, d.Entities[ent].Angle.Y, d.Entities[ent].Angle.Z = a, b, c
+		d.Entities[ent].Angle.X, d.Entities[ent].Angle.Y, d.Entities[ent].Angle.Z = a, b, c
 		d.Entities[ent].Model = model
 		d.Entities[ent].Frame = frame
 	case 0x17: // temp entity
@@ -492,7 +497,8 @@ func (d *Demo) Read() error {
 			readCoord(d.block)
 			readCoord(d.block)
 
-		case TE_LIGHTNING1, TE_LIGHTNING2, TE_LIGHTNING3: // TE_BEAM
+		// TE_BEAM
+		case TE_LIGHTNING1, TE_LIGHTNING2, TE_LIGHTNING3:
 			readUint16(d.block)
 			readCoord(d.block)
 			readCoord(d.block)
@@ -510,6 +516,7 @@ func (d *Demo) Read() error {
 			return fmt.Errorf("bad temp ent type")
 		}
 	case 0x19: // This message selects the client state.
+		// TODO: only start rendering after state 2.
 		state, _ := readUint8(d.block)
 		if Verbose {
 			log.Printf("Set state: %v", state)
@@ -550,19 +557,15 @@ func (d *Demo) Read() error {
 			e, _ := readUint8(d.block)
 			ent = uint16(e)
 		}
-		if Verbose {
+		if debugEnt == ent || Verbose {
 			log.Printf("Update to entity %d", ent)
-		}
-		debugEnt := false
-		if Verbose && ent == 40 {
-			debugEnt = true
 		}
 		if mask&U_MODEL != 0 {
 			a, err := readUint8(d.block)
 			if err != nil {
 				log.Fatal(err)
 			}
-			if Verbose && d.Entities[ent].Model != a {
+			if debugEnt == ent || Verbose && d.Entities[ent].Model != a {
 				log.Printf("  Update %d: Model %d (%q -> %q)", ent, a, d.ServerInfo.Models[d.Entities[ent].Model], d.ServerInfo.Models[a])
 			}
 			d.Entities[ent].Frame = 0
@@ -574,25 +577,25 @@ func (d *Demo) Read() error {
 				log.Fatal(err)
 			}
 			d.Entities[ent].Frame = a
-			if debugEnt {
+			if debugEnt == ent {
 				log.Printf("  Set frame of %d to %d", ent, a)
 			}
 		}
 		if mask&U_COLORMAP != 0 {
 			a, _ := readUint8(d.block)
-			if debugEnt {
+			if debugEnt == ent {
 				log.Printf("  Update %d: Colormap %d", ent, a)
 			}
 		}
 		if mask&U_SKIN != 0 {
 			a, _ := readUint8(d.block)
-			if debugEnt {
+			if debugEnt == ent {
 				log.Printf("  Update %d: Skin %d", ent, a)
 			}
 		}
 		if mask&U_EFFECTS != 0 {
 			a, _ := readUint8(d.block)
-			if debugEnt {
+			if debugEnt == ent {
 				log.Printf("  Update %d: Effects %d", ent, a)
 			}
 		}
@@ -602,59 +605,61 @@ func (d *Demo) Read() error {
 				log.Fatal(err)
 			}
 			d.Entities[ent].Pos.X = a
-			if debugEnt {
+			if debugEnt == ent {
 				log.Printf("  Update %d: Pos X %f", ent, a)
 			}
 		}
 		if mask&U_ANGLE1 != 0 {
 			a, _ := readAngle(d.block)
 			d.Entities[ent].Angle.X = a
-			if debugEnt {
+			if debugEnt == ent {
 				log.Printf("  Update %d: Angle 1 %f", ent, a)
 			}
 		}
 		if mask&U_ORIGIN2 != 0 {
 			a, _ := readCoord(d.block)
 			d.Entities[ent].Pos.Y = a
-			if debugEnt {
+			if debugEnt == ent {
 				log.Printf("  Update %d: Pos Y %f", ent, a)
 			}
 		}
 		if mask&U_ANGLE2 != 0 {
 			a, _ := readAngle(d.block)
 			d.Entities[ent].Angle.Z = a
-			if debugEnt {
+			if debugEnt == ent {
 				log.Printf("  Update %d: Angle 2 %f", ent, a)
 			}
 		}
 		if mask&U_ORIGIN3 != 0 {
 			a, _ := readCoord(d.block)
 			d.Entities[ent].Pos.Z = a
-			if debugEnt {
+			if debugEnt == ent {
 				log.Printf("  Update %d: Pos Z %f", ent, a)
 			}
 		}
 		if mask&U_ANGLE3 != 0 {
 			a, _ := readAngle(d.block)
 			d.Entities[ent].Angle.Y = a
-			if debugEnt {
+			if debugEnt == ent {
 				log.Printf("  Update %d: Angle 3 %f", ent, a)
 			}
 		}
-		if debugEnt {
+		if debugEnt == ent {
 			log.Printf("  Data for %d: %v", ent, d.Entities[ent])
 		}
 	}
 	if d.Entities != nil {
-		d.Pos.X = d.Entities[d.CameraEnt].Pos.X
-		d.Pos.Y = d.Entities[d.CameraEnt].Pos.Y
-		d.Pos.Z = d.Entities[d.CameraEnt].Pos.Z
-		d.ViewAngle.X = d.Entities[d.CameraEnt].Angle.X
-		d.ViewAngle.Y = d.Entities[d.CameraEnt].Angle.Y
-		d.ViewAngle.Z = d.Entities[d.CameraEnt].Angle.Z
+		log.Printf("Camera %v %v", d.Entities[d.CameraEnt].Pos, d.Entities[d.CameraEnt].Angle)
 	}
 	if err != nil {
 		log.Fatal(err)
 	}
 	return nil
+}
+func (d *Demo) ViewAngle() Vertex {
+	return d.viewAngle
+}
+
+func (d *Demo) Pos() Vertex {
+	return d.Entities[d.CameraEnt].Pos
 }

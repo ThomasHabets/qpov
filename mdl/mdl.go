@@ -5,8 +5,11 @@ package mdl
 import (
 	"encoding/binary"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"log"
+	"os"
 	"strings"
 )
 
@@ -40,7 +43,7 @@ type myReader interface {
 	io.Seeker
 }
 
-type fileHeader struct {
+type RawHeader struct {
 	Ident uint32 // magic number: "IDPO"
 
 	Version uint32 /* version: 6 */
@@ -64,7 +67,8 @@ type fileHeader struct {
 }
 
 type TexCoords struct {
-	A, B, C uint32
+	Onseam uint32
+	S, T   uint32
 }
 
 type Triangle struct {
@@ -78,8 +82,10 @@ type SimpleFrame struct {
 }
 
 type Model struct {
-	Triangles []Triangle
-	Frames    []SimpleFrame
+	Header        RawHeader
+	Triangles     []Triangle
+	TextureCoords []TexCoords
+	Frames        []SimpleFrame
 }
 
 func (m *Model) POVFrameID(id int) string {
@@ -97,6 +103,24 @@ func (m *Model) POVFrameID(id int) string {
 		ret += fmt.Sprintf("  vertex_vectors { %d, %s }\n", len(vs), strings.Join(vs, ","))
 	}
 
+	// Add texture coordinates.
+	{
+		vs := []string{}
+		for _, v := range m.TextureCoords {
+			if false {
+				vs = append(vs, fmt.Sprintf("<0,0>"))
+			} else {
+				vs = append(vs, fmt.Sprintf("<%v,%v>",
+					float64(v.S)/float64(m.Header.SkinWidth),
+					float64(v.T)/float64(m.Header.SkinHeight),
+				))
+
+			}
+
+		}
+		ret += fmt.Sprintf("  uv_vectors { %d, %s }\n", len(vs), strings.Join(vs, ","))
+	}
+
 	// Add normals.
 	if useNormals {
 		ns := []string{}
@@ -111,8 +135,14 @@ func (m *Model) POVFrameID(id int) string {
 		ret += "  texture_list { 1,\n"
 		ret += `
     texture {
-      pigment { rgb<1,0,0> }
-      finish { phong 0.9 phong_size 60 }
+      uv_mapping
+      pigment {
+        image_map {
+          png "test.png"
+        }
+        rotate <180,0,0>
+      }
+      //finish { specular 0.1 phong_size 60 }
     }
 `
 		ret += "  }\n"
@@ -137,44 +167,53 @@ func (m *Model) POVFrameID(id int) string {
 		ret += fmt.Sprintf("  normal_indices { %d, %s }\n", len(vs), strings.Join(vs, ","))
 	}
 
+	// Add texture indeces indices.
+	{
+		vs := []string{}
+		for _, tri := range m.Triangles {
+			vs = append(vs, fmt.Sprintf("<%v,%v,%v>", tri.VertexIndex[0], tri.VertexIndex[1], tri.VertexIndex[2]))
+			//_ = tri
+			//vs = append(vs, "<0,0,0>")
+		}
+		ret += fmt.Sprintf("  uv_indices { %d, %s }\n", len(vs), strings.Join(vs, ","))
+	}
+
 	ret += "rotate rot translate pos}\n"
 	return ret
 }
 
 type Skin struct {
 	Group uint32
-	Data  []byte
+	Data  []uint8
 }
 
 func Load(r myReader) (*Model, error) {
-	var h fileHeader
+	m := &Model{}
 	if Verbose {
 		log.Printf("Loading model...")
 	}
-	if err := binary.Read(r, binary.LittleEndian, &h); err != nil {
+	if err := binary.Read(r, binary.LittleEndian, &m.Header); err != nil {
 		return nil, err
 	}
-	if h.Ident != magic {
-		return nil, fmt.Errorf("bad magic %08x, want %08x", h.Ident, magic)
+	if m.Header.Ident != magic {
+		return nil, fmt.Errorf("bad magic %08x, want %08x", m.Header.Ident, magic)
 	}
-	if h.Version != version {
-		return nil, fmt.Errorf("bad version %d", h.Version)
+	if m.Header.Version != version {
+		return nil, fmt.Errorf("bad version %d", m.Header.Version)
 	}
 	if Verbose {
-		log.Printf("Scale: %v", h.Scale)
-		log.Printf("Translate: %v", h.Translate)
-		log.Printf("Eye: %v", h.EyePosition)
+		log.Printf("Scale: %v", m.Header.Scale)
+		log.Printf("Translate: %v", m.Header.Translate)
+		log.Printf("Eye: %v", m.Header.EyePosition)
 	}
-
-	m := &Model{}
 
 	// Load texture data.
 	if Verbose {
-		log.Printf("Skins: %v", h.NumSkins)
+		log.Printf("Skins: %v", m.Header.NumSkins)
 	}
-	for i := uint32(0); i < h.NumSkins; i++ {
+	for i := uint32(0); i < m.Header.NumSkins; i++ {
 		skin := Skin{
-			Data: make([]byte, h.SkinWidth*h.SkinHeight),
+			Data: make([]uint8, m.Header.SkinWidth*m.Header.SkinHeight),
 		}
 		if err := binary.Read(r, binary.LittleEndian, &skin.Group); err != nil {
 			return nil, err
@@ -182,25 +221,39 @@ func Load(r myReader) (*Model, error) {
 		if _, err := r.Read(skin.Data); err != nil {
 			return nil, err
 		}
+		img := image.NewPaletted(image.Rectangle{
+			Min: image.Point{X: 0, Y: 0},
+			Max: image.Point{X: int(m.Header.SkinWidth), Y: int(m.Header.SkinHeight)}}, quakePalette)
+		for n, b := range skin.Data {
+			img.SetColorIndex(n%int(m.Header.SkinWidth), n/int(m.Header.SkinWidth), b)
+		}
+		fo, err := os.Create("test.png")
+		if err != nil {
+			return nil, err
+		}
+		if err := (&png.Encoder{}).Encode(fo, img); err != nil {
+			return nil, err
+		}
+		fo.Close()
 	}
 
 	// Load texcoords.
-	tcoords := make([]TexCoords, h.NumVertices)
-	if err := binary.Read(r, binary.LittleEndian, &tcoords); err != nil {
+	m.TextureCoords = make([]TexCoords, m.Header.NumVertices)
+	if err := binary.Read(r, binary.LittleEndian, &m.TextureCoords); err != nil {
 		return nil, err
 	}
 
 	// Load triangles.
-	m.Triangles = make([]Triangle, h.NumTriangles)
+	m.Triangles = make([]Triangle, m.Header.NumTriangles)
 	if err := binary.Read(r, binary.LittleEndian, &m.Triangles); err != nil {
 		return nil, err
 	}
 
 	// Load frames.
 	if Verbose {
-		log.Printf("Frames: %v", h.NumFrames)
+		log.Printf("Frames: %v", m.Header.NumFrames)
 	}
-	for i := uint32(0); i < h.NumFrames; i++ {
+	for i := uint32(0); i < m.Header.NumFrames; i++ {
 		if Verbose {
 			log.Printf("  Frame %d", i)
 		}
@@ -213,7 +266,7 @@ func Load(r myReader) (*Model, error) {
 		}
 		if typ == 0 {
 			s := simpleFrame{
-				Verts: make([]modelVertex, h.NumVertices, h.NumVertices),
+				Verts: make([]modelVertex, m.Header.NumVertices, m.Header.NumVertices),
 			}
 			if err := binary.Read(r, binary.LittleEndian, &s.Bboxmin); err != nil {
 				return nil, err
@@ -236,9 +289,9 @@ func Load(r myReader) (*Model, error) {
 			for n, v := range s.Verts {
 				sf.Vertices = append(sf.Vertices, ModelVertex{
 					Vertex: Vertex{
-						X: (h.Scale.X*float32(v.X) + h.Translate.X),
-						Y: (h.Scale.Y*float32(v.Y) + h.Translate.Y),
-						Z: (h.Scale.Z*float32(v.Z) + h.Translate.Z),
+						X: (m.Header.Scale.X*float32(v.X) + m.Header.Translate.X),
+						Y: (m.Header.Scale.Y*float32(v.Y) + m.Header.Translate.Y),
+						Z: (m.Header.Scale.Z*float32(v.Z) + m.Header.Translate.Z),
 					},
 					NormalIndex: int(v.NormalIndex),
 				})

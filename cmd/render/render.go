@@ -13,6 +13,7 @@ import (
 
 var (
 	povray      = flag.String("povray", "/usr/bin/povray", "Path to povray.")
+	schedtool   = flag.String("schedtool", "/usr/bin/schedtool", "Path to schedtool.")
 	concurrency = flag.Int("concurrency", 4, "Run this many povrays in parallel.")
 	fast        = flag.Bool("fast", false, "Fast rendering.")
 
@@ -42,13 +43,15 @@ func doRender(files []string, done chan<- int) {
 			defer stderr.Close()
 
 			args := []string{
+				"-D", "-e",
+				*povray,
 				"-D",
 			}
 			if *fast {
 				args = append(args, "+Q0")
 			}
 			args = append(args, path.Base(f))
-			cmd := exec.Command(*povray, args...)
+			cmd := exec.Command(*schedtool, args...)
 			cmd.Stdout = stdout
 			cmd.Stderr = stderr
 			cmd.Dir = path.Dir(f)

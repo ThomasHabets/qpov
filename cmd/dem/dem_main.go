@@ -79,18 +79,18 @@ func main() {
 				log.Fatalf("Level loading %q: %v", d.Level, err)
 			}
 			log.Printf("Level start pos: %s", level.StartPos.String())
-			d.Pos.X = level.StartPos.X
-			d.Pos.Y = level.StartPos.Y
-			d.Pos.Z = level.StartPos.Z
+			//d.Pos().X = level.StartPos.X
+			//d.Pos().Y = level.StartPos.Y
+			//d.Pos().Z = level.StartPos.Z
 			levelfn = fmt.Sprintf("%s.inc", path.Base(d.Level))
 			writeLevel(path.Join(*outDir, levelfn), level)
 		}
-		if oldPos != d.Pos {
-			if false {
-				fmt.Printf("Frame %d: Pos: %v -> %v, viewAngle %v -> %v\n", frame, oldPos, d.Pos, oldView, d.ViewAngle)
+		if oldPos != d.Pos() {
+			if true {
+				fmt.Printf("Frame %d: Pos: %v -> %v, viewAngle %v -> %v\n", frame, oldPos, d.Pos(), oldView, d.ViewAngle())
 			}
-			oldPos = d.Pos
-			oldView = d.ViewAngle
+			oldPos = d.Pos()
+			oldView = d.ViewAngle()
 			writePOV(path.Join(*outDir, fmt.Sprintf("frame-%08d.pov", frame)), levelfn, level, d)
 			frame++
 		}
@@ -171,9 +171,9 @@ func writePOV(fn string, levelfn string, level *bsp.BSP, d *dem.Demo) {
 		Z: 0,
 	}
 	pos := bsp.Vertex{
-		X: d.Pos.X,
-		Y: d.Pos.Y,
-		Z: d.Pos.Z,
+		X: d.Pos().X,
+		Y: d.Pos().Y,
+		Z: d.Pos().Z,
 	}
 
 	models := []string{}
@@ -200,11 +200,15 @@ camera {
   sky <0,0,1>
   right <-1,0,0>
   look_at <%s>
-  rotate <%f,%f,%f>
+  rotate <%f,0,0>
+  rotate <0,%f,0>
+  rotate <0,0,%f>
   translate <%s>
 }
 `, levelfn, strings.Join(models, "\n"), pos.String(), lookAt.String(),
-		d.ViewAngle.X, d.ViewAngle.Y, d.ViewAngle.Z,
+		d.ViewAngle().Z,
+		d.ViewAngle().X, // should always be close to 0.
+		d.ViewAngle().Y,
 		//d.ViewAngle.Z, d.ViewAngle.X, d.ViewAngle.Y,
 		pos.String())
 	if *entities {
