@@ -17,6 +17,7 @@ import (
 var (
 	model   = flag.String("model", "progs/ogre.mdl", "Model to read.")
 	command = flag.String("c", "show", "Command (convert, show)")
+	outDir  = flag.String("out", ".", "Output directory.")
 )
 
 func frameName(mf string, frame int) string {
@@ -26,6 +27,7 @@ func frameName(mf string, frame int) string {
 
 func convert(p pak.MultiPak) {
 	errors := []string{}
+	os.Mkdir(*outDir, 0755)
 	for _, mf := range p.List() {
 		if path.Ext(mf) != ".mdl" {
 			continue
@@ -42,11 +44,15 @@ func convert(p pak.MultiPak) {
 				errors = append(errors, mf)
 				return
 			}
-			if err := os.Mkdir(mf, 0755); err != nil {
-				//log.Printf("Creating model subdir: %v, continuing...", err)
+			var cparts []string
+			for _, part := range strings.Split(mf, "/") {
+				cparts = append(cparts, part)
+				if err := os.Mkdir(path.Join(*outDir, strings.Join(cparts, "/")), 0755); err != nil {
+					//log.Printf("Creating model subdir: %v, continuing...", err)
+				}
 			}
 			fn := fmt.Sprintf(path.Join(mf, "model.inc"))
-			of, err := os.Create(fn)
+			of, err := os.Create(path.Join(*outDir, fn))
 			if err != nil {
 				log.Fatalf("Model create of %q fail: %v", fn, err)
 			}
@@ -56,7 +62,7 @@ func convert(p pak.MultiPak) {
 			}
 
 			for n, skin := range m.Skins {
-				of, err := os.Create(path.Join(mf, fmt.Sprintf("skin_%d.png", n)))
+				of, err := os.Create(path.Join(*outDir, mf, fmt.Sprintf("skin_%d.png", n)))
 				if err != nil {
 					log.Fatalf("Skin create of %q fail: %v", fn, err)
 				}
