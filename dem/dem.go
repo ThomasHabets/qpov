@@ -173,7 +173,6 @@ func parseServerInfo(r io.Reader) (ServerInfo, error) {
 	if err != nil {
 		log.Fatalf("Failed to read map name: %v", err)
 	}
-	log.Printf("Level %q", si.Level)
 
 	// Read model list.
 	for {

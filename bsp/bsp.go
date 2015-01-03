@@ -5,7 +5,6 @@ package bsp
 
 import (
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 )
@@ -60,8 +59,7 @@ type Polygon struct {
 }
 
 type BSP struct {
-	Raw      *Raw
-	StartPos Vertex
+	Raw *Raw
 }
 
 type Entity struct {
@@ -70,16 +68,6 @@ type Entity struct {
 	Pos      Vertex
 	Angle    Vertex
 	Frame    uint8
-}
-
-func findStart(es []Entity) Vertex {
-	for _, e := range es {
-		if e.Data["classname"] == "info_player_start" {
-			return parseVertex(e.Data["origin"])
-		}
-	}
-	log.Fatal("can't find start")
-	panic("hello")
 }
 
 func Load(r myReader) (*BSP, error) {

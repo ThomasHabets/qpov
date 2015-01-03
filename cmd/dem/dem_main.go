@@ -115,7 +115,9 @@ func convert(p pak.MultiPak, args ...string) {
 					fmt.Printf("Camera set to %d\n", m.Entity)
 				}
 			} else if m, ok := msg.(*dem.MsgSpawnBaseline); ok {
-				fmt.Printf("Spawning %d: %+v\n", m.Entity, newState.ServerInfo.Models[m.Model])
+				if false {
+					fmt.Printf("Spawning %d: %+v\n", m.Entity, newState.ServerInfo.Models[m.Model])
+				}
 			} else if m, ok := msg.(*dem.MsgUpdate); ok {
 				if false {
 					if m.Entity == 8 || m.Entity == 9 {
@@ -173,7 +175,7 @@ func generateFrame(p pak.MultiPak, outDir string, oldState, newState *dem.State,
 			log.Fatalf("Level loading %q: %v", newState.ServerInfo.Models[0], err)
 		}
 		// TODO
-		log.Printf("Level start pos: %s", newState.Level.StartPos.String())
+		//log.Printf("Level start pos: %s", newState.Level.StartPos.String())
 		//d.Pos().X = level.StartPos.X
 		//d.Pos().Y = level.StartPos.Y
 		//d.Pos().Z = level.StartPos.Z
