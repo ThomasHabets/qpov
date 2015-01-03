@@ -25,6 +25,12 @@ var (
 func doRender(files []string, done chan<- int) {
 	for n, f := range files {
 		func() {
+			ext := path.Ext(f)
+			base := f[:len(f)-len(ext)]
+			if _, err := os.Stat(base + ".png"); err == nil {
+				return
+			}
+
 			stdout, err := os.Create(fmt.Sprintf("%s.stdout", f))
 			if err != nil {
 				log.Fatalf("Failed to open stdout file: %v", err)
