@@ -5,19 +5,14 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"image"
 	"io"
 	"log"
 	"regexp"
 	"strconv"
+
+	"github.com/ThomasHabets/bsparse/mdl"
 )
-
-type RawVertex struct {
-	X, Y, Z float32
-}
-
-func (v *RawVertex) String() string {
-	return fmt.Sprintf("%g,%g,%g", v.X, v.Y, v.Z)
-}
 
 type RawFace struct {
 	PlaneID   uint16
@@ -47,7 +42,7 @@ type RawEdge struct {
 }
 
 type RawTexInfo struct {
-	SectorS   Vertex  // S vector, horizontal in texture space)
+	VectorS   Vertex  // S vector, horizontal in texture space)
 	DistS     float32 // horizontal offset in texture space
 	VectorT   Vertex  // T vector, vertical in texture space
 	DistT     float32 // vertical offset in texture space
@@ -87,15 +82,16 @@ type RawModel struct {
 }
 
 type Raw struct {
-	Header   RawHeader
-	Vertex   []RawVertex
-	Face     []RawFace
-	MipTex   []RawMipTex
-	Entities []Entity
-	Edge     []RawEdge
-	LEdge    []int32
-	TexInfo  []RawTexInfo
-	Models   []RawModel
+	Header     RawHeader
+	Vertex     []Vertex
+	Face       []RawFace
+	MipTex     []RawMipTex
+	MipTexData []image.Image
+	Entities   []Entity
+	Edge       []RawEdge
+	LEdge      []int32
+	TexInfo    []RawTexInfo
+	Models     []RawModel
 }
 
 type myReader interface {
@@ -190,7 +186,7 @@ func LoadRaw(r myReader) (*Raw, error) {
 			return nil, fmt.Errorf("vertex sizes %v not divisable by %v", raw.Header.Vertices.Size, fileVertexSize)
 		}
 		numVertices := raw.Header.Vertices.Size / fileVertexSize
-		raw.Vertex = make([]RawVertex, numVertices, numVertices)
+		raw.Vertex = make([]Vertex, numVertices, numVertices)
 		if _, err := r.Seek(int64(raw.Header.Vertices.Offset), 0); err != nil {
 			return nil, err
 		}
@@ -291,12 +287,34 @@ func LoadRaw(r myReader) (*Raw, error) {
 			return nil, err
 		}
 		for n := range mipTexOfs {
+			// Read header.
 			if _, err := r.Seek(int64(raw.Header.Miptex.Offset+mipTexOfs[n]), 0); err != nil {
 				return nil, err
+			}
+			if mipTexOfs[n] == 4294967295 {
+				continue
 			}
 			if err := binary.Read(r, binary.LittleEndian, &raw.MipTex[n]); err != nil {
 				return nil, err
 			}
+
+			// Read data.
+			size := raw.MipTex[n].Width * raw.MipTex[n].Height
+			data := make([]byte, size, size)
+			pos := int64(raw.Header.Miptex.Offset + mipTexOfs[n] + raw.MipTex[n].Offset1)
+			if _, err := r.Seek(pos, 0); err != nil {
+				return nil, fmt.Errorf("seeking to miptex data: %v", err)
+			}
+			if _, err := r.Read(data); err != nil {
+				return nil, fmt.Errorf("reading %v bytes of miptex %q data at %v: %v", len(data), raw.MipTex[n].Name(), pos, err)
+			}
+			img := image.NewPaletted(image.Rectangle{
+				Max: image.Point{X: int(raw.MipTex[n].Width), Y: int(raw.MipTex[n].Height)},
+			}, mdl.QuakePalette)
+			for bn, b := range data {
+				img.SetColorIndex(bn%int(raw.MipTex[n].Width), bn/int(raw.MipTex[n].Width), b)
+			}
+			raw.MipTexData = append(raw.MipTexData, img)
 		}
 	}
 

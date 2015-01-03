@@ -27,7 +27,11 @@ func main() {
 			fmt.Printf("%s @%v size=%v\n", n, e.Pos, e.Size)
 		}
 	}
-	level, err := bsp.Load(p.Get("maps/e1m1.bsp"))
+	handle, err := p.Get("maps/e1m1.bsp")
+	if err != nil {
+		log.Fatal(err)
+	}
+	level, err := bsp.Load(handle)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -36,7 +40,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer fo.Close()
-	startPos := level.StartPos
+	startPos := bsp.Vertex{} // level.StartPos
 	if false {
 		startPos = bsp.Vertex{
 			X: -408,
@@ -55,8 +59,9 @@ camera {
   look_at <%s>
 }
 `, startPos.String(), startPos.String(), sky.String(), lookAt.String())
-	fmt.Printf("Polygons: %v\n", len(level.Polygons))
-	for _, p := range level.Polygons {
+	polys, _ := level.Polygons()
+	fmt.Printf("Polygons: %v\n", len(polys))
+	for _, p := range polys {
 		vs := []string{}
 		for _, v := range p.Vertex {
 			vs = append(vs, fmt.Sprintf("<%f,%f,%f>", v.X, v.Y, v.Z))
@@ -71,11 +76,11 @@ camera {
   pigment { Green }
 }
 `, len(p.Vertex), strings.Join(vs, ",\n  "))
-if false {
-		for i, j := 0, len(vs)-1; i < j; i, j = i+1, j-1 {
-			vs[i], vs[j] = vs[j], vs[i]
-		}
-		fmt.Fprintf(fo, `polygon {
+		if false {
+			for i, j := 0, len(vs)-1; i < j; i, j = i+1, j-1 {
+				vs[i], vs[j] = vs[j], vs[i]
+			}
+			fmt.Fprintf(fo, `polygon {
   %d,
   %s
   finish {
@@ -85,6 +90,6 @@ if false {
   pigment { Green }
 }
 `, len(p.Vertex), strings.Join(vs, ",\n  "))
-	}
+		}
 	}
 }

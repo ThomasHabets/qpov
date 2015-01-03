@@ -413,7 +413,7 @@ camera {
   rotate <0,0,%f>
   translate <%s>
 }
-%s_0(<0,0,0>,<0,0,0>)
+%s_0(<0,0,0>,<0,0,0>, "")
 `, state.ServerInfo.Models[0], strings.Join(models, "\n"), lookAt.String(),
 		state.ViewAngle.Z,
 		state.ViewAngle.X,
@@ -429,7 +429,7 @@ camera {
 		m := re.FindStringSubmatch(mod)
 		if len(m) == 2 {
 			i, _ := strconv.Atoi(m[1])
-			fmt.Fprintf(fo, "%s_%d(<%v>,<0,0,0>)\n", bsp.ModelPrefix(state.ServerInfo.Models[0]), i, e.Pos.String())
+			fmt.Fprintf(fo, "%s_%d(<%v>,<0,0,0>,\"\")\n", bsp.ModelPrefix(state.ServerInfo.Models[0]), i, e.Pos.String())
 		}
 	}
 

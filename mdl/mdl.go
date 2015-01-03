@@ -230,7 +230,7 @@ func Load(r myReader) (*Model, error) {
 		}
 		img := image.NewPaletted(image.Rectangle{
 			Min: image.Point{X: 0, Y: 0},
-			Max: image.Point{X: int(m.Header.SkinWidth), Y: int(m.Header.SkinHeight)}}, quakePalette)
+			Max: image.Point{X: int(m.Header.SkinWidth), Y: int(m.Header.SkinHeight)}}, QuakePalette)
 		for n, b := range skin.Data {
 			img.SetColorIndex(n%int(m.Header.SkinWidth), n/int(m.Header.SkinWidth), b)
 		}

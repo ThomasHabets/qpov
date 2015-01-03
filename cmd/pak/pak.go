@@ -3,13 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
-"io"
+	"io"
 	"log"
 	"os"
 
 	"github.com/ThomasHabets/bsparse/pak"
 )
-
 
 func main() {
 	flag.Parse()
@@ -25,9 +24,9 @@ func main() {
 	}
 	switch flag.Arg(1) {
 	case "list":
-	for k := range p.Entries {
-		fmt.Printf("%s\n", k)
-	}
+		for k := range p.Entries {
+			fmt.Printf("%s\n", k)
+		}
 	case "extract":
 		fn := flag.Arg(2)
 		of, err := os.Create(fn)
@@ -35,7 +34,11 @@ func main() {
 			log.Fatalf("Opening output file %q: %v", fn, err)
 		}
 		defer of.Close()
-		if _, err := io.Copy(of, p.Get(fn)); err != nil {
+		handle, err := p.Get(fn)
+		if err != nil {
+			log.Fatalf("Getting %q: %v", fn, err)
+		}
+		if _, err := io.Copy(of, handle); err != nil {
 			os.Remove(of.Name())
 			log.Fatalf("Failed to extract %q: %v", fn, err)
 		}

@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"image/png"
 	"log"
 	"os"
 	"path"
@@ -66,6 +67,23 @@ func convert(p pak.MultiPak, args ...string) {
 			if *lights {
 				fmt.Fprintln(of, b.POVLights())
 			}
+
+			if *textures {
+				for n, texture := range b.Raw.MipTexData {
+					func() {
+						fn := path.Join(*outDir, mf, fmt.Sprintf("texture_%d.png", n))
+						of, err := os.Create(fn)
+						if err != nil {
+							log.Fatalf("Texture create of %q fail: %v", fn, err)
+						}
+						defer of.Close()
+						if err := (&png.Encoder{}).Encode(of, texture); err != nil {
+							log.Fatalf("Encoding texture to png: %v", err)
+						}
+					}()
+				}
+			}
+
 		}()
 	}
 }
@@ -101,9 +119,9 @@ func info(p pak.MultiPak, args ...string) {
 
 func pov(p pak.MultiPak, args ...string) {
 	fs := flag.NewFlagSet("pov", flag.ExitOnError)
-	//outDir := fs.String("out", ".", "Output directory.")
 	lights := fs.Bool("lights", true, "Export lights.")
 	flatColor := fs.String("flat_color", "Gray25", "")
+	textures := fs.Bool("textures", false, "Use textures.")
 	//maps := fs.String("maps", ".*", "Regex of maps to convert.")
 	fs.Parse(args)
 	maps := fs.Arg(0)
@@ -114,12 +132,18 @@ func pov(p pak.MultiPak, args ...string) {
 	}
 
 	m, err := bsp.Load(res)
+	if err != nil {
+		log.Fatalf("Loading %q: %v", maps, err)
+	}
 
-	mesh, err := m.POVTriangleMesh(bsp.ModelPrefix(maps), *lights, *flatColor)
+	mesh, err := m.POVTriangleMesh(bsp.ModelPrefix(maps), *textures, *flatColor)
 	if err != nil {
 		log.Fatalf("Error getting mesh: %v", err)
 	}
 	fmt.Println(mesh)
+	if *lights {
+		fmt.Println(m.POVLights())
+	}
 }
 
 func main() {
