@@ -267,10 +267,12 @@ type State struct {
 	Time     float64
 	Entities []Entity
 
-	CameraEnt  int
-	ViewAngle  Vertex
-	ServerInfo ServerInfo
-	Level      *bsp.BSP
+	CameraEnt          int
+	CameraViewAngle    Vertex
+	CameraSetViewAngle bool // If CameraOrientation has been set, ignore header.
+	ViewAngle          Vertex
+	ServerInfo         ServerInfo
+	Level              *bsp.BSP
 }
 
 func NewState() *State {
@@ -279,8 +281,41 @@ func NewState() *State {
 	}
 }
 
+func (s *State) Copy() *State {
+	n := NewState()
+	n.Time = s.Time
+	for i := range n.Entities {
+		n.Entities[i] = s.Entities[i]
+	}
+	n.CameraViewAngle = s.CameraViewAngle
+	n.CameraSetViewAngle = s.CameraSetViewAngle
+	n.CameraEnt = s.CameraEnt
+	n.ViewAngle = s.ViewAngle
+	n.ServerInfo = s.ServerInfo
+	n.Level = s.Level
+	return n
+}
+
 type Message interface {
 	Apply(*State)
+}
+
+type MsgIntermission struct {
+	Text string
+}
+
+func (m *MsgIntermission) Apply(s *State) {
+	s.CameraSetViewAngle = true
+	s.ViewAngle = s.CameraViewAngle
+}
+
+type MsgFinale struct {
+	Text string
+}
+
+func (m *MsgFinale) Apply(s *State) {
+	s.CameraSetViewAngle = true
+	s.ViewAngle = s.CameraViewAngle
 }
 
 type MsgNop struct{}
@@ -388,9 +423,10 @@ type MsgCameraOrientation struct {
 }
 
 func (m MsgCameraOrientation) Apply(s *State) {
-	s.ViewAngle.X = m.X
-	s.ViewAngle.Y = m.Y
-	s.ViewAngle.Z = m.Z
+	s.CameraViewAngle.X = m.X
+	s.CameraViewAngle.Y = m.Y
+	s.CameraViewAngle.Z = m.Z
+	s.ViewAngle = s.CameraViewAngle
 }
 
 func (si *ServerInfo) Apply(s *State) {
@@ -694,9 +730,11 @@ func (block *Block) DecodeMessage() (Message, error) {
 		readUint8(block.buf) // vol
 		readUint8(block.buf) // attenuation
 	case 0x1e: // intermission
-		readString(block.buf)
+		t, _ := readString(block.buf)
+		return &MsgIntermission{Text: t}, nil
 	case 0x1f: // finale - end screen
-		readString(block.buf)
+		t, _ := readString(block.buf)
+		return &MsgFinale{Text: t}, nil
 	case 0x20: // CD track
 		readUint8(block.buf) // from track
 		readUint8(block.buf) // to track

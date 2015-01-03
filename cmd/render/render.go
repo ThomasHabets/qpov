@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -14,7 +15,7 @@ import (
 var (
 	povray      = flag.String("povray", "/usr/bin/povray", "Path to povray.")
 	schedtool   = flag.String("schedtool", "/usr/bin/schedtool", "Path to schedtool.")
-	concurrency = flag.Int("concurrency", 4, "Run this many povrays in parallel.")
+	concurrency = flag.Int("concurrency", -1, "Run this many povrays in parallel. <0 means set to number of CPUs.")
 	fast        = flag.Bool("fast", false, "Fast rendering.")
 	hq          = flag.Bool("hq", true, "High quality.")
 
@@ -90,6 +91,10 @@ func doRender(files []string, done chan<- int) {
 func main() {
 	flag.Parse()
 	done := make(chan int)
+
+	if *concurrency < 0 {
+		*concurrency = runtime.NumCPU()
+	}
 
 	total := len(flag.Args())
 	step := total / *concurrency

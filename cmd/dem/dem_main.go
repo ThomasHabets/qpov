@@ -101,7 +101,9 @@ func convert(p pak.MultiPak, args ...string) {
 		if err != nil {
 			log.Fatalf("Demo error: %v", err)
 		}
-		newState.ViewAngle = block.Header.ViewAngle
+		if !newState.CameraSetViewAngle {
+			newState.ViewAngle = block.Header.ViewAngle
+		}
 
 		seenTime := false
 		msgs, err := block.Messages()
@@ -113,8 +115,20 @@ func convert(p pak.MultiPak, args ...string) {
 			if _, ok := msg.(*dem.MsgTime); ok {
 				seenTime = true
 			} else if m, ok := msg.(*dem.MsgCameraPos); ok {
-				if false {
+				if *verbose {
 					fmt.Printf("Camera set to %d\n", m.Entity)
+				}
+			} else if m, ok := msg.(*dem.MsgIntermission); ok {
+				if *verbose {
+					fmt.Printf("Intermission: %q\n", m.Text)
+				}
+			} else if m, ok := msg.(*dem.MsgFinale); ok {
+				if *verbose {
+					fmt.Printf("Finale: %q\n", m.Text)
+				}
+			} else if m, ok := msg.(*dem.MsgCameraOrientation); ok {
+				if *verbose {
+					fmt.Printf("Camera angle set to <%g,%g,%g>\n", m.X, m.Y, m.Z)
 				}
 			} else if m, ok := msg.(*dem.MsgSpawnBaseline); ok {
 				if false {
@@ -153,15 +167,7 @@ func convert(p pak.MultiPak, args ...string) {
 
 			// Only wipe old state if we generate any frame at all.
 			if oldState == nil || anyFrame {
-				oldState = dem.NewState()
-				oldState.Time = newState.Time
-				for n := range oldState.Entities {
-					oldState.Entities[n] = newState.Entities[n]
-				}
-				oldState.CameraEnt = newState.CameraEnt
-				oldState.ViewAngle = newState.ViewAngle
-				oldState.ServerInfo = newState.ServerInfo
-				oldState.Level = newState.Level
+				oldState = newState.Copy()
 			}
 		}
 	}
@@ -270,14 +276,9 @@ func generateFrame(p pak.MultiPak, outDir string, oldState, newState *dem.State,
 		//d.Pos().Z = level.StartPos.Z
 	}
 	ival := float64(t-oldState.Time) / float64(newState.Time-oldState.Time)
-	curState := &dem.State{
-		Time:       t,
-		CameraEnt:  newState.CameraEnt,
-		ViewAngle:  interpolateAngle(oldState.ViewAngle, newState.ViewAngle, ival),
-		ServerInfo: newState.ServerInfo,
-		Level:      newState.Level,
-		Entities:   make([]dem.Entity, len(newState.Entities), len(newState.Entities)),
-	}
+	curState := newState.Copy()
+	curState.Time = t
+	curState.ViewAngle = interpolateAngle(oldState.ViewAngle, newState.ViewAngle, ival)
 	if tooFast(oldState, newState) { //, float64(newState.Time-oldState.Time)) {
 		if false {
 			fmt.Printf("Frame %d: Moving too fast, snapping.\n", frameNum)
