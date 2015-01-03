@@ -176,8 +176,9 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
 				}
 				texWidth := 1.0
 				texHeight := 1.0
-				texWidth, texHeight = 296.0, 194.0
-				texWidth, texHeight = float64(mip.Width), float64(mip.Height)
+				if true {
+					texWidth, texHeight = float64(mip.Width), float64(mip.Height)
+				}
 				vs = append(vs, fmt.Sprintf("<%v,%v>",
 					(v0.DotProduct(a)+float64(ti.DistS))/texWidth,
 					(v0.DotProduct(b)+float64(ti.DistT))/texHeight,
@@ -208,7 +209,7 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
           png concat(textureprefix, "/texture_%d.png")
           interpolate 2
         }
-        rotate <0,0,0>
+        rotate <180,0,0>
       }
     }
 `, n))
@@ -255,8 +256,10 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
 			for n, tri := range triangles {
 				if false {
 					tris = append(tris, fmt.Sprintf("<%v,%v,%v>", tri.A, tri.B, tri.C))
-				} else {
+				} else if false {
 					tris = append(tris, fmt.Sprintf("<%d,%d,%d>", n, n+1, n+2))
+				} else {
+					tris = append(tris, fmt.Sprintf("<%d,%d,%d>", n*3, n*3+1, n*3+2))
 				}
 			}
 			ret += fmt.Sprintf("  uv_indices { %d, %s }\n", len(tris), strings.Join(tris, ","))
