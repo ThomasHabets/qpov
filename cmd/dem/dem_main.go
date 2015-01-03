@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"os"
 	"path"
 	"regexp"
@@ -161,6 +162,26 @@ func interpolate(v0, v1 dem.Vertex, t float64) dem.Vertex {
 	}
 }
 
+func tooFast(s0, s1 *dem.State) bool {
+	const maxSpeed = 50.0
+	const maxAngleSpeed = 45.0
+	dx := math.Abs(float64(s0.Entities[s0.CameraEnt].Pos.X - s1.Entities[s1.CameraEnt].Pos.X))
+	dy := math.Abs(float64(s0.Entities[s0.CameraEnt].Pos.Y - s1.Entities[s1.CameraEnt].Pos.Y))
+	dz := math.Abs(float64(s0.Entities[s0.CameraEnt].Pos.Z - s1.Entities[s1.CameraEnt].Pos.Z))
+	if speed := math.Sqrt(dx*dx + dy*dy + dz*dz); speed > maxSpeed {
+		fmt.Printf("Speed %g %v %v\n", speed, s0.Entities[s0.CameraEnt].Pos, s1.Entities[s1.CameraEnt].Pos)
+		return true
+	}
+	dx = math.Abs(float64(s0.ViewAngle.X - s1.ViewAngle.X))
+	dy = math.Abs(float64(s0.ViewAngle.Y - s1.ViewAngle.Y))
+	dz = math.Abs(float64(s0.ViewAngle.Z - s1.ViewAngle.Z))
+	if speed := math.Sqrt(dx*dx + dy*dy + dz*dz); speed > maxAngleSpeed {
+		fmt.Printf("Angular speed %g\n", speed)
+		return true
+	}
+	return false
+}
+
 func generateFrame(p pak.MultiPak, outDir string, oldState, newState *dem.State, frameNum int, t float64, cameraLight bool) {
 	if newState.ServerInfo.Models == nil {
 		return
@@ -190,6 +211,16 @@ func generateFrame(p pak.MultiPak, outDir string, oldState, newState *dem.State,
 		Level:      newState.Level,
 		Entities:   make([]dem.Entity, len(newState.Entities), len(newState.Entities)),
 	}
+	if tooFast(oldState, newState) { //, float64(newState.Time-oldState.Time)) {
+		fmt.Printf("Frame %d: Moving too fast, snapping.\n", frameNum)
+		if ival < 0.5 {
+			curState.ViewAngle = oldState.ViewAngle
+			curState.Entities[curState.CameraEnt].Pos = oldState.Entities[curState.CameraEnt].Pos
+		} else {
+			curState.ViewAngle = newState.ViewAngle
+			curState.Entities[curState.CameraEnt].Pos = newState.Entities[curState.CameraEnt].Pos
+		}
+	}
 	for n := range oldState.Entities {
 		if oldState.Entities[n].Model != newState.Entities[n].Model {
 			// If model has changed, choose nearest and stop.
@@ -200,7 +231,7 @@ func generateFrame(p pak.MultiPak, outDir string, oldState, newState *dem.State,
 			}
 			continue
 		}
-		curState.Entities[n].Model = curState.Entities[n].Model
+		curState.Entities[n].Model = oldState.Entities[n].Model
 		curState.Entities[n].Pos = interpolate(oldState.Entities[n].Pos, newState.Entities[n].Pos, ival)
 		curState.Entities[n].Angle = interpolate(oldState.Entities[n].Angle, newState.Entities[n].Angle, ival)
 		if ival < 0.5 {
@@ -214,9 +245,17 @@ func generateFrame(p pak.MultiPak, outDir string, oldState, newState *dem.State,
 		}
 	}
 	if *verbose {
-		fmt.Printf("Frame %d (t=%g): Pos: %v, viewAngle %v\n", frameNum, curState.Time, curState.Entities[curState.CameraEnt].Pos, curState.ViewAngle)
+		fmt.Printf("Frame %d (t=%g): Pos: %v (%v -> %v, %g), viewAngle %v (%v -> %v)\n", frameNum, curState.Time,
+			curState.Entities[curState.CameraEnt].Pos,
+			oldState.Entities[curState.CameraEnt].Pos,
+			newState.Entities[curState.CameraEnt].Pos,
+			ival,
+			curState.ViewAngle,
+			oldState.ViewAngle,
+			newState.ViewAngle,
+		)
 	}
-	writePOV(path.Join(outDir, fmt.Sprintf("frame-%08d.pov", frameNum)), oldState, cameraLight)
+	writePOV(path.Join(outDir, fmt.Sprintf("frame-%08d.pov", frameNum)), curState, cameraLight)
 }
 
 func frameName(mf string, frame int) string {
