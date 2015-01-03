@@ -29,6 +29,7 @@ func mkdirP(base, mf string) {
 func convert(p pak.MultiPak, args ...string) {
 	fs := flag.NewFlagSet("convert", flag.ExitOnError)
 	outDir := fs.String("out", ".", "Output directory.")
+	flatColor := fs.String("flat_color", "Gray25", "")
 	textures := fs.Bool("textures", false, "Use textures.")
 	lights := fs.Bool("lights", true, "Export lights.")
 	fs.Parse(args)
@@ -57,7 +58,7 @@ func convert(p pak.MultiPak, args ...string) {
 				log.Fatalf("Model create of %q fail: %v", fn, err)
 			}
 			defer of.Close()
-			m, err := b.POVTriangleMesh(bsp.ModelPrefix(mf), *textures)
+			m, err := b.POVTriangleMesh(bsp.ModelPrefix(mf), *textures, *flatColor)
 			if err != nil {
 				log.Fatalf("Making mesh of %q: %v", mf, err)
 			}
@@ -101,6 +102,8 @@ func info(p pak.MultiPak, args ...string) {
 func pov(p pak.MultiPak, args ...string) {
 	fs := flag.NewFlagSet("pov", flag.ExitOnError)
 	//outDir := fs.String("out", ".", "Output directory.")
+	lights := fs.Bool("lights", true, "Export lights.")
+	flatColor := fs.String("flat_color", "Gray25", "")
 	//maps := fs.String("maps", ".*", "Regex of maps to convert.")
 	fs.Parse(args)
 	maps := fs.Arg(0)
@@ -112,7 +115,7 @@ func pov(p pak.MultiPak, args ...string) {
 
 	m, err := bsp.Load(res)
 
-	mesh, err := m.POVTriangleMesh(bsp.ModelPrefix(maps), true)
+	mesh, err := m.POVTriangleMesh(bsp.ModelPrefix(maps), *lights, *flatColor)
 	if err != nil {
 		log.Fatalf("Error getting mesh: %v", err)
 	}

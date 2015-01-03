@@ -107,7 +107,7 @@ func (bsp *BSP) POVLights() string {
 	return strings.Join(ret, "\n")
 }
 
-func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool) (string, error) {
+func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor string) (string, error) {
 	var ret string
 	for modelNumber := range bsp.Raw.Models {
 		//  TODO: Prune vertexes and everything else not needed for this model.
@@ -179,7 +179,7 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool) (string, error
 `
 		} else {
 			ret += "  texture_list { 2,\n"
-			ret += "    texture{pigment{Gray25}}"
+			ret += fmt.Sprintf("    texture{pigment{%s}}", flatColor)
 
 			ret += `
     texture {
