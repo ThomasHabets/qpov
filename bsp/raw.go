@@ -74,6 +74,18 @@ type RawHeader struct {
 	Models    dentry
 }
 
+type RawModel struct {
+	BoundBoxMin, BoundBoxMax Vertex // The bounding box of the Model
+	Origin                   Vertex // origin of model, usually (0,0,0)
+	NodeID0                  uint32 // index of first BSP node
+	NodeID1                  uint32 // index of the first Clip node
+	NodeID2                  uint32 // index of the second Clip node
+	NodeID3                  uint32 // usually zero
+	NumLeafs                 uint32 // number of BSP leaves
+	FaceID                   uint32 // index of Faces
+	FaceNum                  uint32 // Number of faces.
+}
+
 type Raw struct {
 	Header   RawHeader
 	Vertex   []RawVertex
@@ -83,6 +95,7 @@ type Raw struct {
 	Edge     []RawEdge
 	LEdge    []int32
 	TexInfo  []RawTexInfo
+	Models   []RawModel
 }
 
 type myReader interface {
@@ -244,6 +257,21 @@ func LoadRaw(r myReader) (*Raw, error) {
 			return nil, err
 		}
 		if err := binary.Read(r, binary.LittleEndian, &raw.TexInfo); err != nil {
+			return nil, err
+		}
+	}
+
+	// Load models.
+	{
+		if raw.Header.Models.Size%fileModelSize != 0 {
+			return nil, fmt.Errorf("models size %v not divisible by %v", raw.Header.Models.Size, fileModelSize)
+		}
+		numModels := raw.Header.Models.Size / fileModelSize
+		raw.Models = make([]RawModel, numModels, numModels)
+		if _, err := r.Seek(int64(raw.Header.Models.Offset), 0); err != nil {
+			return nil, err
+		}
+		if err := binary.Read(r, binary.LittleEndian, &raw.Models); err != nil {
 			return nil, err
 		}
 	}

@@ -30,6 +30,7 @@ func convert(p pak.MultiPak, args ...string) {
 	fs := flag.NewFlagSet("convert", flag.ExitOnError)
 	outDir := fs.String("out", ".", "Output directory.")
 	textures := fs.Bool("textures", false, "Use textures.")
+	lights := fs.Bool("lights", true, "Export lights.")
 	fs.Parse(args)
 
 	//errors := []string{}
@@ -61,8 +62,39 @@ func convert(p pak.MultiPak, args ...string) {
 				log.Fatalf("Making mesh of %q: %v", mf, err)
 			}
 			fmt.Fprintln(of, m)
-			fmt.Fprintln(of, b.POVLights())
+			if *lights {
+				fmt.Fprintln(of, b.POVLights())
+			}
 		}()
+	}
+}
+
+func info(p pak.MultiPak, args ...string) {
+	fs := flag.NewFlagSet("info", flag.ExitOnError)
+	//outDir := fs.String("out", ".", "Output directory.")
+	//maps := fs.String("maps", ".*", "Regex of maps to convert.")
+	fs.Parse(args)
+	mapName := fs.Arg(0)
+	b, err := p.Get(mapName)
+	if err != nil {
+		log.Fatalf("Finding map %q: %v", mapName, err)
+	}
+
+	m, err := bsp.Load(b)
+	if err != nil {
+		log.Fatalf("Loading map: %v", err)
+	}
+	fmt.Printf("Vertices: %v\n", len(m.Raw.Vertex))
+	fmt.Printf("Faces: %v\n", len(m.Raw.Face))
+	fmt.Printf("Edges: %v\n", len(m.Raw.Edge))
+	fmt.Printf("LEdges: %v\n", len(m.Raw.LEdge))
+	fmt.Printf("Vertices: %v\n", len(m.Raw.Entities))
+	fmt.Printf("MipTexes: %v\n", len(m.Raw.MipTex))
+	fmt.Printf("TexInfos: %v\n", len(m.Raw.TexInfo))
+
+	fmt.Printf("Model  Faces\n")
+	for n, mod := range m.Raw.Models {
+		fmt.Printf("%7d %6v\n", n, mod.FaceNum)
 	}
 }
 
@@ -99,23 +131,7 @@ func main() {
 
 	switch flag.Arg(1) {
 	case "info":
-		mapName := flag.Arg(0)
-		b, err := p.Get(mapName)
-		if err != nil {
-			log.Fatalf("Finding map %q: %v", mapName, err)
-		}
-
-		m, err := bsp.Load(b)
-		if err != nil {
-			log.Fatalf("Loading map: %v", err)
-		}
-		fmt.Fprintf(os.Stderr, "Vertices: %v\n", len(m.Raw.Vertex))
-		fmt.Fprintf(os.Stderr, "Faces: %v\n", len(m.Raw.Face))
-		fmt.Fprintf(os.Stderr, "Edges: %v\n", len(m.Raw.Edge))
-		fmt.Fprintf(os.Stderr, "LEdges: %v\n", len(m.Raw.LEdge))
-		fmt.Fprintf(os.Stderr, "Vertices: %v\n", len(m.Raw.Entities))
-		fmt.Fprintf(os.Stderr, "MipTexes: %v\n", len(m.Raw.MipTex))
-		fmt.Fprintf(os.Stderr, "TexInfos: %v\n", len(m.Raw.TexInfo))
+		info(p, flag.Args()[2:]...)
 	case "pov":
 		pov(p, flag.Args()[2:]...)
 	case "convert":

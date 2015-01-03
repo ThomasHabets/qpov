@@ -20,6 +20,7 @@ import (
 var (
 	cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 	entities   = flag.Bool("entities", true, "Render entities too.")
+	verbose    = flag.Bool("v", false, "Verbose output.")
 )
 
 func info(p pak.MultiPak, args ...string) {
@@ -77,6 +78,7 @@ func convert(p pak.MultiPak, args ...string) {
 	//useTextures := fs.Bool("textures", true, "Render textures.")
 	fps := fs.Float64("fps", 25.0, "Frames per second.")
 	outDir := fs.String("out", "render", "Output directory.")
+	cameraLight := fs.Bool("camera_light", false, "Add camera light.")
 	fs.Parse(args)
 	demo := fs.Arg(0)
 
@@ -112,10 +114,12 @@ func convert(p pak.MultiPak, args ...string) {
 				if false {
 					fmt.Printf("Camera set to %d\n", m.Entity)
 				}
+			} else if m, ok := msg.(*dem.MsgSpawnBaseline); ok {
+				fmt.Printf("Spawning %d: %+v\n", m.Entity, newState.ServerInfo.Models[m.Model])
 			} else if m, ok := msg.(*dem.MsgUpdate); ok {
 				if false {
-					if m.Entity == 449 {
-						fmt.Printf("Camera ent %d moved to %v %v\n", m.Entity, newState.Entities[m.Entity].Pos, newState.Entities[m.Entity].Angle)
+					if m.Entity == 8 || m.Entity == 9 {
+						fmt.Printf("Ent %d moved to %v %v\n", m.Entity, newState.Entities[m.Entity].Pos, newState.Entities[m.Entity].Angle)
 					}
 				}
 			}
@@ -124,12 +128,14 @@ func convert(p pak.MultiPak, args ...string) {
 		if seenTime {
 			anyFrame := false
 			if oldState != nil {
-				fmt.Printf("Saw time, outputting frames between %g and %g\n",
-					oldState.Time,
-					newState.Time,
-				)
+				if *verbose {
+					fmt.Printf("Saw time, outputting frames between %g and %g\n",
+						oldState.Time,
+						newState.Time,
+					)
+				}
 				for _, t := range genTimeFrames(float64(oldState.Time), float64(newState.Time), *fps) {
-					generateFrame(p, *outDir, oldState, newState, frameNum, t)
+					generateFrame(p, *outDir, oldState, newState, frameNum, t, *cameraLight)
 					anyFrame = true
 					frameNum++
 				}
@@ -152,7 +158,7 @@ func interpolate(v0, v1 dem.Vertex, t float64) dem.Vertex {
 	}
 }
 
-func generateFrame(p pak.MultiPak, outDir string, oldState, newState *dem.State, frameNum int, t float64) {
+func generateFrame(p pak.MultiPak, outDir string, oldState, newState *dem.State, frameNum int, t float64, cameraLight bool) {
 	if newState.ServerInfo.Models == nil {
 		return
 	}
@@ -204,8 +210,10 @@ func generateFrame(p pak.MultiPak, outDir string, oldState, newState *dem.State,
 			curState.Entities[n].Color = curState.Entities[n].Color
 		}
 	}
-	fmt.Printf("Frame %d (t=%g): Pos: %v, viewAngle %v\n", frameNum, curState.Time, curState.Entities[curState.CameraEnt].Pos, curState.ViewAngle)
-	writePOV(path.Join(outDir, fmt.Sprintf("frame-%08d.pov", frameNum)), oldState)
+	if *verbose {
+		fmt.Printf("Frame %d (t=%g): Pos: %v, viewAngle %v\n", frameNum, curState.Time, curState.Entities[curState.CameraEnt].Pos, curState.ViewAngle)
+	}
+	writePOV(path.Join(outDir, fmt.Sprintf("frame-%08d.pov", frameNum)), oldState, cameraLight)
 }
 
 func frameName(mf string, frame int) string {
@@ -236,7 +244,7 @@ func validModel(m string) bool {
 	return true
 }
 
-func writePOV(fn string, state *dem.State) {
+func writePOV(fn string, state *dem.State, cameraLight bool) {
 	ufo, err := os.Create(fn)
 	if err != nil {
 		log.Fatalf("Creating %q: %v", fn, err)
@@ -291,6 +299,9 @@ camera {
 		state.ViewAngle.Y,
 		//d.ViewAngle.Z, d.ViewAngle.X, d.ViewAngle.Y,
 		pos.String())
+	if cameraLight {
+		fmt.Fprintf(fo, "light_source { <%s> White }", pos.String())
+	}
 	if *entities {
 		for n, e := range state.Entities {
 			if int(state.CameraEnt) == n {

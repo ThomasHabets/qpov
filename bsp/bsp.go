@@ -27,6 +27,8 @@ const fileFaceSize = 2 + 2 + 4 + 2 + 2 + 1 + 1 + 2 + 4
 
 const fileTexInfoSize = 3*4 + 4 + 3*4 + 4 + 4 + 4
 
+const fileModelSize = 2*3*4 + 3*4 + 4*4 + 3*4
+
 const fileMiptexSize = 16 + 4 + 4 + 4*4
 
 func (f *RawMipTex) Name() string {
@@ -229,8 +231,20 @@ type Triangle struct {
 }
 
 func (bsp *BSP) makeTriangles() ([]Triangle, error) {
+	skipFace := make(map[int]bool)
+	for nm, m := range bsp.Raw.Models {
+		for n := int(m.FaceID); n < int(m.FaceID+m.FaceNum); n++ {
+			if nm == 1 {
+				skipFace[n] = true
+			}
+		}
+	}
+
 	tris := []Triangle{}
-	for _, f := range bsp.Raw.Face {
+	for fn, f := range bsp.Raw.Face {
+		if skipFace[fn] {
+			continue
+		}
 		texName := bsp.Raw.MipTex[bsp.Raw.TexInfo[f.TexinfoID].TextureID].Name()
 		switch texName {
 		case "trigger":
