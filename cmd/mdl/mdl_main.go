@@ -76,7 +76,9 @@ func convert(p pak.MultiPak, args ...string) {
 			}
 		}()
 	}
-	fmt.Printf("Failed to convert %d models:\n  %s\n", len(errors), strings.Join(errors, "\n  "))
+	if len(errors) > 0 {
+		fmt.Printf("Failed to convert %d models:\n  %s\n", len(errors), strings.Join(errors, "\n  "))
+	}
 }
 
 func show(p pak.MultiPak, args ...string) {
