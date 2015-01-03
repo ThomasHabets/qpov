@@ -57,7 +57,7 @@ func convert(p pak.MultiPak, args ...string) {
 				log.Fatalf("Model create of %q fail: %v", fn, err)
 			}
 			defer of.Close()
-			m, err := b.POVTriangleMesh(*textures)
+			m, err := b.POVTriangleMesh(bsp.ModelPrefix(mf), *textures)
 			if err != nil {
 				log.Fatalf("Making mesh of %q: %v", mf, err)
 			}
@@ -112,7 +112,7 @@ func pov(p pak.MultiPak, args ...string) {
 
 	m, err := bsp.Load(res)
 
-	mesh, err := m.POVTriangleMesh(true)
+	mesh, err := m.POVTriangleMesh(bsp.ModelPrefix(maps), true)
 	if err != nil {
 		log.Fatalf("Error getting mesh: %v", err)
 	}

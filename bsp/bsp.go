@@ -5,6 +5,7 @@ package bsp
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -81,6 +82,11 @@ func Load(r myReader) (*BSP, error) {
 	return ret, nil
 }
 
+func ModelPrefix(s string) string {
+	re := regexp.MustCompile(`[/.*-]`)
+	return "modelprefix_" + re.ReplaceAllString(s, "_")
+}
+
 func (bsp *BSP) Polygons() ([]Polygon, error) {
 	polys := []Polygon{}
 	return polys, nil
@@ -101,48 +107,55 @@ func (bsp *BSP) POVLights() string {
 	return strings.Join(ret, "\n")
 }
 
-func (bsp *BSP) POVTriangleMesh(withTextures bool) (string, error) {
-	ret := "mesh2 {\n"
+func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool) (string, error) {
+	var ret string
+	for modelNumber := range bsp.Raw.Models {
+		//  TODO: Prune vertexes and everything else not needed for this model.
+		ret += fmt.Sprintf("#macro %s_%d(pos,rot)\n", prefix, modelNumber)
 
-	triangles, err := bsp.makeTriangles()
-	if err != nil {
-		return "", nil
-	}
-
-	// Add vertices.
-	{
-		vs := []string{}
-		for _, v := range bsp.Raw.Vertex {
-			vs = append(vs, fmt.Sprintf("<%s>", v.String()))
+		triangles, err := bsp.makeTriangles(modelNumber)
+		if err != nil {
+			return "", nil
 		}
-		ret += fmt.Sprintf("  vertex_vectors { %d, %s }\n", len(bsp.Raw.Vertex), strings.Join(vs, ","))
-	}
-
-	// Add texture coordinates.
-	if withTextures {
-		vs := []string{}
-		vs = append(vs, "<0,0>", "<0,1>", "<1,0>")
-		for _, tri := range triangles {
-			//ti := bsp.Raw.TexInfo[tri.Face.TexinfoID]
-			vs = append(vs, fmt.Sprintf("<%v,%v>", 0, 0))
-			vs = append(vs, fmt.Sprintf("<%v,%v>",
-				0.1*(bsp.Raw.Vertex[tri.B].X-bsp.Raw.Vertex[tri.A].X),
-				0.1*(bsp.Raw.Vertex[tri.B].Y-bsp.Raw.Vertex[tri.A].Y),
-			))
-			vs = append(vs, fmt.Sprintf("<%v,%v>",
-				0.1*(bsp.Raw.Vertex[tri.C].X-bsp.Raw.Vertex[tri.A].X),
-				0.1*(bsp.Raw.Vertex[tri.C].Y-bsp.Raw.Vertex[tri.A].Y),
-			))
+		if len(triangles) == 0 {
+			ret += "#end\n"
+			continue
 		}
-		ret += fmt.Sprintf("  uv_vectors { %d, %s }\n", len(vs), strings.Join(vs, ","))
-	}
+		ret += "object { mesh2 {\n"
+		// Add vertices.
+		{
+			vs := []string{}
+			for _, v := range bsp.Raw.Vertex {
+				vs = append(vs, fmt.Sprintf("<%s>", v.String()))
+			}
+			ret += fmt.Sprintf("  vertex_vectors { %d, %s }\n", len(bsp.Raw.Vertex), strings.Join(vs, ","))
+		}
 
-	// TODO: add normals.
+		// Add texture coordinates.
+		if withTextures {
+			vs := []string{}
+			vs = append(vs, "<0,0>", "<0,1>", "<1,0>")
+			for _, tri := range triangles {
+				//ti := bsp.Raw.TexInfo[tri.Face.TexinfoID]
+				vs = append(vs, fmt.Sprintf("<%v,%v>", 0, 0))
+				vs = append(vs, fmt.Sprintf("<%v,%v>",
+					0.1*(bsp.Raw.Vertex[tri.B].X-bsp.Raw.Vertex[tri.A].X),
+					0.1*(bsp.Raw.Vertex[tri.B].Y-bsp.Raw.Vertex[tri.A].Y),
+				))
+				vs = append(vs, fmt.Sprintf("<%v,%v>",
+					0.1*(bsp.Raw.Vertex[tri.C].X-bsp.Raw.Vertex[tri.A].X),
+					0.1*(bsp.Raw.Vertex[tri.C].Y-bsp.Raw.Vertex[tri.A].Y),
+				))
+			}
+			ret += fmt.Sprintf("  uv_vectors { %d, %s }\n", len(vs), strings.Join(vs, ","))
+		}
 
-	// Add textures.
-	if withTextures {
-		//var textures []string
-		ret += `
+		// TODO: add normals.
+
+		// Add textures.
+		if withTextures {
+			//var textures []string
+			ret += `
   texture_list { 2,
     texture {
       uv_mapping
@@ -164,11 +177,11 @@ func (bsp *BSP) POVTriangleMesh(withTextures bool) (string, error) {
     }
   }
 `
-	} else {
-		ret += "  texture_list { 2,\n"
-		ret += "    texture{pigment{Gray25}}"
+		} else {
+			ret += "  texture_list { 2,\n"
+			ret += "    texture{pigment{Gray25}}"
 
-		ret += `
+			ret += `
     texture {
       normal { bumps 0.08 scale <1,0.25,0.35>*1 turbulence 0.6 }
       pigment { rgbf<0,0,1,0.2> }
@@ -177,39 +190,40 @@ func (bsp *BSP) POVTriangleMesh(withTextures bool) (string, error) {
         diffuse 0.55
       }
     }`
-		ret += "  }\n"
-	}
-
-	// Add faces.
-	{
-		var tris []string
-		for _, tri := range triangles {
-			texture := 0
-			texName := bsp.Raw.MipTex[bsp.Raw.TexInfo[tri.Face.TexinfoID].TextureID].Name()
-			if texName[0] == '*' {
-				texture = 1 // water.
-			}
-			tris = append(tris, fmt.Sprintf("<%d,%d,%d>,%d", tri.A, tri.B, tri.C, texture))
+			ret += "  }\n"
 		}
-		ret += fmt.Sprintf("  face_indices { %d, %s }\n", len(tris), strings.Join(tris, ","))
-	}
 
-	// TODO: Add normal indices.
-
-	// Add texture coord indices.
-	if withTextures {
-		var tris []string
-		for n, tri := range triangles {
-			if false {
-				tris = append(tris, fmt.Sprintf("<%v,%v,%v>", tri.A, tri.B, tri.C))
-			} else {
-				tris = append(tris, fmt.Sprintf("<%d,%d,%d>", n, n+1, n+2))
+		// Add faces.
+		{
+			var tris []string
+			for _, tri := range triangles {
+				texture := 0
+				texName := bsp.Raw.MipTex[bsp.Raw.TexInfo[tri.Face.TexinfoID].TextureID].Name()
+				if texName[0] == '*' {
+					texture = 1 // water.
+				}
+				tris = append(tris, fmt.Sprintf("<%d,%d,%d>,%d", tri.A, tri.B, tri.C, texture))
 			}
+			ret += fmt.Sprintf("  face_indices { %d, %s }\n", len(tris), strings.Join(tris, ","))
 		}
-		ret += fmt.Sprintf("  uv_indices { %d, %s }\n", len(tris), strings.Join(tris, ","))
-	}
 
-	ret += "  pigment { rgb 1 }\n}\n"
+		// TODO: Add normal indices.
+
+		// Add texture coord indices.
+		if withTextures {
+			var tris []string
+			for n, tri := range triangles {
+				if false {
+					tris = append(tris, fmt.Sprintf("<%v,%v,%v>", tri.A, tri.B, tri.C))
+				} else {
+					tris = append(tris, fmt.Sprintf("<%d,%d,%d>", n, n+1, n+2))
+				}
+			}
+			ret += fmt.Sprintf("  uv_indices { %d, %s }\n", len(tris), strings.Join(tris, ","))
+		}
+
+		ret += "  pigment { rgb 1 }\n} rotate rot translate pos}\n#end\n"
+	}
 	return ret, nil
 }
 
@@ -218,11 +232,11 @@ type Triangle struct {
 	A, B, C int
 }
 
-func (bsp *BSP) makeTriangles() ([]Triangle, error) {
+func (bsp *BSP) makeTriangles(modelNumber int) ([]Triangle, error) {
 	skipFace := make(map[int]bool)
 	for nm, m := range bsp.Raw.Models {
 		for n := int(m.FaceID); n < int(m.FaceID+m.FaceNum); n++ {
-			if nm == 1 {
+			if nm != modelNumber {
 				skipFace[n] = true
 			}
 		}

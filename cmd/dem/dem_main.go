@@ -10,6 +10,7 @@ import (
 	"path"
 	"regexp"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 
 	"github.com/ThomasHabets/bsparse/bsp"
@@ -121,7 +122,7 @@ func convert(p pak.MultiPak, args ...string) {
 			} else if m, ok := msg.(*dem.MsgUpdate); ok {
 				if false {
 					if m.Entity == 8 || m.Entity == 9 {
-						fmt.Printf("Ent %d moved to %v %v\n", m.Entity, newState.Entities[m.Entity].Pos, newState.Entities[m.Entity].Angle)
+						fmt.Printf("Frame %d Ent %d moved to %v %v\n", frameNum, m.Entity, newState.Entities[m.Entity].Pos, newState.Entities[m.Entity].Angle)
 					}
 				}
 			}
@@ -295,14 +296,28 @@ camera {
   rotate <0,0,%f>
   translate <%s>
 }
+%s_0(<0,0,0>,<0,0,0>)
 `, state.ServerInfo.Models[0], strings.Join(models, "\n"), lookAt.String(),
 		state.ViewAngle.Z,
 		state.ViewAngle.X,
 		state.ViewAngle.Y,
 		//d.ViewAngle.Z, d.ViewAngle.X, d.ViewAngle.Y,
-		pos.String())
+		pos.String(),
+		bsp.ModelPrefix(state.ServerInfo.Models[0]),
+	)
+	re := regexp.MustCompile(`^\*(\d+)$`)
+	for _, e := range state.Entities {
+		nm := e.Model
+		mod := state.ServerInfo.Models[nm]
+		m := re.FindStringSubmatch(mod)
+		if len(m) == 2 {
+			i, _ := strconv.Atoi(m[1])
+			fmt.Fprintf(fo, "%s_%d(<%v>,<0,0,0>)\n", bsp.ModelPrefix(state.ServerInfo.Models[0]), i, e.Pos.String())
+		}
+	}
+
 	if cameraLight {
-		fmt.Fprintf(fo, "light_source { <%s> White }", pos.String())
+		fmt.Fprintf(fo, "light_source { <%s> White }\n", pos.String())
 	}
 	if *entities {
 		for n, e := range state.Entities {
