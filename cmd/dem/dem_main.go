@@ -267,13 +267,12 @@ func writePOV(fn string, state *dem.State) {
 	}
 	fmt.Fprintf(fo, `#version 3.7;
 global_settings {
-  assumed_gamma 2.2
+  assumed_gamma 1.0
 }
 #include "colors.inc"
 #include "progs/soldier.mdl/model.inc"
 #include "%s/level.inc"
 %s
-light_source { <%s> color White }
 camera {
   angle 100
   location <0,0,0>
@@ -286,7 +285,7 @@ camera {
   rotate <0,0,%f>
   translate <%s>
 }
-`, state.ServerInfo.Models[0], strings.Join(models, "\n"), pos.String(), lookAt.String(),
+`, state.ServerInfo.Models[0], strings.Join(models, "\n"), lookAt.String(),
 		state.ViewAngle.Z,
 		state.ViewAngle.X,
 		state.ViewAngle.Y,

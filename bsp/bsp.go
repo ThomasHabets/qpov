@@ -6,6 +6,7 @@ package bsp
 import (
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 )
 
@@ -95,6 +96,21 @@ func (bsp *BSP) Polygons() ([]Polygon, error) {
 	return polys, nil
 }
 
+func (bsp *BSP) POVLights() string {
+	ret := []string{}
+	for _, ent := range bsp.Raw.Entities {
+		if ent.Data["classname"] == "light" {
+			brightness, err := strconv.ParseFloat(ent.Data["light"], 64)
+			if err != nil {
+				brightness = 200.0
+			}
+			brightness /= 200.0 // 200.0 is Quake baseline.
+			ret = append(ret, fmt.Sprintf("light_source {<%v> Gray50*%g}", ent.Pos.String(), brightness))
+		}
+	}
+	return strings.Join(ret, "\n")
+}
+
 func (bsp *BSP) POVTriangleMesh(withTextures bool) (string, error) {
 	ret := "mesh2 {\n"
 
@@ -160,7 +176,7 @@ func (bsp *BSP) POVTriangleMesh(withTextures bool) (string, error) {
 `
 	} else {
 		ret += "  texture_list { 2,\n"
-		ret += "    texture{pigment{rgb<1,1,1>}}"
+		ret += "    texture{pigment{Gray25}}"
 
 		ret += `
     texture {

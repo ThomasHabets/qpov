@@ -61,6 +61,7 @@ func convert(p pak.MultiPak, args ...string) {
 				log.Fatalf("Making mesh of %q: %v", mf, err)
 			}
 			fmt.Fprintln(of, m)
+			fmt.Fprintln(of, b.POVLights())
 		}()
 	}
 }
