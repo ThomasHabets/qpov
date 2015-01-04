@@ -51,11 +51,16 @@ func info(p pak.MultiPak, args ...string) {
 		if err != nil {
 			log.Fatalf("Getting messages: %v", err)
 		}
+		timeUpdatesInBlock := 0
 		for _, msg := range msgs {
 			messages++
 			if _, ok := msg.(*dem.MsgTime); ok {
 				timeUpdates++
+				timeUpdatesInBlock++
 			}
+		}
+		if timeUpdatesInBlock > 1 {
+			fmt.Printf("Block %d had %d time updates\n", blockCount, timeUpdatesInBlock)
 		}
 	}
 	fmt.Printf("Blocks: %d\n", blockCount)
