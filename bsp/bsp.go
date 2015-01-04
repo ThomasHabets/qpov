@@ -1,52 +1,21 @@
+// Package bsp loads Quake BSP files.
+//
+// References:
+// * https://developer.valvesoftware.com/wiki/Source_BSP_File_Format
+// * http://www.gamers.org/dEngine/quake/spec/quake-spec34/qkspec_4.htm
+// * http://www.gamers.org/dEngine/quake/QDP/qmapspec.html
 package bsp
-
-// https://developer.valvesoftware.com/wiki/Source_BSP_File_Format
-// http://www.gamers.org/dEngine/quake/spec/quake-spec34/qkspec_4.htm
 
 import (
 	"fmt"
-	"log"
-	"math"
 	"regexp"
 	"strconv"
 	"strings"
 )
 
-const (
-	Version = 29
-)
-
 var (
 	Verbose = false
 )
-
-type dentry struct {
-	Offset uint32
-	Size   uint32
-}
-
-const fileFaceSize = 2 + 2 + 4 + 2 + 2 + 1 + 1 + 2 + 4
-
-const fileTexInfoSize = 3*4 + 4 + 3*4 + 4 + 4 + 4
-
-const fileModelSize = 2*3*4 + 3*4 + 4*4 + 3*4
-
-const fileMiptexSize = 16 + 4 + 4 + 4*4
-
-func (f *RawMipTex) Name() string {
-	s := ""
-	for _, ch := range f.NameBytes {
-		if ch == 0 {
-			break
-		}
-		s = fmt.Sprintf("%s%c", s, ch)
-	}
-	return s
-}
-
-const fileVertexSize = 4 * 3
-
-const fileEdgeSize = 2 + 2
 
 type Vertex struct {
 	X, Y, Z float32
@@ -58,10 +27,6 @@ func (v *Vertex) String() string {
 
 func (v *Vertex) DotProduct(w Vertex) float64 {
 	return float64(v.X*w.X + v.Y*w.Y + v.Z*w.Z)
-}
-
-func (v *Vertex) Length() float64 {
-	return math.Sqrt(float64(v.X*v.X + v.Y*v.Y + v.Z*v.Z))
 }
 
 func (v *Vertex) Sub(w Vertex) *Vertex {
@@ -162,23 +127,7 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
 
 				a := ti.VectorS
 				b := ti.VectorT
-				if false {
-					a.X, a.Y, a.Z = a.X, a.Z, a.Y
-					b.X, b.Y, b.Z = b.X, b.Z, b.Y
-				}
-
-				if false {
-					a.X, a.Y, a.Z = a.Y, a.X, a.Z
-					b.X, b.Y, b.Z = b.Y, b.X, b.Z
-				}
-				if false {
-					log.Printf("Project onto %v and %v", a, b)
-				}
-				texWidth := 1.0
-				texHeight := 1.0
-				if true {
-					texWidth, texHeight = float64(mip.Width), float64(mip.Height)
-				}
+				texWidth, texHeight := float64(mip.Width), float64(mip.Height)
 				vs = append(vs, fmt.Sprintf("<%v,%v>",
 					(v0.DotProduct(a)+float64(ti.DistS))/texWidth,
 					(v0.DotProduct(b)+float64(ti.DistT))/texHeight,

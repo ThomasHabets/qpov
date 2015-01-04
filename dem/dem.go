@@ -267,6 +267,9 @@ type State struct {
 	Time     float64
 	Entities []Entity
 
+	// 2 Means render 3D.
+	ClientState int
+
 	CameraEnt          int
 	CameraViewAngle    Vertex
 	CameraSetViewAngle bool // If CameraOrientation has been set, ignore header.
@@ -321,6 +324,14 @@ func (m *MsgFinale) Apply(s *State) {
 type MsgNop struct{}
 
 func (m MsgNop) Apply(s *State) {}
+
+type MsgClientState struct {
+	State uint8
+}
+
+func (m MsgClientState) Apply(s *State) {
+	s.ClientState = int(m.State)
+}
 
 type MsgUpdate struct {
 	Entity                             uint16
@@ -712,12 +723,12 @@ func (block *Block) DecodeMessage() (Message, error) {
 		default:
 			return nil, fmt.Errorf("bad temp ent type")
 		}
-	case 0x19: // This message selects the client state.
-		// TODO: only start rendering after state 2.
+	case 0x19:
 		state, _ := readUint8(block.buf)
 		if Verbose {
 			log.Printf("Set state: %v", state)
 		}
+		return &MsgClientState{State: state}, nil
 	case 0x1a: // centerprint
 		readString(block.buf)
 	case 0x1b: // killed monster

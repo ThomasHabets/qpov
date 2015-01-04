@@ -167,6 +167,7 @@ func convert(p pak.MultiPak, args ...string) {
 					)
 				}
 				for _, t := range genTimeFrames(float64(oldState.Time), float64(newState.Time), *fps) {
+					// TODO: Only generate frames if client state is 2.
 					generateFrame(p, *outDir, oldState, newState, frameNum, t, *cameraLight)
 					anyFrame = true
 					frameNum++
@@ -321,13 +322,13 @@ func generateFrame(p pak.MultiPak, outDir string, oldState, newState *dem.State,
 		}
 		curState.Entities[n].Angle = interpolateAngle(oldState.Entities[n].Angle, newState.Entities[n].Angle, ival)
 		if ival < 0.5 {
-			curState.Entities[n].Frame = curState.Entities[n].Frame
-			curState.Entities[n].Skin = curState.Entities[n].Skin
-			curState.Entities[n].Color = curState.Entities[n].Color
+			curState.Entities[n].Frame = oldState.Entities[n].Frame
+			curState.Entities[n].Skin = oldState.Entities[n].Skin
+			curState.Entities[n].Color = oldState.Entities[n].Color
 		} else {
-			curState.Entities[n].Frame = curState.Entities[n].Frame
-			curState.Entities[n].Skin = curState.Entities[n].Skin
-			curState.Entities[n].Color = curState.Entities[n].Color
+			curState.Entities[n].Frame = newState.Entities[n].Frame
+			curState.Entities[n].Skin = newState.Entities[n].Skin
+			curState.Entities[n].Color = newState.Entities[n].Color
 		}
 	}
 	if *verbose {
@@ -479,30 +480,6 @@ camera {
 			}
 		}
 	}
-}
-
-var randColorState int
-
-func randColor() string {
-	return "White"
-	randColorState++
-
-	// qdqr e1m4 frame 200, polygon 3942 not being drawn correctly.
-	if randColorState < 15506 { // 31010 {
-		return "White"
-	}
-	if randColorState > 15510 { // 31021 {
-		return "Red"
-	}
-	colors := []string{
-		"Green",
-		//"White",
-		"Blue",
-		//		"Red",
-		"Yellow",
-		//"Brown",
-	}
-	return colors[randColorState%len(colors)]
 }
 
 func main() {
