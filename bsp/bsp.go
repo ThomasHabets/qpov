@@ -109,9 +109,6 @@ func (bsp *BSP) remapVertex(in int, list *[]Vertex, vertexMap map[int]int) int {
 func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor string) (string, error) {
 	var ret string
 	for modelNumber := range bsp.Raw.Models {
-		var localVertices []Vertex
-		vertexMap := make(map[int]int)
-
 		ret += fmt.Sprintf("#macro %s_%d(pos,rot,textureprefix)\n", prefix, modelNumber)
 
 		triangles, err := bsp.makeTriangles(modelNumber)
@@ -123,12 +120,28 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
 			continue
 		}
 
-		// Find used triangles.
+		// Find used vertices and textures.
+		// Vertice indices are simply changed and localVertices will be looked at later on.
+		// For faces, because of the indirections via texinfo, both mipTexMap and localMipTex are
+		// needed later on.
+		// TODO: Change this to work the same way, for consistency?
+		var localVertices []Vertex           // Local vertices
+		mipTexMap := make(map[uint32]uint32) // Map from global texture ID to local.
+		var localMipTex []uint32             // Map from local texture Id to global.
 		{
+			vertexMap := make(map[int]int) // Map from global vertex ID to local. Only used to avoid dups.
 			for n := range triangles {
 				triangles[n].A = bsp.remapVertex(triangles[n].A, &localVertices, vertexMap)
 				triangles[n].B = bsp.remapVertex(triangles[n].B, &localVertices, vertexMap)
 				triangles[n].C = bsp.remapVertex(triangles[n].C, &localVertices, vertexMap)
+
+				oldMipTex := bsp.Raw.TexInfo[triangles[n].Face.TexinfoID].TextureID
+				_, found := mipTexMap[oldMipTex]
+				if !found {
+					newMipTex := uint32(len(mipTexMap))
+					mipTexMap[oldMipTex] = newMipTex
+					localMipTex = append(localMipTex, oldMipTex)
+				}
 			}
 		}
 
@@ -175,10 +188,9 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
 		// TODO: add normals.
 
 		// Add textures.
-		// TODO: prune unused textures.
 		if withTextures {
 			var textures []string
-			for n := range bsp.Raw.MipTexData {
+			for _, n := range localMipTex {
 				textures = append(textures, fmt.Sprintf(`
     texture {
       uv_mapping
@@ -221,7 +233,7 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
 						textureID = 1 // water.
 					}
 				}
-				tris = append(tris, fmt.Sprintf("<%d,%d,%d>,%d", tri.A, tri.B, tri.C, textureID))
+				tris = append(tris, fmt.Sprintf("<%d,%d,%d>,%d", tri.A, tri.B, tri.C, mipTexMap[textureID]))
 			}
 			ret += fmt.Sprintf("  face_indices { %d, %s }\n", len(tris), strings.Join(tris, ","))
 		}
