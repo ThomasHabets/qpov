@@ -119,7 +119,7 @@ func (bsp *BSP) POVLights() string {
 				brightness = 200.0
 			}
 			brightness /= 200.0 // 200.0 is Quake baseline.
-			ret = append(ret, fmt.Sprintf("light_source {<%v> Gray50*%g}", ent.Pos.String(), brightness))
+			ret = append(ret, fmt.Sprintf("light_source {<%v> rgb<0.05,0.05,0.05>*%g}", ent.Pos.String(), brightness))
 		}
 	}
 	return strings.Join(ret, "\n")

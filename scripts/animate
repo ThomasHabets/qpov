@@ -1,0 +1,7 @@
+#!/bin/sh
+
+set -e
+
+mkdir all
+N=0;find -name "*.png" | grep e1m | sort | while read fn; do (cd all && ln ../$fn all-$(printf "%08d" $N).png);N=$((N + 1));done
+avconv -r 30 -i all/all-%08d.png -f mp4 -q:v 0 -vcodec mpeg4 output-30.mp4

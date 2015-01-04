@@ -1,0 +1,67 @@
+#!/bin/bash
+#
+# Render a Quake level 
+#
+set -e
+
+MODEL="$1"
+if [[ "$MODEL" = "" ]]; then
+    echo Usage
+    exit 1
+fi
+
+#
+# Config
+#
+LIGHTS=true
+TEXTURES=true
+PAK="/usr/share/games/quake/id1/pak0.pak"
+LIGHTSOURCE=
+FLAT_COLOR=Gray25
+
+#
+# Functions of the config
+#
+if [[ ! "$LIGHTS" = "true" ]]; then
+    FLAT_COLOR=White
+    LIGHTSOURCE="light_source { Position color White }"
+fi
+
+#
+# Do it
+#
+./go build github.com/ThomasHabets/bsparse/cmd/bsp
+./bsp "${PAK}" pov -textures="${TEXTURES}" -lights="${LIGHTS}" -flat_color="${FLAT_COLOR}" "$@" > model.inc
+
+BLAH=$(echo $MODEL | sed 's/[/.-]/_/g')
+
+cat > testmodel.pov <<EOF
+#include "colors.inc"
+#include "model.inc"
+
+global_settings {
+  assumed_gamma 1.0
+}
+
+// E1M1 start pos.
+// #declare Position = <480,-352,88>;
+
+// Near the start of E1M1, for comparison.
+#declare Position = <483,-400, 88>;
+
+$LIGHTSOURCE
+camera {
+  angle 90
+  location <0,0,0>
+  sky <0,0,1>
+  right <-1.33,0,0>
+  look_at <1,0,0>
+//  translate -<-6,0,-24> // Eye level of player.mdl
+  translate <0,0,20>  // This made it look good on E1M1
+  rotate <0,0,90>
+  translate Position
+}
+modelprefix_${BLAH}_0(<0,0,0>,<0,0,0>, "${MODEL}")
+EOF
+
+povray +Q9 +P testmodel.pov

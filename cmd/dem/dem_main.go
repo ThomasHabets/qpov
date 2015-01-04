@@ -26,37 +26,41 @@ var (
 )
 
 func info(p pak.MultiPak, args ...string) {
-	/*
-		fs := flag.NewFlagSet("info", flag.ExitOnError)
-		fs.Parse(args)
-		demo := fs.Arg(0)
-		df, err := p.Get(demo)
-		if err != nil {
-			log.Fatalf("Getting %q: %v", demo, err)
-		}
-		d := dem.Open(df)
+	fs := flag.NewFlagSet("info", flag.ExitOnError)
+	fs.Parse(args)
+	demo := fs.Arg(0)
+	df, err := p.Get(demo)
+	if err != nil {
+		log.Fatalf("Getting %q: %v", demo, err)
+	}
+	d := dem.Open(df)
 
-		oldTime := float32(-1)
-		timeUpdates := 0
-		messages := 0
-		for {
-			err := d.Read()
+	timeUpdates := 0
+	messages := 0
+	blockCount := 0
+	for {
+		block, err := d.ReadBlock()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Fatalf("Demo error: %v", err)
+		}
+		blockCount++
+		msgs, err := block.Messages()
+		if err != nil {
+			log.Fatalf("Getting messages: %v", err)
+		}
+		for _, msg := range msgs {
 			messages++
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				log.Fatalf("Demo error: %v", err)
-			}
-			if oldTime != d.Time {
+			if _, ok := msg.(*dem.MsgTime); ok {
 				timeUpdates++
-				oldTime = d.Time
 			}
 		}
-		fmt.Printf("Blocks: %d\n", d.BlockCount)
-		fmt.Printf("Messages: %d\n", messages)
-		fmt.Printf("Time updates: %d\n", timeUpdates)
-	*/
+	}
+	fmt.Printf("Blocks: %d\n", blockCount)
+	fmt.Printf("Messages: %d\n", messages)
+	fmt.Printf("Time updates: %d\n", timeUpdates)
 }
 
 func genTimeFrames(from, to, fps float64) []float64 {

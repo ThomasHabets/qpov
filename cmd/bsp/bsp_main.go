@@ -31,8 +31,8 @@ func convert(p pak.MultiPak, args ...string) {
 	fs := flag.NewFlagSet("convert", flag.ExitOnError)
 	outDir := fs.String("out", ".", "Output directory.")
 	flatColor := fs.String("flat_color", "Gray25", "")
-	textures := fs.Bool("textures", false, "Use textures.")
-	lights := fs.Bool("lights", true, "Export lights.")
+	textures := fs.Bool("textures", true, "Use textures.")
+	lights := fs.Bool("lights", false, "Export lights.")
 	fs.Parse(args)
 
 	//errors := []string{}
