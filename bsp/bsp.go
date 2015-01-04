@@ -96,10 +96,22 @@ light_source {
 	return strings.Join(ret, "\n")
 }
 
+func (bsp *BSP) remapVertex(in int, list *[]Vertex, vertexMap map[int]int) int {
+	if newV, found := vertexMap[in]; found {
+		return newV
+	}
+	newV := len(*list)
+	*list = append(*list, bsp.Raw.Vertex[in])
+	vertexMap[in] = newV
+	return newV
+}
+
 func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor string) (string, error) {
 	var ret string
 	for modelNumber := range bsp.Raw.Models {
-		//  TODO: Prune vertexes and everything else not needed for this model.
+		var localVertices []Vertex
+		vertexMap := make(map[int]int)
+
 		ret += fmt.Sprintf("#macro %s_%d(pos,rot,textureprefix)\n", prefix, modelNumber)
 
 		triangles, err := bsp.makeTriangles(modelNumber)
@@ -110,14 +122,24 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
 			ret += "#end\n"
 			continue
 		}
+
+		// Find used triangles.
+		{
+			for n := range triangles {
+				triangles[n].A = bsp.remapVertex(triangles[n].A, &localVertices, vertexMap)
+				triangles[n].B = bsp.remapVertex(triangles[n].B, &localVertices, vertexMap)
+				triangles[n].C = bsp.remapVertex(triangles[n].C, &localVertices, vertexMap)
+			}
+		}
+
 		ret += "object { mesh2 {\n"
 		// Add vertices.
 		{
 			vs := []string{}
-			for _, v := range bsp.Raw.Vertex {
+			for _, v := range localVertices {
 				vs = append(vs, fmt.Sprintf("<%s>", v.String()))
 			}
-			ret += fmt.Sprintf("  vertex_vectors { %d, %s }\n", len(bsp.Raw.Vertex), strings.Join(vs, ","))
+			ret += fmt.Sprintf("  vertex_vectors { %d, %s }\n", len(localVertices), strings.Join(vs, ","))
 		}
 
 		// Add texture coordinates.
@@ -127,9 +149,9 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
 				ti := bsp.Raw.TexInfo[tri.Face.TexinfoID]
 				mip := bsp.Raw.MipTex[ti.TextureID]
 
-				v0 := bsp.Raw.Vertex[tri.A]
-				v1 := bsp.Raw.Vertex[tri.B]
-				v2 := bsp.Raw.Vertex[tri.C]
+				v0 := localVertices[tri.A]
+				v1 := localVertices[tri.B]
+				v2 := localVertices[tri.C]
 
 				a := ti.VectorS
 				b := ti.VectorT
@@ -153,6 +175,7 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
 		// TODO: add normals.
 
 		// Add textures.
+		// TODO: prune unused textures.
 		if withTextures {
 			var textures []string
 			for n := range bsp.Raw.MipTexData {
