@@ -36,11 +36,12 @@ fi
 BLAH=$(echo $MODEL | sed 's/[/.-]/_/g')
 
 cat > testmodel.pov <<EOF
+#version 3.7;
 #include "colors.inc"
 #include "model.inc"
 
 global_settings {
-  assumed_gamma 1.0
+  assumed_gamma 2.2
 }
 
 // E1M1 start pos.
@@ -64,4 +65,4 @@ camera {
 modelprefix_${BLAH}_0(<0,0,0>,<0,0,0>, "${MODEL}")
 EOF
 
-povray +Q9 +P testmodel.pov
+exec povray +Q9 +RP5 +P testmodel.pov

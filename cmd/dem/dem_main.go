@@ -404,7 +404,7 @@ func writePOV(fn, texturesPath string, state *dem.State, cameraLight bool) {
 	}
 	fmt.Fprintf(fo, `#version 3.7;
 global_settings {
-  assumed_gamma 1.0
+  assumed_gamma 2.2
 }
 #include "colors.inc"
 #include "progs/soldier.mdl/model.inc"
@@ -421,6 +421,7 @@ camera {
   rotate <0,%f,0>
   rotate <0,0,%f>
   translate <%s>
+  translate <0,0,20>
 }
 %s_0(<0,0,0>,<0,0,0>, "%s")
 `, state.ServerInfo.Models[0], strings.Join(models, "\n"), lookAt.String(),
