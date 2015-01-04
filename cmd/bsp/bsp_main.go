@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/ThomasHabets/bsparse/bsp"
@@ -33,12 +34,21 @@ func convert(p pak.MultiPak, args ...string) {
 	flatColor := fs.String("flat_color", "Gray25", "")
 	textures := fs.Bool("textures", true, "Use textures.")
 	lights := fs.Bool("lights", false, "Export lights.")
+	maps := fs.String("maps", ".*", "Maps regex.")
 	fs.Parse(args)
+
+	re, err := regexp.Compile(*maps)
+	if err != nil {
+		log.Fatalf("Maps regex %q invalid: %v", *maps, err)
+	}
 
 	//errors := []string{}
 	os.Mkdir(*outDir, 0755)
 	for _, mf := range p.List() {
 		if path.Ext(mf) != ".bsp" {
+			continue
+		}
+		if !re.MatchString(mf) {
 			continue
 		}
 		func() {
