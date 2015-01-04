@@ -96,7 +96,9 @@ func show(p pak.MultiPak, args ...string) {
 		log.Fatalf("Unable to load %q: %v", model, err)
 	}
 
-	fmt.Printf("Filename: %s\n  Triangles: %v\n", model, len(m.Triangles))
+	fmt.Printf("Filename: %s\n", model)
+	fmt.Printf("  Triangles: %v\n", len(m.Triangles))
+	fmt.Printf("  EyePosition: %v\n", m.Header.EyePosition)
 	fmt.Printf("Skins: %v\n", len(m.Skins))
 	fmt.Printf("  %6s %16s\n", "Frame#", "Name")
 	for n, f := range m.Frames {
