@@ -81,7 +81,6 @@ func genTimeFrames(from, to, fps float64) []float64 {
 
 func convert(p pak.MultiPak, args ...string) {
 	fs := flag.NewFlagSet("convert", flag.ExitOnError)
-	//useTextures := fs.Bool("textures", true, "Render textures.")
 	fps := fs.Float64("fps", 25.0, "Frames per second.")
 	outDir := fs.String("out", "render", "Output directory.")
 	cameraLight := fs.Bool("camera_light", false, "Add camera light.")
@@ -337,7 +336,7 @@ func generateFrame(p pak.MultiPak, outDir string, oldState, newState *dem.State,
 			newState.ViewAngle,
 		)
 	}
-	writePOV(path.Join(outDir, fmt.Sprintf("frame-%08d.pov", frameNum)), curState, cameraLight)
+	writePOV(path.Join(outDir, fmt.Sprintf("frame-%08d.pov", frameNum)), newState.ServerInfo.Models[0], curState, cameraLight)
 }
 
 func frameName(mf string, frame int) string {
@@ -368,7 +367,7 @@ func validModel(m string) bool {
 	return true
 }
 
-func writePOV(fn string, state *dem.State, cameraLight bool) {
+func writePOV(fn, texturesPath string, state *dem.State, cameraLight bool) {
 	ufo, err := os.Create(fn)
 	if err != nil {
 		log.Fatalf("Creating %q: %v", fn, err)
@@ -417,7 +416,7 @@ camera {
   rotate <0,0,%f>
   translate <%s>
 }
-%s_0(<0,0,0>,<0,0,0>, "")
+%s_0(<0,0,0>,<0,0,0>, "%s")
 `, state.ServerInfo.Models[0], strings.Join(models, "\n"), lookAt.String(),
 		state.ViewAngle.Z,
 		state.ViewAngle.X,
@@ -425,6 +424,7 @@ camera {
 		//d.ViewAngle.Z, d.ViewAngle.X, d.ViewAngle.Y,
 		pos.String(),
 		bsp.ModelPrefix(state.ServerInfo.Models[0]),
+		texturesPath,
 	)
 	re := regexp.MustCompile(`^\*(\d+)$`)
 	for _, e := range state.Entities {
@@ -433,7 +433,7 @@ camera {
 		m := re.FindStringSubmatch(mod)
 		if len(m) == 2 {
 			i, _ := strconv.Atoi(m[1])
-			fmt.Fprintf(fo, "%s_%d(<%v>,<0,0,0>,\"\")\n", bsp.ModelPrefix(state.ServerInfo.Models[0]), i, e.Pos.String())
+			fmt.Fprintf(fo, "%s_%d(<%v>,<0,0,0>,\"%s\")\n", bsp.ModelPrefix(state.ServerInfo.Models[0]), i, e.Pos.String(), texturesPath)
 		}
 	}
 

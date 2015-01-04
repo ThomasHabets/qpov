@@ -1,0 +1,81 @@
+#!/bin/bash
+#
+# Generate POV files for QDQr recammed.
+#
+
+set -e
+
+#
+# Parameters.
+#
+NAME="$1"
+if [[ "$NAME" = "" ]]; then
+   echo Usage
+   exit 1
+fi
+shift
+PAK="$1"
+if [[ "$PAK" = "" ]]; then
+    PAK="qdq_1635-cam/PAK0.PAK"
+fi
+
+#
+# Configs
+#
+BASEPAK="/usr/share/games/quake/id1/pak0.pak"
+FPS=30
+TEXTURES=true
+LIGHTS=false
+
+# Function of configs.
+#
+OUTBASE="render/${NAME}"
+case "$LIGHTS" in
+    true)
+	FLAT_COLOR=Gray25
+	CAMERA_LIGHT=false
+	;;
+    false)
+	CAMERA_LIGHT=true
+	FLAT_COLOR=White
+	;;
+    *)
+	echo "Invalid lights value: ${LIGHTS}"
+	exit 1
+	;;
+esac
+
+#
+# Do it.
+#
+rm -fr "render/${NAME}"
+mkdir "render/${NAME}"
+
+echo "Building..."
+./go build github.com/ThomasHabets/bsparse/cmd/mdl
+./go build github.com/ThomasHabets/bsparse/cmd/dem
+./go build github.com/ThomasHabets/bsparse/cmd/bsp
+./go build -o dorender github.com/ThomasHabets/bsparse/cmd/render
+
+echo "Exporting models..."
+./mdl "${BASEPAK}" convert -out "${OUTBASE}"
+./mdl "${PAK}" convert -out "${OUTBASE}"
+
+echo "Exporting levels..."
+./bsp "${BASEPAK}" convert -textures="${TEXTURES}" -lights="${LIGHTS}" -flat_color="${FLAT_COLOR}" -out "${OUTBASE}"
+
+echo "Exporting demos..."
+for level in e1m{1,2,3,4,5,6,7}; do
+    OUT="${OUTBASE}/${level}"
+    mkdir "${OUT}"
+    (cd "${OUT}" && ln -s ../progs)
+    (cd "${OUT}" && ln -s ../maps)
+    ./dem "${BASEPAK}","${PAK}" convert -camera_light="${CAMERA_LIGHT}" -fps "${FPS}" -out "${OUT}" "${level}.dem"
+done
+cp dorender "${OUTBASE}"
+exit 0
+for level in e1m{1,2,3,4,5,6,7}; do
+    (
+	./dorender "render/${NAME}/${level}"/*.pov
+    )
+done

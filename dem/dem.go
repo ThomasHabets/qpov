@@ -69,7 +69,7 @@ const (
 
 var (
 	Verbose  = false
-	debugEnt = uint16(0)
+	debugEnt = uint16(65000)
 )
 
 type Vertex struct {
