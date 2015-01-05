@@ -13,6 +13,14 @@ import (
 	"strings"
 )
 
+const (
+	// POV output parameters to add to all light_sources.
+	// Values found by experimentation.
+	lightMultiplier   = 0.7   // Multiplier to light intensity.
+	lightFadeDistance = 120.0 // fade_distance
+	lightFadePower    = 2.0   // fade_power
+)
+
 var (
 	Verbose = false
 )
@@ -87,10 +95,10 @@ func (bsp *BSP) POVLights() string {
 			ret = append(ret, fmt.Sprintf(`
 light_source {
   <%v>
-  rgb<1,1,1>*%g*0.7 // TODO: move to variable. Value gotten empirically.
-  fade_distance 120 // TODO: move to variable. Value gotten empirically.
-  fade_power 2 // TODO: move to variable. Value gotten empirically.
-}`, ent.Pos.String(), brightness))
+  rgb<1,1,1>*%g*%g
+  fade_distance %g
+  fade_power %g
+}`, ent.Pos.String(), brightness, lightMultiplier, lightFadeDistance, lightFadePower))
 		}
 	}
 	return strings.Join(ret, "\n")
