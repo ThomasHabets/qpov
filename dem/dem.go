@@ -50,6 +50,9 @@ const (
 	U_EFFECTS    = 0x2000
 	U_LONGENTITY = 0x4000
 
+	// Effects
+	EF_MUZZLEFLASH = 0x2
+
 	TE_SPIKE        = 0
 	TE_SUPERSPIKE   = 1
 	TE_GUNSHOT      = 2
@@ -264,8 +267,9 @@ func readInt16(r io.Reader) (int16, error) {
 }
 
 type State struct {
-	Time     float64
-	Entities []Entity
+	Time       float64
+	Entities   []Entity
+	SeenEntity map[uint16]bool
 
 	// 2 Means render 3D.
 	ClientState int
@@ -280,7 +284,8 @@ type State struct {
 
 func NewState() *State {
 	return &State{
-		Entities: make([]Entity, 1000, 1000),
+		Entities:   make([]Entity, 1000, 1000),
+		SeenEntity: make(map[uint16]bool),
 	}
 }
 
@@ -293,6 +298,7 @@ func (s *State) Copy() *State {
 	n.CameraViewAngle = s.CameraViewAngle
 	n.CameraSetViewAngle = s.CameraSetViewAngle
 	n.CameraEnt = s.CameraEnt
+	n.ClientState = s.ClientState
 	n.ViewAngle = s.ViewAngle
 	n.ServerInfo = s.ServerInfo
 	n.Level = s.Level
@@ -325,6 +331,27 @@ type MsgNop struct{}
 
 func (m MsgNop) Apply(s *State) {}
 
+type MsgLightStyle struct {
+	Index uint8
+	Style string
+}
+
+func (m MsgLightStyle) Apply(s *State) {}
+
+type MsgPlayerName struct {
+	Index uint8
+	Name  string
+}
+
+func (m MsgPlayerName) Apply(s *State) {}
+
+type MsgFrags struct {
+	Player uint8
+	Frags  uint16
+}
+
+func (m MsgFrags) Apply(s *State) {}
+
 type MsgClientState struct {
 	State uint8
 }
@@ -341,6 +368,10 @@ type MsgUpdate struct {
 }
 
 func (m MsgUpdate) Apply(s *State) {
+	s.SeenEntity[m.Entity] = true
+	if m.Entity == debugEnt {
+		log.Printf("Debugent MsgUpdate: %+v", m)
+	}
 	if m.X != nil {
 		s.Entities[m.Entity].Pos.X = *m.X
 	}
@@ -361,6 +392,9 @@ func (m MsgUpdate) Apply(s *State) {
 	}
 
 	if m.Model != nil {
+		if m.Entity == debugEnt {
+			log.Printf("  Model; %d", *m.Model)
+		}
 		s.Entities[m.Entity].Model = *m.Model
 		s.Entities[m.Entity].Skin = 0
 		s.Entities[m.Entity].Color = 0
@@ -547,24 +581,38 @@ func (block *Block) DecodeMessage() (Message, error) {
 		}
 		return &si, nil
 	case 0x0c: // light style
-		readUint8(block.buf)
-		readString(block.buf)
+		styleIndex, _ := readUint8(block.buf)
+		style, _ := readString(block.buf)
+		return &MsgLightStyle{
+			Index: styleIndex,
+			Style: style,
+		}, nil
 	case 0x0d: // set player name
 		i, _ := readUint8(block.buf)
 		name, _ := readString(block.buf)
 		if false {
 			log.Printf("Setting player %d name to %q", i, name)
 		}
+		return &MsgPlayerName{
+			Index: i,
+			Name:  name,
+		}, nil
 	case 0x0e: // set frags
-		readUint8(block.buf)
-		readUint16(block.buf)
+		player, _ := readUint8(block.buf)
+		frags, _ := readUint16(block.buf)
+		return &MsgFrags{
+			Player: player,
+			Frags:  frags,
+		}, nil
 	case 0x0F: // client data
 		mask, _ := readUint16(block.buf)
 		if Verbose {
 			log.Printf("Mask: %04x", mask)
 		}
 		if mask&SU_VIEWHEIGHT != 0 {
-			readUint8(block.buf)
+			viewOffsetZ, _ := readUint8(block.buf)
+			// TODO: Use this to offset camera in Z axis.
+			_ = viewOffsetZ
 		}
 		if mask&SU_IDEALPITCH != 0 {
 			readUint8(block.buf)
@@ -641,9 +689,12 @@ func (block *Block) DecodeMessage() (Message, error) {
 			log.Printf("Weapon: %v", weapon)
 		}
 
+	case 0x10: // stopsound
+		readUint16(block.buf)
+
 	case 0x11: // set colors
-		readUint8(block.buf)
-		readUint8(block.buf)
+		readUint8(block.buf) // player
+		readUint8(block.buf) // color
 	case 0x12: // particle
 		readCoord(block.buf) // origin...
 		readCoord(block.buf)
@@ -673,6 +724,7 @@ func (block *Block) DecodeMessage() (Message, error) {
 		if Verbose {
 			log.Printf("Spawning static %f,%f,%f: %d %d %d %d %f %f %f", x, y, z, model, frame, color, skin, a, b, c)
 		}
+		// TODO: Spawn something static.
 	case 0x16: // spawnbaseline
 		r := &MsgSpawnBaseline{}
 		r.Entity, _ = readUint16(block.buf)
@@ -723,7 +775,10 @@ func (block *Block) DecodeMessage() (Message, error) {
 		default:
 			return nil, fmt.Errorf("bad temp ent type")
 		}
-	case 0x19:
+		// TODO: spawn temp entity.
+	case 0x18: // setpause
+		readUint8(block.buf)
+	case 0x19: // signonnum
 		state, _ := readUint8(block.buf)
 		if Verbose {
 			log.Printf("Set state: %v", state)
@@ -770,6 +825,9 @@ func (block *Block) DecodeMessage() (Message, error) {
 			e, _ := readUint8(block.buf)
 			m.Entity = uint16(e)
 		}
+		if m.Entity == debugEnt {
+			log.Printf("DebugEnt mask: %04x", mask)
+		}
 		if mask&U_MODEL != 0 {
 			a, err := readUint8(block.buf)
 			if err != nil {
@@ -795,6 +853,9 @@ func (block *Block) DecodeMessage() (Message, error) {
 		if mask&U_EFFECTS != 0 {
 			a, _ := readUint8(block.buf)
 			m.Effects = &a
+			if *m.Effects&0xfd != 0 {
+				log.Fatalf("Entity %v effect %v", m.Entity, a)
+			}
 		}
 		if mask&U_ORIGIN1 != 0 {
 			a, err := readCoord(block.buf)

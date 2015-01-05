@@ -158,6 +158,15 @@ func convert(p pak.MultiPak, args ...string) {
 		}
 
 		if seenTime {
+			// Flush unseen entities.
+			if oldState != nil && oldState.ClientState >= 3 {
+				for n := range newState.Entities {
+					if n > 0 && !newState.SeenEntity[uint16(n)] {
+						newState.Entities[n].Model = 0
+					}
+				}
+			}
+
 			anyFrame := false
 			if oldState != nil {
 				if *verbose {
@@ -168,6 +177,9 @@ func convert(p pak.MultiPak, args ...string) {
 				}
 				for _, t := range genTimeFrames(float64(oldState.Time), float64(newState.Time), *fps) {
 					// TODO: Only generate frames if client state is 2.
+					if *verbose {
+						log.Printf("Generating frame %d", frameNum)
+					}
 					generateFrame(p, *outDir, oldState, newState, frameNum, t, *cameraLight)
 					anyFrame = true
 					frameNum++
@@ -177,6 +189,7 @@ func convert(p pak.MultiPak, args ...string) {
 			// Only wipe old state if we generate any frame at all.
 			if oldState == nil || anyFrame {
 				oldState = newState.Copy()
+				newState.SeenEntity = make(map[uint16]bool)
 			}
 		}
 	}
