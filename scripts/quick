@@ -22,8 +22,8 @@ fi
 BASEPAK="/usr/share/games/quake/id1/pak0.pak"
 FPS=30
 TEXTURES=true
-LIGHTS=true
-LEVEL=e1m1
+LIGHTS=false
+LEVEL=e1m3
 
 #
 #
@@ -60,7 +60,7 @@ if true; then
     ./mdl "${PAK}" convert -skins="${SKINS}" -out "${OUTBASE}"
 
     echo "Exporting levels..."
-    ./bsp "${BASEPAK}" convert -textures="${TEXTURES}" -lights="${LIGHTS}" -flat_color="${FLAT_COLOR}" -maps=".*${LEVEL}.*" -out "${OUTBASE}"
+    ./bsp "${BASEPAK}" convert -textures="${TEXTURES}" -lights="${LIGHTS}" -flat_color="${FLAT_COLOR}" -maps="(.*${LEVEL}.*)|b_.*" -out "${OUTBASE}"
 fi
 
 echo "Making demo..."
