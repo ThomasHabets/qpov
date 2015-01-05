@@ -421,7 +421,7 @@ camera {
   rotate <0,%f,0>
   rotate <0,0,%f>
   translate <%s>
-  translate <0,0,20>
+  translate <0,0,10>
 }
 %s_0(<0,0,0>,<0,0,0>, "%s")
 `, state.ServerInfo.Models[0], strings.Join(models, "\n"), lookAt.String(),

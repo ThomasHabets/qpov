@@ -120,7 +120,7 @@ func (bsp *BSP) overrideTexture(miptex uint32) (string, bool) {
 	case "*lava1":
 		return `
       normal { bumps 0.08 scale <1,0.25,0.35>*1 turbulence 0.6 }
-      pigment { rgbf<1,0.0,0,0.2> }
+      pigment { rgbf<0.5,0.0,0,0.2> }
       finish {
         reflection { 0.1 }
         diffuse 0.55
