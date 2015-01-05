@@ -58,7 +58,7 @@ func doRender(files []string, done chan<- int) {
 			if *fast {
 				args = append(args, "+Q2", "+W400", "+H225")
 			} else if *hq {
-				args = append(args, "+Q11", "+A0.1", "+R4", "+W1600", "+H900")
+				args = append(args, "+Q11", "+A0.3", "+R4", "+W1600", "+H900")
 			} else {
 				args = append(args, "+W1600", "+H900")
 			}
