@@ -114,6 +114,54 @@ func (bsp *BSP) remapVertex(in int, list *[]Vertex, vertexMap map[int]int) int {
 	return newV
 }
 
+func (bsp *BSP) overrideTexture(miptex uint32) (string, bool) {
+	mipName := bsp.Raw.MipTex[miptex].Name()
+	switch mipName {
+	case "*lava1":
+		return `
+      normal { bumps 0.08 scale <1,0.25,0.35>*1 turbulence 0.6 }
+      pigment { rgbf<1,0.0,0,0.2> }
+      finish {
+        reflection { 0.1 }
+        diffuse 0.55
+      }
+`, true
+	case "*04water1", "*slime0": // Green-brown slime.
+		return `
+      normal { bumps 0.08 scale <1,0.25,0.35>*1 turbulence 0.6 }
+      pigment { rgbf<6/256,74/256,0,0.2> }
+      finish {
+        reflection { 0.1 }
+      }
+`, true
+	case "*water", "*water0":
+		return `
+      normal { bumps 0.08 scale <1,0.25,0.35>*1 turbulence 0.6 }
+      pigment { rgbf<0,0,1,0.2> }
+      finish {
+        reflection 0.3
+        diffuse 0.55
+      }
+`, true
+	case "*teleport":
+		return "", false
+	}
+
+	// Default animator.
+	if mipName[0] == '*' {
+		return `
+      normal { bumps 0.08 scale <1,0.25,0.35>*1 turbulence 0.6 }
+      pigment { rgbf<1,0,0,0.2> }
+      finish {
+        reflection 0.3
+        diffuse 0.55
+      }
+`, true
+	}
+
+	return "", false
+}
+
 func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor string) (string, error) {
 	var ret string
 	for modelNumber := range bsp.Raw.Models {
@@ -196,11 +244,10 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
 		// TODO: add normals.
 
 		// Add textures.
-		if withTextures {
+		{
 			var textures []string
 			for _, n := range localMipTex {
-				textures = append(textures, fmt.Sprintf(`
-    texture {
+				texture := fmt.Sprintf(`
       uv_mapping
       pigment {
         image_map {
@@ -209,24 +256,20 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
         }
         rotate <180,0,0>
       }
-    }
-`, n))
-			}
-			ret += fmt.Sprintf("texture_list { %d, %s}\n", len(textures), strings.Join(textures, "\n"))
-		} else {
-			ret += "  texture_list { 2,\n"
-			ret += fmt.Sprintf("    texture{pigment{%s}}", flatColor)
-
-			ret += `
-    texture {
-      normal { bumps 0.08 scale <1,0.25,0.35>*1 turbulence 0.6 }
-      pigment { rgbf<0,0,1,0.2> }
       finish {
-        reflection 0.3
+        reflection {0.03}
         diffuse 0.55
       }
-    }`
-			ret += "  }\n"
+`, n)
+				if !withTextures {
+					texture = fmt.Sprintf("pigment{%s}", flatColor)
+				}
+				if tex, do := bsp.overrideTexture(n); do {
+					texture = tex
+				}
+				textures = append(textures, fmt.Sprintf("// %s (#%v)\n%s", bsp.Raw.MipTex[n].Name(), n, texture))
+			}
+			ret += fmt.Sprintf("texture_list { %d, texture {%s} }\n", len(textures), strings.Join(textures, "}\ntexture{\n"))
 		}
 
 		// Add faces.
@@ -234,13 +277,6 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
 			var tris []string
 			for _, tri := range triangles {
 				textureID := bsp.Raw.TexInfo[tri.Face.TexinfoID].TextureID
-				texName := bsp.Raw.MipTex[textureID].Name()
-				if !withTextures {
-					textureID = 0
-					if texName[0] == '*' {
-						textureID = 1 // water.
-					}
-				}
 				tris = append(tris, fmt.Sprintf("<%d,%d,%d>,%d", tri.A, tri.B, tri.C, mipTexMap[textureID]))
 			}
 			ret += fmt.Sprintf("  face_indices { %d, %s }\n", len(tris), strings.Join(tris, ","))

@@ -25,8 +25,9 @@ fi
 BASEPAK="/usr/share/games/quake/id1/pak0.pak"
 FPS=30
 TEXTURES=true
-LIGHTS=false
+LIGHTS=true
 
+#
 # Function of configs.
 #
 OUTBASE="render/${NAME}"

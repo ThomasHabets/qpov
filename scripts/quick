@@ -1,0 +1,72 @@
+#!/bin/bash
+
+set -e
+
+SKINS=true
+
+NAME="$1"
+if [[ "$NAME" = "" ]]; then
+   echo Usage
+   exit 1
+fi
+shift
+PAK="$1"
+if [[ "$PAK" = "" ]]; then
+    PAK="qdq_1635-cam/PAK0.PAK"
+    #PAK="data/qdqr.pak"
+fi
+
+#
+# Configs
+#
+BASEPAK="/usr/share/games/quake/id1/pak0.pak"
+FPS=30
+TEXTURES=true
+LIGHTS=true
+LEVEL=e1m1
+
+#
+#
+#
+OUTBASE="render/${NAME}"
+case "$LIGHTS" in
+    true)
+	FLAT_COLOR=Gray25
+	CAMERA_LIGHT=false
+	;;
+    false)
+	FLAT_COLOR=White
+	CAMERA_LIGHT=true
+	;;
+    *)
+	echo "Invalid lights value: ${LIGHTS}"
+	exit 1
+	;;
+esac
+
+echo "Building..."
+./go build github.com/ThomasHabets/bsparse/cmd/dem
+
+if true; then
+    rm -fr "${OUTBASE}"
+    mkdir "${OUTBASE}"
+
+    ./go build github.com/ThomasHabets/bsparse/cmd/mdl
+    ./go build github.com/ThomasHabets/bsparse/cmd/bsp
+    ./go build -o dorender github.com/ThomasHabets/bsparse/cmd/render
+
+    echo "Exporting models..."
+    ./mdl "${BASEPAK}" convert -skins="${SKINS}" -out "${OUTBASE}"
+    ./mdl "${PAK}" convert -skins="${SKINS}" -out "${OUTBASE}"
+
+    echo "Exporting levels..."
+    ./bsp "${BASEPAK}" convert -textures="${TEXTURES}" -lights="${LIGHTS}" -flat_color="${FLAT_COLOR}" -maps=".*${LEVEL}.*" -out "${OUTBASE}"
+fi
+
+echo "Making demo..."
+OUT="${OUTBASE}/${LEVEL}"
+mkdir "${OUT}"
+(cd "${OUT}" && ln -s ../progs)
+(cd "${OUT}" && ln -s ../maps)
+./dem "${BASEPAK}","${PAK}" convert -camera_light="${CAMERA_LIGHT}" -fps "${FPS}" -out "${OUT}" "${LEVEL}.dem"
+cp dorender "${OUTBASE}"

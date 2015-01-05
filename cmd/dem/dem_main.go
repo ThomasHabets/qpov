@@ -404,7 +404,7 @@ func writePOV(fn, texturesPath string, state *dem.State, cameraLight bool) {
 	}
 	fmt.Fprintf(fo, `#version 3.7;
 global_settings {
-  assumed_gamma 2.4
+  assumed_gamma 2.0
 }
 #include "colors.inc"
 #include "progs/soldier.mdl/model.inc"
