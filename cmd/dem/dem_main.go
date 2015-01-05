@@ -353,13 +353,6 @@ func frameName(mf string, frame int) string {
 }
 
 func validModel(m string) bool {
-	if !strings.HasPrefix(m, "progs/") {
-		return false
-	}
-	if !strings.HasSuffix(m, ".mdl") {
-		return false
-	}
-
 	// These have grouped frames. Not yet handled.
 	if strings.Contains(m, "flame.mdl") {
 		return false
@@ -370,7 +363,14 @@ func validModel(m string) bool {
 	if strings.Contains(m, "w_spike.mdl") {
 		return false
 	}
-	return true
+
+	if strings.HasSuffix(m, ".mdl") {
+		return true
+	}
+	if strings.HasSuffix(m, ".bsp") {
+		return true
+	}
+	return false
 }
 
 func writePOV(fn, texturesPath string, state *dem.State, cameraLight bool) {
@@ -399,7 +399,12 @@ func writePOV(fn, texturesPath string, state *dem.State, cameraLight bool) {
 			if !validModel(m) {
 				continue
 			}
-			models = append(models, fmt.Sprintf(`#include "%s/model.inc"`, m))
+			if strings.HasSuffix(m, ".mdl") {
+				models = append(models, fmt.Sprintf(`#include "%s/model.inc"`, m))
+			}
+			if strings.HasSuffix(m, ".bsp") {
+				models = append(models, fmt.Sprintf(`#include "%s/level.inc"`, m))
+			}
 		}
 	}
 	fmt.Fprintf(fo, `#version 3.7;
@@ -423,7 +428,7 @@ camera {
   translate <%s>
   translate <0,0,10>
 }
-%s_0(<0,0,0>,<0,0,0>, "%s")
+// %s_0(<0,0,0>,<0,0,0>, "%s")
 `, state.ServerInfo.Models[0], strings.Join(models, "\n"), lookAt.String(),
 		state.ViewAngle.Z,
 		state.ViewAngle.X,
@@ -468,16 +473,21 @@ camera {
 			if validModel(state.ServerInfo.Models[e.Model]) {
 				a := e.Angle
 				a.X, a.Y, a.Z = a.Z, a.X, a.Y
-
-				// TODO: skin is broken sometimes, just use first one.
-				e.Skin = 0
-				useTextures := true // TODO
-				if useTextures {
-					skinName := path.Join(name, fmt.Sprintf("skin_%v.png", e.Skin))
-					fmt.Fprintf(fo, "// Entity %d\n%s(<%s>,<%s>,\"%s\")\n", n, frameName(name, frame), e.Pos.String(), a.String(), skinName)
-				} else {
-					fmt.Fprintf(fo, "// Entity %d\n%s(<%s>,<%s>)\n", n, frameName(name, frame), e.Pos.String(), a.String())
+				modelName := state.ServerInfo.Models[e.Model]
+				if strings.HasSuffix(modelName, ".mdl") {
+					// TODO: skin is broken sometimes, just use first one.
+					e.Skin = 0
+					useTextures := true // TODO
+					if useTextures {
+						skinName := path.Join(name, fmt.Sprintf("skin_%v.png", e.Skin))
+						fmt.Fprintf(fo, "// Entity %d\n%s(<%s>,<%s>,\"%s\")\n", n, frameName(name, frame), e.Pos.String(), a.String(), skinName)
+					} else {
+						fmt.Fprintf(fo, "// Entity %d\n%s(<%s>,<%s>)\n", n, frameName(name, frame), e.Pos.String(), a.String())
+					}
+				} else if strings.HasSuffix(state.ServerInfo.Models[e.Model], ".bsp") {
+					fmt.Fprintf(fo, "// BSP Entity %d\n%s_0(<%s>,<%s>, \"%s\")\n", n, bsp.ModelPrefix(modelName), e.Pos.String(), a.String(), modelName)
 				}
+
 			}
 		}
 	}
