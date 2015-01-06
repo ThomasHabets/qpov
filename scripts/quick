@@ -23,7 +23,7 @@ BASEPAK="/usr/share/games/quake/id1/pak0.pak"
 FPS=30
 TEXTURES=true
 LIGHTS=false
-LEVEL=e1m3
+LEVEL=e1m2
 
 #
 #
@@ -31,11 +31,11 @@ LEVEL=e1m3
 OUTBASE="render/${NAME}"
 case "$LIGHTS" in
     true)
-	FLAT_COLOR=Gray25
+	FLAT_COLOR='rgb<1,1,1>*0.25'
 	CAMERA_LIGHT=false
 	;;
     false)
-	FLAT_COLOR=White
+	FLAT_COLOR='rgb<1,1,1>'
 	CAMERA_LIGHT=true
 	;;
     *)
