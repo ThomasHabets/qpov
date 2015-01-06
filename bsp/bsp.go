@@ -126,7 +126,7 @@ func (bsp *BSP) overrideTexture(miptex uint32) (string, bool) {
         diffuse 0.55
       }
 `, true
-	case "*04water1", "*slime0": // Green-brown slime.
+	case "*04water1", "*04water2", "*slime0": // Green-brown slime.
 		return `
       normal { bumps 0.08 scale <1,0.25,0.35>*1 turbulence 0.6 }
       pigment { rgbf<6/256,74/256,0,0.2> }
