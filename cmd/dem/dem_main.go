@@ -158,16 +158,11 @@ func convert(p pak.MultiPak, args ...string) {
 		}
 
 		if seenTime {
-			// Flush unseen entities.
-			if oldState != nil && oldState.ClientState >= 3 {
-				for n := range newState.Entities {
-					if n > 0 && !newState.SeenEntity[uint16(n)] {
-						newState.Entities[n].Model = 0
-					}
-				}
-			}
-
 			anyFrame := false
+			for n := range newState.Entities {
+				newState.Entities[n].Visible = newState.SeenEntity[uint16(n)]
+			}
+			newState.Entities[0].Visible = true // World.
 			if oldState != nil {
 				if *verbose {
 					fmt.Printf("Saw time, outputting frames between %g and %g\n",
@@ -420,6 +415,9 @@ func writePOV(fn, texturesPath string, state *dem.State, cameraLight bool) {
 			}
 		}
 	}
+	eyeLevel := bsp.Vertex{
+		Z: 10,
+	}
 	fmt.Fprintf(fo, `#version 3.7;
 global_settings {
   assumed_gamma 2.0
@@ -439,20 +437,20 @@ camera {
   rotate <0,%f,0>
   rotate <0,0,%f>
   translate <%s>
-  translate <0,0,10>
+  translate <%s>
 }
-// %s_0(<0,0,0>,<0,0,0>, "%s")
 `, state.ServerInfo.Models[0], strings.Join(models, "\n"), lookAt.String(),
 		state.ViewAngle.Z,
 		state.ViewAngle.X,
 		state.ViewAngle.Y,
-		//d.ViewAngle.Z, d.ViewAngle.X, d.ViewAngle.Y,
 		pos.String(),
-		bsp.ModelPrefix(state.ServerInfo.Models[0]),
-		texturesPath,
+		eyeLevel.String(),
 	)
 	re := regexp.MustCompile(`^\*(\d+)$`)
 	for _, e := range state.Entities {
+		if !e.Visible {
+			continue
+		}
 		nm := e.Model
 		mod := state.ServerInfo.Models[nm]
 		m := re.FindStringSubmatch(mod)
@@ -463,10 +461,13 @@ camera {
 	}
 
 	if cameraLight {
-		fmt.Fprintf(fo, "light_source { <%s> White }\n", pos.String())
+		fmt.Fprintf(fo, "light_source { <%s> White translate <%s> }\n", pos.String(), eyeLevel.String())
 	}
 	if *entities {
 		for n, e := range state.Entities {
+			if !e.Visible {
+				continue
+			}
 			if int(state.CameraEnt) == n {
 				continue
 			}

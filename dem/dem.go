@@ -84,12 +84,13 @@ func (v *Vertex) String() string {
 }
 
 type Entity struct {
-	Pos   Vertex
-	Angle Vertex
-	Model uint8
-	Frame uint8
-	Skin  uint8
-	Color int
+	Pos     Vertex
+	Angle   Vertex
+	Model   uint8
+	Frame   uint8
+	Skin    uint8
+	Color   int
+	Visible bool
 }
 
 type Demo struct {
@@ -300,6 +301,7 @@ func (s *State) Copy() *State {
 	n.CameraEnt = s.CameraEnt
 	n.ClientState = s.ClientState
 	n.ViewAngle = s.ViewAngle
+	n.SeenEntity = s.SeenEntity
 	n.ServerInfo = s.ServerInfo
 	n.Level = s.Level
 	return n
