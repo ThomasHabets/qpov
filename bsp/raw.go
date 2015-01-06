@@ -394,6 +394,9 @@ func LoadRaw(r myReader) (*Raw, error) {
 					n, raw.Header.Miptex.Offset, mipTexOfs[n], raw.Header.Miptex.Offset+mipTexOfs[n], err)
 			}
 			if mipTexOfs[n] == unusedMipTexOffset {
+				// fmt.Printf("Skipping texture near %d\n", n)
+				// Make fake texture that won't be referenced.
+				raw.MipTexData = append(raw.MipTexData, image.NewPaletted(image.Rectangle{Max: image.Point{X: 8, Y: 8}}, mdl.QuakePalette))
 				continue
 			}
 			if err := binary.Read(r, binary.LittleEndian, &raw.MipTex[n]); err != nil {
