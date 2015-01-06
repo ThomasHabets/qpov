@@ -151,17 +151,3 @@ func main() {
 		log.Fatalf("Unknown command %q", flag.Arg(1))
 	}
 }
-
-var randColorState int
-
-func randColor() string {
-	randColorState++
-	colors := []string{
-		"Green",
-		"White",
-		"Blue",
-		"Red",
-		"Yellow",
-	}
-	return colors[randColorState%len(colors)]
-}

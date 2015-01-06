@@ -17,14 +17,14 @@ LIGHTS=false
 TEXTURES=true
 PAK="/usr/share/games/quake/id1/pak0.pak"
 LIGHTSOURCE=
-FLAT_COLOR=White
+FLAT_COLOR="rgb<1,1,1>"
 
 #
 # Functions of the config
 #
 if [[ ! "$LIGHTS" = "true" ]]; then
-    FLAT_COLOR=Gray25
-    LIGHTSOURCE="light_source { Position color White }"
+    FLAT_COLOR="rgb<1,1,1>*0.25"
+    LIGHTSOURCE="light_source { Position color rgb<1,1,1> }"
 fi
 
 #

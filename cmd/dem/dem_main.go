@@ -418,11 +418,10 @@ func writePOV(fn, texturesPath string, state *dem.State, cameraLight bool) {
 	eyeLevel := bsp.Vertex{
 		Z: 10,
 	}
-	fmt.Fprintf(fo, `#version 3.7;
+	fmt.Fprintf(fo, `#version 3.6;
 global_settings {
   assumed_gamma 2.0
 }
-#include "colors.inc"
 #include "progs/soldier.mdl/model.inc"
 #include "%s/level.inc"
 %s
@@ -461,7 +460,7 @@ camera {
 	}
 
 	if cameraLight {
-		fmt.Fprintf(fo, "light_source { <%s> White translate <%s> }\n", pos.String(), eyeLevel.String())
+		fmt.Fprintf(fo, "light_source { <%s> rgb<1,1,1> translate <%s> }\n", pos.String(), eyeLevel.String())
 	}
 	if *entities {
 		for n, e := range state.Entities {

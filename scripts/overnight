@@ -33,12 +33,12 @@ LIGHTS=true
 OUTBASE="render/${NAME}"
 case "$LIGHTS" in
     true)
-	FLAT_COLOR=Gray25
+	FLAT_COLOR='rgb<0.25,0.25,0.25>'
 	CAMERA_LIGHT=false
 	;;
     false)
 	CAMERA_LIGHT=true
-	FLAT_COLOR=White
+	FLAT_COLOR='rgb<1,1,1>'
 	;;
     *)
 	echo "Invalid lights value: ${LIGHTS}"
