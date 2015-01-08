@@ -66,6 +66,9 @@ const (
 	TE_LAVASPLASH   = 10
 	TE_TELEPORT     = 11
 	TE_EXPLOSION2   = 12
+	TE_BEAM         = 13
+	TE_IMPLOSION    = 14
+	TE_RAILTRAIL    = 15
 
 	maxEntities = 1000
 )
@@ -750,14 +753,12 @@ func (block *Block) DecodeMessage() (Message, error) {
 			log.Printf("Temp entity type %d", entityType)
 		}
 		switch entityType {
-		// TE_KNIGHT_SPIKE
-		case TE_SPIKE, TE_SUPERSPIKE, TE_GUNSHOT, TE_EXPLOSION, TE_TAREXPLOSION, TE_WIZSPIKE, TE_LAVASPLASH, TE_TELEPORT:
+		case TE_SPIKE, TE_SUPERSPIKE, TE_GUNSHOT, TE_EXPLOSION, TE_TAREXPLOSION, TE_WIZSPIKE, TE_LAVASPLASH, TE_TELEPORT, TE_KNIGHT_SPIKE, TE_IMPLOSION:
 			readCoord(block.buf) // origin...
 			readCoord(block.buf)
 			readCoord(block.buf)
 
-		// TE_BEAM
-		case TE_LIGHTNING1, TE_LIGHTNING2, TE_LIGHTNING3:
+		case TE_LIGHTNING1, TE_LIGHTNING2, TE_LIGHTNING3, TE_BEAM, TE_RAILRAIL:
 			ent, _ := readUint16(block.buf)
 			if debugEnt == ent {
 				log.Printf("Lightning from ent %d", ent)
@@ -775,7 +776,7 @@ func (block *Block) DecodeMessage() (Message, error) {
 			readUint8(block.buf) // color
 			readUint8(block.buf) // range
 		default:
-			return nil, fmt.Errorf("bad temp ent type")
+			return nil, fmt.Errorf("bad temp ent type %d", entityType)
 		}
 		// TODO: spawn temp entity.
 	case 0x18: // setpause

@@ -23,7 +23,7 @@ BASEPAK="/usr/share/games/quake/id1/pak0.pak"
 FPS=30
 TEXTURES=true
 LIGHTS=false
-LEVEL=e1m2
+LEVEL=e1m1
 
 #
 #

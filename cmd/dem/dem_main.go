@@ -488,8 +488,6 @@ camera {
 				a.X, a.Y, a.Z = a.Z, a.X, a.Y
 				modelName := state.ServerInfo.Models[e.Model]
 				if strings.HasSuffix(modelName, ".mdl") {
-					// TODO: skin is broken sometimes, just use first one.
-					e.Skin = 0
 					useTextures := true // TODO
 					if useTextures {
 						skinName := path.Join(name, fmt.Sprintf("skin_%v.png", e.Skin))
