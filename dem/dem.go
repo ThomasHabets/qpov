@@ -753,12 +753,12 @@ func (block *Block) DecodeMessage() (Message, error) {
 			log.Printf("Temp entity type %d", entityType)
 		}
 		switch entityType {
-		case TE_SPIKE, TE_SUPERSPIKE, TE_GUNSHOT, TE_EXPLOSION, TE_TAREXPLOSION, TE_WIZSPIKE, TE_LAVASPLASH, TE_TELEPORT, TE_KNIGHT_SPIKE, TE_IMPLOSION:
+		case TE_SPIKE, TE_SUPERSPIKE, TE_GUNSHOT, TE_EXPLOSION, TE_TAREXPLOSION, TE_WIZSPIKE, TE_LAVASPLASH, TE_TELEPORT, TE_KNIGHTSPIKE, TE_IMPLOSION:
 			readCoord(block.buf) // origin...
 			readCoord(block.buf)
 			readCoord(block.buf)
 
-		case TE_LIGHTNING1, TE_LIGHTNING2, TE_LIGHTNING3, TE_BEAM, TE_RAILRAIL:
+		case TE_LIGHTNING1, TE_LIGHTNING2, TE_LIGHTNING3, TE_BEAM, TE_RAILTRAIL:
 			ent, _ := readUint16(block.buf)
 			if debugEnt == ent {
 				log.Printf("Lightning from ent %d", ent)

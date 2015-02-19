@@ -19,6 +19,9 @@ const (
 	lightMultiplier   = 0.7   // Multiplier to light intensity.
 	lightFadeDistance = 120.0 // fade_distance
 	lightFadePower    = 2.0   // fade_power
+
+	// Prefix for all BSP file macros.
+	macroPrefix = "modelprefix_"
 )
 
 var (
@@ -62,6 +65,7 @@ type Entity struct {
 	Frame    uint8
 }
 
+// Load loads a BSP model (map) from something that reads and seeks.
 func Load(r myReader) (*BSP, error) {
 	raw, err := LoadRaw(r)
 	if err != nil {
@@ -73,19 +77,17 @@ func Load(r myReader) (*BSP, error) {
 	return ret, nil
 }
 
-func ModelPrefix(s string) string {
+// ModelMacroPrefix returns the model macro prefix for a given model filename.
+func ModelMacroPrefix(s string) string {
 	re := regexp.MustCompile(`[/.*-]`)
-	return "modelprefix_" + re.ReplaceAllString(s, "_")
+	return macroPrefix + re.ReplaceAllString(s, "_")
 }
 
-func (bsp *BSP) Polygons() ([]Polygon, error) {
-	polys := []Polygon{}
-	return polys, nil
-}
-
+// POVLights returns the static light sources in a BSP, in POV-Ray format.
 func (bsp *BSP) POVLights() string {
 	ret := []string{}
 	for _, ent := range bsp.Raw.Entities {
+		// TODO: There are more complicated light sources.
 		if ent.Data["classname"] == "light" {
 			brightness, err := strconv.ParseFloat(ent.Data["light"], 64)
 			if err != nil {
@@ -104,6 +106,9 @@ light_source {
 	return strings.Join(ret, "\n")
 }
 
+// remapVertex returns an existing vertex ID if it's in the list,
+// else add it to the list and return that ID.
+// This is used to prevent duplicate vertices when creating triangles for the BSP.
 func (bsp *BSP) remapVertex(in int, list *[]Vertex, vertexMap map[int]int) int {
 	if newV, found := vertexMap[in]; found {
 		return newV
@@ -114,6 +119,9 @@ func (bsp *BSP) remapVertex(in int, list *[]Vertex, vertexMap map[int]int) int {
 	return newV
 }
 
+// overrideTexture changes given textures to something more POV-Ray-y.
+// If texture should be overriden, return the texture data and true.
+// If just a normal texture, second return is false.
 func (bsp *BSP) overrideTexture(miptex uint32) (string, bool) {
 	mipName := bsp.Raw.MipTex[miptex].Name()
 	switch mipName {
@@ -162,6 +170,9 @@ func (bsp *BSP) overrideTexture(miptex uint32) (string, bool) {
 	return "", false
 }
 
+// POVTriangleMesh returns the triangle mesh of the BSP as macros starting with the prefix given.
+// One BSP can contain multiple models.
+// If withTextures is false, everything will be flatshaded with the flatColor.
 func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor string) (string, error) {
 	var ret string
 	for modelNumber := range bsp.Raw.Models {
@@ -187,11 +198,11 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
 		{
 			vertexMap := make(map[int]int) // Map from global vertex ID to local. Only used to avoid dups.
 			for n := range triangles {
-				triangles[n].A = bsp.remapVertex(triangles[n].A, &localVertices, vertexMap)
-				triangles[n].B = bsp.remapVertex(triangles[n].B, &localVertices, vertexMap)
-				triangles[n].C = bsp.remapVertex(triangles[n].C, &localVertices, vertexMap)
+				triangles[n].a = bsp.remapVertex(triangles[n].a, &localVertices, vertexMap)
+				triangles[n].b = bsp.remapVertex(triangles[n].b, &localVertices, vertexMap)
+				triangles[n].c = bsp.remapVertex(triangles[n].c, &localVertices, vertexMap)
 
-				oldMipTex := bsp.Raw.TexInfo[triangles[n].Face.TexinfoID].TextureID
+				oldMipTex := bsp.Raw.TexInfo[triangles[n].face.TexinfoID].TextureID
 				_, found := mipTexMap[oldMipTex]
 				if !found {
 					newMipTex := uint32(len(mipTexMap))
@@ -215,12 +226,12 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
 		if withTextures {
 			vs := []string{}
 			for _, tri := range triangles {
-				ti := bsp.Raw.TexInfo[tri.Face.TexinfoID]
+				ti := bsp.Raw.TexInfo[tri.face.TexinfoID]
 				mip := bsp.Raw.MipTex[ti.TextureID]
 
-				v0 := localVertices[tri.A]
-				v1 := localVertices[tri.B]
-				v2 := localVertices[tri.C]
+				v0 := localVertices[tri.a]
+				v1 := localVertices[tri.b]
+				v2 := localVertices[tri.c]
 
 				a := ti.VectorS
 				b := ti.VectorT
@@ -276,8 +287,8 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
 		{
 			var tris []string
 			for _, tri := range triangles {
-				textureID := bsp.Raw.TexInfo[tri.Face.TexinfoID].TextureID
-				tris = append(tris, fmt.Sprintf("<%d,%d,%d>,%d", tri.A, tri.B, tri.C, mipTexMap[textureID]))
+				textureID := bsp.Raw.TexInfo[tri.face.TexinfoID].TextureID
+				tris = append(tris, fmt.Sprintf("<%d,%d,%d>,%d", tri.a, tri.b, tri.c, mipTexMap[textureID]))
 			}
 			ret += fmt.Sprintf("  face_indices { %d, %s }\n", len(tris), strings.Join(tris, ","))
 		}
@@ -289,7 +300,7 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
 			var tris []string
 			for n, tri := range triangles {
 				if false {
-					tris = append(tris, fmt.Sprintf("<%v,%v,%v>", tri.A, tri.B, tri.C))
+					tris = append(tris, fmt.Sprintf("<%v,%v,%v>", tri.a, tri.b, tri.c))
 				} else if false {
 					tris = append(tris, fmt.Sprintf("<%d,%d,%d>", n, n+1, n+2))
 				} else {
@@ -304,12 +315,16 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
 	return ret, nil
 }
 
-type Triangle struct {
-	Face    RawFace
-	A, B, C int // Triangle vertex index.
+type triangle struct {
+	face    RawFace
+	a, b, c int // Triangle vertex index.
 }
 
-func (bsp *BSP) makeTriangles(modelNumber int) ([]Triangle, error) {
+// makeTriangles takes the faces from one model in the BSP and returns them as triangles.
+// The reason for using triangles instead of polygons is that:
+// 1) They can never go wrong in terms of geometry.
+// 2) Triangles is what POV-Ray mesh2 operator wants.
+func (bsp *BSP) makeTriangles(modelNumber int) ([]triangle, error) {
 	skipFace := make(map[int]bool)
 	for nm, m := range bsp.Raw.Models {
 		for n := int(m.FaceID); n < int(m.FaceID+m.FaceNum); n++ {
@@ -319,14 +334,14 @@ func (bsp *BSP) makeTriangles(modelNumber int) ([]Triangle, error) {
 		}
 	}
 
-	tris := []Triangle{}
+	tris := []triangle{}
 	for fn, f := range bsp.Raw.Face {
 		if skipFace[fn] {
 			continue
 		}
 		texName := bsp.Raw.MipTex[bsp.Raw.TexInfo[f.TexinfoID].TextureID].Name()
 		switch texName {
-		case "trigger":
+		case "trigger": // Don't draw triggers.
 			continue
 		}
 		vs := []uint16{}
@@ -346,11 +361,11 @@ func (bsp *BSP) makeTriangles(modelNumber int) ([]Triangle, error) {
 			vs = append(vs, vi0)
 		}
 		for i := 0; i < len(vs)-2; i++ {
-			tris = append(tris, Triangle{
-				Face: f,
-				A:    int(vs[0]),
-				B:    int(vs[i+1]),
-				C:    int(vs[i+2]),
+			tris = append(tris, triangle{
+				face: f,
+				a:    int(vs[0]),
+				b:    int(vs[i+1]),
+				c:    int(vs[i+2]),
 			})
 		}
 	}

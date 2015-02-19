@@ -455,7 +455,7 @@ camera {
 		m := re.FindStringSubmatch(mod)
 		if len(m) == 2 {
 			i, _ := strconv.Atoi(m[1])
-			fmt.Fprintf(fo, "%s_%d(<%v>,<0,0,0>,\"%s\")\n", bsp.ModelPrefix(state.ServerInfo.Models[0]), i, e.Pos.String(), texturesPath)
+			fmt.Fprintf(fo, "%s_%d(<%v>,<0,0,0>,\"%s\")\n", bsp.ModelMacroPrefix(state.ServerInfo.Models[0]), i, e.Pos.String(), texturesPath)
 		}
 	}
 
@@ -496,7 +496,7 @@ camera {
 						fmt.Fprintf(fo, "// Entity %d\n%s(<%s>,<%s>)\n", n, frameName(name, frame), e.Pos.String(), a.String())
 					}
 				} else if strings.HasSuffix(state.ServerInfo.Models[e.Model], ".bsp") {
-					fmt.Fprintf(fo, "// BSP Entity %d\n%s_0(<%s>,<%s>, \"%s\")\n", n, bsp.ModelPrefix(modelName), e.Pos.String(), a.String(), modelName)
+					fmt.Fprintf(fo, "// BSP Entity %d\n%s_0(<%s>,<%s>, \"%s\")\n", n, bsp.ModelMacroPrefix(modelName), e.Pos.String(), a.String(), modelName)
 				}
 
 			}
