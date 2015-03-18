@@ -10,8 +10,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ThomasHabets/bsparse/mdl"
-	"github.com/ThomasHabets/bsparse/pak"
+	"github.com/ThomasHabets/qpov/mdl"
+	"github.com/ThomasHabets/qpov/pak"
 )
 
 func frameName(mf string, frame int) string {

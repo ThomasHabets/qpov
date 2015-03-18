@@ -14,9 +14,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ThomasHabets/bsparse/bsp"
-	"github.com/ThomasHabets/bsparse/dem"
-	"github.com/ThomasHabets/bsparse/pak"
+	"github.com/ThomasHabets/qpov/bsp"
+	"github.com/ThomasHabets/qpov/dem"
+	"github.com/ThomasHabets/qpov/pak"
 )
 
 var (

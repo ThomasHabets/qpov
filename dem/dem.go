@@ -8,7 +8,7 @@ import (
 	"io"
 	"log"
 
-	"github.com/ThomasHabets/bsparse/bsp"
+	"github.com/ThomasHabets/qpov/bsp"
 )
 
 const (

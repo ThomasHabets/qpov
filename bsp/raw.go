@@ -13,7 +13,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/ThomasHabets/bsparse/mdl"
+	"github.com/ThomasHabets/qpov/mdl"
 )
 
 const (

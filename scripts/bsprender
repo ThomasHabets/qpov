@@ -30,7 +30,7 @@ fi
 #
 # Do it
 #
-./go build github.com/ThomasHabets/bsparse/cmd/bsp
+./go build github.com/ThomasHabets/qpov/cmd/bsp
 ./bsp "${PAK}" pov -textures="${TEXTURES}" -lights="${LIGHTS}" -flat_color="${FLAT_COLOR}" "$@" > model.inc
 
 BLAH=$(echo $MODEL | sed 's/[/.-]/_/g')

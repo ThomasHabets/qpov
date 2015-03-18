@@ -52,10 +52,10 @@ rm -fr "render/${NAME}"
 mkdir "render/${NAME}"
 
 echo "Building..."
-./go build github.com/ThomasHabets/bsparse/cmd/mdl
-./go build github.com/ThomasHabets/bsparse/cmd/dem
-./go build github.com/ThomasHabets/bsparse/cmd/bsp
-./go build -o dorender github.com/ThomasHabets/bsparse/cmd/render
+./go build github.com/ThomasHabets/qpov/cmd/mdl
+./go build github.com/ThomasHabets/qpov/cmd/dem
+./go build github.com/ThomasHabets/qpov/cmd/bsp
+./go build -o dorender github.com/ThomasHabets/qpov/cmd/render
 
 echo "Exporting models..."
 ./mdl "${BASEPAK}" convert -out "${OUTBASE}"

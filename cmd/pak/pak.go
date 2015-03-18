@@ -7,7 +7,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/ThomasHabets/bsparse/pak"
+	"github.com/ThomasHabets/qpov/pak"
 )
 
 func main() {
