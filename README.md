@@ -21,4 +21,10 @@ Running
 =======
 You need to convert Quake maps and models in addition to the demos.
 
-TODO: More instructions.
+```
+$ bsp /.../pak0.pak convert -out demo1
+$ mdl /.../pak0.pak convert -out demo1
+$ mkdir demo1
+$ dem /.../pak0.pak convert -out demo1 -fps 30 -camera_light demo1.dem
+$ render -fast demo1/*.pov
+```
