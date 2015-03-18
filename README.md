@@ -1,6 +1,7 @@
 QPov
+====
 
-Copyright Thomas Habets 2015
+Copyright Thomas Habets <thomas@habets.se> 2015
 
 Introduction
 ============
