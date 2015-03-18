@@ -7,6 +7,7 @@ Introduction
 ============
 
 QPov converts Quake demos into POV-Ray files, ready to render.
+Example: https://www.youtube.com/watch?v=jzcevsd5SGE
 
 Installing
 ==========
