@@ -106,7 +106,7 @@ func genTimeFrames(from, to, fps float64) []float64 {
 
 func convert(p pak.MultiPak, args ...string) {
 	fs := flag.NewFlagSet("convert", flag.ExitOnError)
-	fps := fs.Float64("fps", 25.0, "Frames per second.")
+	fps := fs.Float64("fps", 30.0, "Frames per second.")
 	outDir := fs.String("out", "render", "Output directory.")
 	cameraLight := fs.Bool("camera_light", false, "Add camera light.")
 	fs.Parse(args)
