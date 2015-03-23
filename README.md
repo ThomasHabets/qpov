@@ -48,3 +48,7 @@ Assuming 30fps and QDQr recam:
 * water:
   * e1m1: 232 610
   * e1m3: 300
+
+Interesting links
+-----------------
+* https://www.quaddicted.com/engines/software_vs_glquake
