@@ -38,6 +38,7 @@ var (
 	concurrency = flag.Int("concurrency", -1, "Run this many povrays in parallel. <0 means set to number of CPUs.")
 	fast        = flag.Bool("fast", false, "Fast rendering.")
 	hq          = flag.Bool("hq", true, "High quality.")
+	idle        = flag.Bool("idle", true, "Use idle priority.")
 
 	mutex                  sync.Mutex
 	totalUser, totalSystem time.Duration
@@ -70,11 +71,15 @@ func doRender(files []string, done chan<- int) {
 			}
 			defer stderr.Close()
 
-			args := []string{
-				"-D", "-e",
-				*povray,
-				"-D",
+			var bin string
+			var args []string
+			if *idle {
+				bin = *schedtool
+				args = append(args, "-D", "-e", *povray)
+			} else {
+				bin = *povray
 			}
+			args = append(args, "-D")
 			if *fast {
 				args = append(args, "+Q2", "+W400", "+H225")
 			} else if *hq {
@@ -83,7 +88,7 @@ func doRender(files []string, done chan<- int) {
 				args = append(args, "+W1600", "+H900")
 			}
 			args = append(args, path.Base(f))
-			cmd := exec.Command(*schedtool, args...)
+			cmd := exec.Command(bin, args...)
 			cmd.Stdout = stdout
 			cmd.Stderr = stderr
 			cmd.Dir = path.Dir(f)
