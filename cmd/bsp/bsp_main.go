@@ -39,6 +39,10 @@ var (
 	pakFiles = flag.String("pak", "", "Comma-separated list of pakfiles to search for resources.")
 )
 
+const (
+	pngCompressionLevel = 9
+)
+
 func mkdirP(base, mf string) {
 	var cparts []string
 	for _, part := range strings.Split(mf, "/") {
@@ -147,7 +151,7 @@ func convert(p pak.MultiPak, args ...string) {
 							log.Fatalf("Texture create of %q fail: %v", fn, err)
 						}
 						defer of.Close()
-						if err := (&png.Encoder{}).Encode(of, texture); err != nil {
+						if err := (&png.Encoder{CompressionLevel: pngCompressionLevel}).Encode(of, texture); err != nil {
 							log.Fatalf("Encoding texture to png: %v", err)
 						}
 					}()
