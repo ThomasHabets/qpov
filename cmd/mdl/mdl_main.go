@@ -34,6 +34,10 @@ import (
 	"github.com/ThomasHabets/qpov/pak"
 )
 
+const (
+	pngCompressionLevel = 9
+)
+
 var (
 	pakFiles = flag.String("pak", "", "Comma-separated list of pakfiles to search for resources.")
 )
@@ -98,7 +102,7 @@ func convert(p pak.MultiPak, args ...string) {
 					log.Fatalf("Skin create of %q fail: %v", fn, err)
 				}
 				defer of.Close()
-				if err := (&png.Encoder{}).Encode(of, skin); err != nil {
+				if err := (&png.Encoder{CompressionLevel: pngCompressionLevel}).Encode(of, skin); err != nil {
 					log.Fatalf("Encoding skin to png: %v", err)
 				}
 			}
