@@ -114,7 +114,7 @@ func convert(p pak.MultiPak, args ...string) {
 }
 
 func info(p pak.MultiPak, args ...string) {
-	fs := flag.NewFlagSet("show", flag.ExitOnError)
+	fs := flag.NewFlagSet("info", flag.ExitOnError)
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s -pak <pak0,pak1,...> info [options] <progs/model.mdl> \n", os.Args[0])
 		fs.PrintDefaults()
