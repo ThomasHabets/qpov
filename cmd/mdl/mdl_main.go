@@ -34,6 +34,10 @@ import (
 	"github.com/ThomasHabets/qpov/pak"
 )
 
+var (
+	pakFiles = flag.String("pak", "", "Comma-separated list of pakfiles to search for resources.")
+)
+
 func frameName(mf string, frame int) string {
 	re := regexp.MustCompile(`[/.-]`)
 	return fmt.Sprintf("demprefix_%s_%d", re.ReplaceAllString(mf, "_"), frame)
@@ -41,6 +45,10 @@ func frameName(mf string, frame int) string {
 
 func convert(p pak.MultiPak, args ...string) {
 	fs := flag.NewFlagSet("convert", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s -pak <pak0,pak1,...> convert [options]\n", os.Args[0])
+		fs.PrintDefaults()
+	}
 	outDir := fs.String("out", ".", "Output directory.")
 	skins := fs.Bool("skins", true, "Use skins.")
 	fs.Parse(args)
@@ -101,9 +109,16 @@ func convert(p pak.MultiPak, args ...string) {
 	}
 }
 
-func show(p pak.MultiPak, args ...string) {
+func info(p pak.MultiPak, args ...string) {
 	fs := flag.NewFlagSet("show", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s -pak <pak0,pak1,...> info [options] <progs/model.mdl> \n", os.Args[0])
+		fs.PrintDefaults()
+	}
 	fs.Parse(args)
+	if fs.NArg() == 0 {
+		log.Fatalf("Need to specify a model name.")
+	}
 	model := fs.Arg(0)
 
 	h, err := p.Get(model)
@@ -128,9 +143,16 @@ func show(p pak.MultiPak, args ...string) {
 
 func triangles(p pak.MultiPak, args ...string) {
 	fs := flag.NewFlagSet("pov", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s -pak <pak0,pak1,...> pov [options] <progs/model.mdl> \n", os.Args[0])
+		fs.PrintDefaults()
+	}
 	rotate := fs.String("rotate", "0,0,0", "Rotate model.")
 	useSkin := fs.Bool("skin", true, "Use texture.")
 	fs.Parse(args)
+	if fs.NArg() == 0 {
+		log.Fatalf("Need to specify a model name.")
+	}
 
 	model := fs.Arg(0)
 
@@ -153,21 +175,38 @@ func triangles(p pak.MultiPak, args ...string) {
 	}
 }
 
+func usage() {
+	fmt.Fprintf(os.Stderr, "Usage: %s [global options] command [options]\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Commands:\n  info\n  convert\n  pov\nGlobal options:\n")
+	flag.PrintDefaults()
+}
+
 func main() {
+	flag.Usage = usage
 	flag.Parse()
-	p, err := pak.MultiOpen(flag.Arg(0))
+
+	pf := strings.Split(*pakFiles, ",")
+	p, err := pak.MultiOpen(pf...)
 	if err != nil {
-		log.Fatalf("Failed to open pakfiles %q: %v", flag.Args(), err)
+		log.Fatalf("Opening pakfiles %q: %v", pf, err)
+	}
+	defer p.Close()
+
+	if flag.NArg() == 0 {
+		usage()
+		log.Fatalf("Need to specify a command.")
 	}
 
-	switch flag.Arg(1) {
+	cmd := flag.Arg(0)
+	args := flag.Args()[1:]
+	switch cmd {
 	case "convert":
-		convert(p, flag.Args()[2:]...)
+		convert(p, args...)
 	case "pov":
-		triangles(p, flag.Args()[2:]...)
-	case "show":
-		show(p, flag.Args()[2:]...)
+		triangles(p, args...)
+	case "info":
+		info(p, args...)
 	default:
-		log.Fatalf("Unknown command %q", flag.Arg(1))
+		log.Fatalf("Unknown command %q", cmd)
 	}
 }
