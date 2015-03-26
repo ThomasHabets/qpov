@@ -23,6 +23,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"image"
 	"image/png"
 	"log"
 	"os"
@@ -48,9 +49,41 @@ func mkdirP(base, mf string) {
 	}
 }
 
+// levelShortname returns just the name portion of the bsp, removing .bsp and directories.
+// This is used to find per-map textures.
+func levelShortname(l string) string {
+	re := regexp.MustCompile(`^(?:.*/)([^/]+).bsp$`)
+	m := re.FindStringSubmatch(l)
+	if len(m) != 2 {
+		return l
+	}
+	return m[1]
+}
+
+// retexture returns a new texture full path name if it finds a replacement texture.
+func retexture(retexturePack, mapName string, m bsp.RawMipTex, img image.Image) (string, bool) {
+	// First try level-specific retexture.
+	fn := path.Join(retexturePack, levelShortname(mapName), m.Name()+".png")
+	if _, err := os.Stat(fn); err == nil {
+		// log.Printf("Retexturing %q", fn)
+		return fn, true
+	}
+
+	// Then try global retexture.
+	fn = path.Join(retexturePack, m.Name()+".png")
+	if _, err := os.Stat(fn); err == nil {
+		// log.Printf("Retexturing %q", fn)
+		return fn, true
+	}
+
+	// No retexture found.
+	return "", false
+}
+
 func convert(p pak.MultiPak, args ...string) {
 	fs := flag.NewFlagSet("convert", flag.ExitOnError)
 	outDir := fs.String("out", ".", "Output directory.")
+	retexturePack := fs.String("retexture", "", "Path to retexture pack.")
 	flatColor := fs.String("flat_color", "Gray25", "")
 	textures := fs.Bool("textures", true, "Use textures.")
 	lights := fs.Bool("lights", false, "Export lights.")
@@ -100,8 +133,15 @@ func convert(p pak.MultiPak, args ...string) {
 
 			if *textures {
 				for n, texture := range b.Raw.MipTexData {
+					fn := path.Join(*outDir, mf, fmt.Sprintf("texture_%d.png", n))
+					retexFn, retex := retexture(*retexturePack, mf, b.Raw.MipTex[n], texture)
+					if retex {
+						if err := os.Symlink(retexFn, fn); err != nil {
+							log.Fatalf("Failed to symlink %q to %q for texture pack: %v", fn, retexFn, err)
+						}
+						continue
+					}
 					func() {
-						fn := path.Join(*outDir, mf, fmt.Sprintf("texture_%d.png", n))
 						of, err := os.Create(fn)
 						if err != nil {
 							log.Fatalf("Texture create of %q fail: %v", fn, err)
