@@ -35,7 +35,7 @@ import (
 )
 
 var (
-	pakFile = flag.String("pak", "", "Pakfile to use.")
+	pakFiles = flag.String("pak", "", "Comma-separated list of pakfiles to search for resources.")
 )
 
 func mkdirP(base, mf string) {
@@ -176,24 +176,39 @@ func pov(p pak.MultiPak, args ...string) {
 	}
 }
 
+func usage() {
+	fmt.Fprintf(os.Stderr, "Usage: %s [global options] command [options]\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Commands:\n  info\n  pov\n  convert\nGlobal options:\n")
+	flag.PrintDefaults()
+}
+
 func main() {
+	flag.Usage = usage
 	flag.Parse()
 
-	pakFile := flag.Arg(0)
-
-	p, err := pak.MultiOpen(pakFile)
+	pf := strings.Split(*pakFiles, ",")
+	p, err := pak.MultiOpen(pf...)
 	if err != nil {
-		log.Fatalf("Opening pakfile %q: %v", pakFile, err)
+		log.Fatalf("Opening pakfiles %q: %v", pf, err)
 	}
 
-	switch flag.Arg(1) {
+	if flag.NArg() == 0 {
+		usage()
+		log.Fatalf("Need to specify a command.")
+	}
+
+	cmd := flag.Arg(0)
+	args := flag.Args()[1:]
+	switch cmd {
 	case "info":
-		info(p, flag.Args()[2:]...)
+		info(p, args...)
 	case "pov":
-		pov(p, flag.Args()[2:]...)
+		pov(p, args...)
 	case "convert":
-		convert(p, flag.Args()[2:]...)
+		convert(p, args...)
+	case "help":
+		usage()
 	default:
-		log.Fatalf("Unknown command %q", flag.Arg(1))
+		log.Fatalf("Unknown command %q", cmd)
 	}
 }
