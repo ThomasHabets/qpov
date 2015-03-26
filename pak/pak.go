@@ -121,6 +121,9 @@ func MultiOpen(fns ...string) (MultiPak, error) {
 	// TODO: don't leak files on error.
 	var ret []*Pak
 	for _, fn := range fns {
+		if fn == "" {
+			continue
+		}
 		f, err := os.Open(fn)
 		if err != nil {
 			return nil, err
