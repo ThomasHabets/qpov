@@ -35,12 +35,12 @@ import (
 	"github.com/ThomasHabets/qpov/pak"
 )
 
-var (
-	pakFiles = flag.String("pak", "", "Comma-separated list of pakfiles to search for resources.")
-)
-
 const (
 	pngCompressionLevel = 9
+)
+
+var (
+	pakFiles = flag.String("pak", "", "Comma-separated list of pakfiles to search for resources.")
 )
 
 func mkdirP(base, mf string) {
