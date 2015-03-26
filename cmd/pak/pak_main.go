@@ -26,25 +26,34 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/ThomasHabets/qpov/pak"
 )
 
+func usage() {
+	fmt.Fprintf(os.Stderr, "Usage: %s [options] <pakfiles> command [command args...]\n", os.Args[0])
+	flag.PrintDefaults()
+}
+
 func main() {
+	flag.Usage = usage
 	flag.Parse()
-	fn := flag.Arg(0)
-	f, err := os.Open(fn)
+
+	if flag.NArg() < 2 {
+		usage()
+		os.Exit(1)
+	}
+
+	pakFiles := strings.Split(flag.Arg(0), ",")
+	p, err := pak.MultiOpen(pakFiles...)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer f.Close()
-	p, err := pak.Open(f)
-	if err != nil {
-		log.Fatal(err)
-	}
+	defer p.Close()
 	switch flag.Arg(1) {
 	case "list":
-		for k := range p.Entries {
+		for _, k := range p.List() {
 			fmt.Printf("%s\n", k)
 		}
 	case "extract":
