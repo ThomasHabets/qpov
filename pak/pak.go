@@ -146,7 +146,10 @@ func (m MultiPak) Get(s string) (*reader, error) {
 			return r, nil
 		}
 	}
-	return nil, err
+	if err != nil {
+		return nil, err
+	}
+	return nil, os.ErrNotExist
 }
 
 func (m MultiPak) Close() {
