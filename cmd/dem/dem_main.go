@@ -119,6 +119,7 @@ func convert(p pak.MultiPak, args ...string) {
 		fmt.Fprintf(os.Stderr, "Usage: %s -pak <pak0,pak1,...> convert [options] <demofile.dem> \n", os.Args[0])
 		fs.PrintDefaults()
 	}
+	radiosity := fs.Bool("radiosity", false, "Use radiosity lighting.")
 	fps := fs.Float64("fps", 30.0, "Frames per second.")
 	outDir := fs.String("out", "render", "Output directory.")
 	cameraLight := fs.Bool("camera_light", false, "Add camera light.")
@@ -211,7 +212,7 @@ func convert(p pak.MultiPak, args ...string) {
 					if *verbose {
 						log.Printf("Generating frame %d", frameNum)
 					}
-					generateFrame(p, *outDir, oldState, newState, frameNum, t, *cameraLight)
+					generateFrame(p, *outDir, oldState, newState, frameNum, t, *cameraLight, *radiosity)
 					anyFrame = true
 					frameNum++
 				}
@@ -308,7 +309,7 @@ func tooFast(s0, s1 *dem.State) bool {
 	return false
 }
 
-func generateFrame(p pak.MultiPak, outDir string, oldState, newState *dem.State, frameNum int, t float64, cameraLight bool) {
+func generateFrame(p pak.MultiPak, outDir string, oldState, newState *dem.State, frameNum int, t float64, cameraLight, radiosity bool) {
 	if newState.ServerInfo.Models == nil {
 		return
 	}
@@ -386,7 +387,7 @@ func generateFrame(p pak.MultiPak, outDir string, oldState, newState *dem.State,
 			newState.ViewAngle,
 		)
 	}
-	writePOV(path.Join(outDir, fmt.Sprintf("frame-%08d.pov", frameNum)), newState.ServerInfo.Models[0], curState, cameraLight)
+	writePOV(path.Join(outDir, fmt.Sprintf("frame-%08d.pov", frameNum)), newState.ServerInfo.Models[0], curState, cameraLight, radiosity)
 }
 
 func frameName(mf string, frame int) string {
@@ -417,7 +418,7 @@ func validModel(m string) bool {
 	return false
 }
 
-func writePOV(fn, texturesPath string, state *dem.State, cameraLight bool) {
+func writePOV(fn, texturesPath string, state *dem.State, cameraLight, radiosity bool) {
 	ufo, err := os.Create(fn)
 	if err != nil {
 		log.Fatalf("Creating %q: %v", fn, err)
@@ -454,9 +455,19 @@ func writePOV(fn, texturesPath string, state *dem.State, cameraLight bool) {
 	eyeLevel := bsp.Vertex{
 		Z: 10,
 	}
+	var rad string
+	if radiosity {
+		rad = `
+radiosity {
+      Rad_Settings(Radiosity_Normal,off,off)
+}`
+	}
+
 	fmt.Fprintf(fo, `#version 3.6;
+#include "rad_def.inc"
 global_settings {
   assumed_gamma 2.0
+  %s
 }
 #include "progs/soldier.mdl/model.inc"
 #include "%s/level.inc"
@@ -474,7 +485,7 @@ camera {
   translate <%s>
   translate <%s>
 }
-`, state.ServerInfo.Models[0], strings.Join(models, "\n"), lookAt.String(),
+`, rad, state.ServerInfo.Models[0], strings.Join(models, "\n"), lookAt.String(),
 		state.ViewAngle.Z,
 		state.ViewAngle.X,
 		state.ViewAngle.Y,
