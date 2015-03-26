@@ -175,7 +175,7 @@ func (bsp *BSP) overrideTexture(miptex uint32) (string, bool) {
 	}
 
 	// Default animator.
-	if mipName[0] == '*' {
+	if strings.HasPrefix(mipName, "*") {
 		return `
       normal { bumps 0.08 scale <1,0.25,0.35>*1 turbulence 0.6 }
       pigment { rgbf<0,0,1,0.2> }
