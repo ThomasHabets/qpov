@@ -86,6 +86,10 @@ func retexture(retexturePack, mapName string, m bsp.RawMipTex, img image.Image) 
 
 func convert(p pak.MultiPak, args ...string) {
 	fs := flag.NewFlagSet("convert", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s -pak pak0,pak1,... convert [options]\n", os.Args[0])
+		fs.PrintDefaults()
+	}
 	outDir := fs.String("out", ".", "Output directory.")
 	retexturePack := fs.String("retexture", "", "Path to retexture pack.")
 	flatColor := fs.String("flat_color", "Gray25", "")
@@ -166,7 +170,14 @@ func info(p pak.MultiPak, args ...string) {
 	fs := flag.NewFlagSet("info", flag.ExitOnError)
 	//outDir := fs.String("out", ".", "Output directory.")
 	//maps := fs.String("maps", ".*", "Regex of maps to convert.")
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s -pak <pak0,pak1,...> info [options] <maps/eXmX.bsp> \n", os.Args[0])
+		fs.PrintDefaults()
+	}
 	fs.Parse(args)
+	if fs.NArg() == 0 {
+		log.Fatalf("Need to specify a map name.")
+	}
 	mapName := fs.Arg(0)
 	b, err := p.Get(mapName)
 	if err != nil {
@@ -193,11 +204,18 @@ func info(p pak.MultiPak, args ...string) {
 
 func pov(p pak.MultiPak, args ...string) {
 	fs := flag.NewFlagSet("pov", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s -pak <pak0,pak1,...> pov [options] <maps/eXmX.bsp> \n", os.Args[0])
+		fs.PrintDefaults()
+	}
 	lights := fs.Bool("lights", true, "Export lights.")
 	flatColor := fs.String("flat_color", "Gray25", "")
 	textures := fs.Bool("textures", false, "Use textures.")
 	//maps := fs.String("maps", ".*", "Regex of maps to convert.")
 	fs.Parse(args)
+	if fs.NArg() == 0 {
+		log.Fatalf("Need to specify a map name.")
+	}
 	maps := fs.Arg(0)
 
 	res, err := p.Get(maps)
@@ -235,6 +253,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Opening pakfiles %q: %v", pf, err)
 	}
+	defer p.Close()
 
 	if flag.NArg() == 0 {
 		usage()
