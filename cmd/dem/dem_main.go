@@ -33,6 +33,7 @@ import (
 	"runtime/pprof"
 	"strconv"
 	"strings"
+	"text/template"
 
 	"github.com/ThomasHabets/qpov/bsp"
 	"github.com/ThomasHabets/qpov/dem"
@@ -44,6 +45,8 @@ var (
 	entities   = flag.Bool("entities", true, "Render entities too.")
 	verbose    = flag.Bool("v", false, "Verbose output.")
 	pakFiles   = flag.String("pak", "", "Comma-separated list of pakfiles to search for resources.")
+	version    = flag.String("version", "3.7", "POV-Ray version to generate data for.")
+	prefix     = flag.String("prefix", "", "Add this prefix to all paths to maps and models.")
 )
 
 func info(p pak.MultiPak, args ...string) {
@@ -445,55 +448,75 @@ func writePOV(fn, texturesPath string, state *dem.State, cameraLight, radiosity 
 				continue
 			}
 			if strings.HasSuffix(m, ".mdl") {
-				models = append(models, fmt.Sprintf(`#include "%s/model.inc"`, m))
+				models = append(models, fmt.Sprintf(`%s/model.inc`, m))
 			}
 			if strings.HasSuffix(m, ".bsp") {
-				models = append(models, fmt.Sprintf(`#include "%s/level.inc"`, m))
+				models = append(models, fmt.Sprintf(`%s/level.inc`, m))
 			}
 		}
 	}
 	eyeLevel := bsp.Vertex{
 		Z: 10,
 	}
-	var rad string
-	if radiosity {
-		rad = `
-radiosity {
-      Rad_Settings(Radiosity_Normal,off,off)
-}`
-	}
 
-	fmt.Fprintf(fo, `#version 3.7;
+	tmpl := template.Must(template.New("header").Parse(`
+{{$root := .}}
+#version {{.Version}};
 #include "rad_def.inc"
 global_settings {
-  // 1.0 seems to be right for 3.7 & camera light.
-  // for 3.6, use 2.0?
-  assumed_gamma 1.0
-  %s
+  assumed_gamma {{.Gamma}}
+  {{ if .Radiosity }}radiosity { Rad_Settings(Radiosity_Normal,off,off)}{{ end }}
 }
-#include "progs/soldier.mdl/model.inc"
-#include "%s/level.inc"
-%s
+#include "{{.Prefix}}progs/soldier.mdl/model.inc"
+#include "{{.Prefix}}{{.Level}}/level.inc"
+{{ range .Models }}#include "{{$root.Prefix}}{{ . }}"
+{{ end }}
 camera {
   angle 100
   location <0,0,0>
   sky <0,0,1>
   up <0,0,9>
   right <-16,0,0>
-  look_at <%s>
-  rotate <%f,0,0>
-  rotate <0,%f,0>
-  rotate <0,0,%f>
-  translate <%s>
-  translate <%s>
+  look_at <{{.LookAt}}>
+  rotate <{{.AngleX}},0,0>
+  rotate <0,{{.AngleY}},0>
+  rotate <0,0,{{.AngleZ}}>
+  translate <{{.Pos}}>
+  translate <{{.EyeLevel}}>
 }
-`, rad, state.ServerInfo.Models[0], strings.Join(models, "\n"), lookAt.String(),
-		state.ViewAngle.Z,
-		state.ViewAngle.X,
-		state.ViewAngle.Y,
-		pos.String(),
-		eyeLevel.String(),
-	)
+`))
+	gamma := "1.0"
+	switch *version {
+	case "3.6":
+		gamma = "2.0"
+	}
+	if err := tmpl.Execute(fo, struct {
+		Gamma                  string
+		Prefix                 string
+		Version                string
+		Radiosity              bool
+		AngleX, AngleY, AngleZ float64
+		Pos                    string
+		LookAt                 string
+		Level                  string
+		EyeLevel               string
+		Models                 []string
+	}{
+		Prefix:    *prefix,
+		Version:   *version,
+		Gamma:     gamma,
+		Radiosity: radiosity,
+		Level:     state.ServerInfo.Models[0],
+		Models:    models,
+		LookAt:    lookAt.String(),
+		AngleX:    float64(state.ViewAngle.Z),
+		AngleY:    float64(state.ViewAngle.X),
+		AngleZ:    float64(state.ViewAngle.Y),
+		Pos:       pos.String(),
+		EyeLevel:  eyeLevel.String(),
+	}); err != nil {
+		log.Fatalf("Executing template: %v", err)
+	}
 	re := regexp.MustCompile(`^\*(\d+)$`)
 	for _, e := range state.Entities {
 		if !e.Visible {
@@ -504,7 +527,7 @@ camera {
 		m := re.FindStringSubmatch(mod)
 		if len(m) == 2 {
 			i, _ := strconv.Atoi(m[1])
-			fmt.Fprintf(fo, "%s_%d(<%v>,<0,0,0>,\"%s\")\n", bsp.ModelMacroPrefix(state.ServerInfo.Models[0]), i, e.Pos.String(), texturesPath)
+			fmt.Fprintf(fo, "%s_%d(<%v>,<0,0,0>,\"%s\")\n", bsp.ModelMacroPrefix(state.ServerInfo.Models[0]), i, e.Pos.String(), *prefix+texturesPath)
 		}
 	}
 
@@ -540,12 +563,12 @@ camera {
 					useTextures := true // TODO
 					if useTextures {
 						skinName := path.Join(name, fmt.Sprintf("skin_%v.png", e.Skin))
-						fmt.Fprintf(fo, "// Entity %d\n%s(<%s>,<%s>,\"%s\")\n", n, frameName(name, frame), e.Pos.String(), a.String(), skinName)
+						fmt.Fprintf(fo, "// Entity %d\n%s(<%s>,<%s>,\"%s\")\n", n, frameName(name, frame), e.Pos.String(), a.String(), *prefix+skinName)
 					} else {
 						fmt.Fprintf(fo, "// Entity %d\n%s(<%s>,<%s>)\n", n, frameName(name, frame), e.Pos.String(), a.String())
 					}
 				} else if strings.HasSuffix(state.ServerInfo.Models[e.Model], ".bsp") {
-					fmt.Fprintf(fo, "// BSP Entity %d\n%s_0(<%s>,<%s>, \"%s\")\n", n, bsp.ModelMacroPrefix(modelName), e.Pos.String(), a.String(), modelName)
+					fmt.Fprintf(fo, "// BSP Entity %d\n%s_0(<%s>,<%s>, \"%s\")\n", n, bsp.ModelMacroPrefix(modelName), e.Pos.String(), a.String(), *prefix+modelName)
 				}
 
 			}
