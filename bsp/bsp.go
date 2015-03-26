@@ -107,7 +107,7 @@ func (bsp *BSP) POVLights() string {
 	ret := []string{}
 	for _, ent := range bsp.Raw.Entities {
 		// TODO: There are more complicated light sources.
-		if ent.Data["classname"] == "light" {
+		if strings.HasPrefix(ent.Data["classname"], "light") {
 			brightness, err := strconv.ParseFloat(ent.Data["light"], 64)
 			if err != nil {
 				brightness = 200.0
