@@ -43,11 +43,20 @@ var (
 	cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 	entities   = flag.Bool("entities", true, "Render entities too.")
 	verbose    = flag.Bool("v", false, "Verbose output.")
+	pakFiles   = flag.String("pak", "", "Comma-separated list of pakfiles to search for resources.")
 )
 
 func info(p pak.MultiPak, args ...string) {
 	fs := flag.NewFlagSet("info", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s -pak <pak0,pak1,...> info [options] <demofile.dem> \n", os.Args[0])
+		fs.PrintDefaults()
+	}
 	fs.Parse(args)
+	if fs.NArg() == 0 {
+		log.Fatalf("Need to specify a demo name.")
+	}
+
 	demo := fs.Arg(0)
 	df, err := p.Get(demo)
 	if err != nil {
@@ -106,10 +115,17 @@ func genTimeFrames(from, to, fps float64) []float64 {
 
 func convert(p pak.MultiPak, args ...string) {
 	fs := flag.NewFlagSet("convert", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s -pak <pak0,pak1,...> convert [options] <demofile.dem> \n", os.Args[0])
+		fs.PrintDefaults()
+	}
 	fps := fs.Float64("fps", 30.0, "Frames per second.")
 	outDir := fs.String("out", "render", "Output directory.")
 	cameraLight := fs.Bool("camera_light", false, "Add camera light.")
 	fs.Parse(args)
+	if fs.NArg() == 0 {
+		log.Fatalf("Need to specify a demo name.")
+	}
 	demo := fs.Arg(0)
 
 	df, err := p.Get(demo)
@@ -524,7 +540,14 @@ camera {
 	}
 }
 
+func usage() {
+	fmt.Fprintf(os.Stderr, "Usage: %s [global options] command [options]\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Commands:\n  info\n  convert\nGlobal options:\n")
+	flag.PrintDefaults()
+}
+
 func main() {
+	flag.Usage = usage
 	flag.Parse()
 
 	if *cpuprofile != "" {
@@ -536,18 +559,26 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	p, err := pak.MultiOpen(strings.Split(flag.Arg(0), ",")...)
+	pf := strings.Split(*pakFiles, ",")
+	p, err := pak.MultiOpen(pf...)
 	if err != nil {
-		log.Fatalf("MultiOpen(%q): %v", flag.Arg(0), err)
+		log.Fatalf("Opening pakfiles %q: %v", pf, err)
 	}
 	defer p.Close()
 
-	switch flag.Arg(1) {
+	if flag.NArg() == 0 {
+		usage()
+		log.Fatalf("Need to specify a command.")
+	}
+
+	cmd := flag.Arg(0)
+	args := flag.Args()[1:]
+	switch cmd {
 	case "convert":
-		convert(p, flag.Args()[2:]...)
+		convert(p, args...)
 	case "info":
-		info(p, flag.Args()[2:]...)
+		info(p, args...)
 	default:
-		log.Fatalf("Unknown command %q", flag.Arg(0))
+		log.Fatalf("Unknown command %q", cmd)
 	}
 }
