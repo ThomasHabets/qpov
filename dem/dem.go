@@ -21,6 +21,10 @@ package dem
 //   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 // http://www.quakewiki.net/archives/demospecs/dem/dem.html
+//
+// TODO
+// * Remove all log.Fatals
+// * Check errors from all read*() calls.
 import (
 	"bytes"
 	"encoding/binary"
@@ -549,45 +553,84 @@ func (block *Block) DecodeMessage() (Message, error) {
 		r.Entity, _ = readUint16(block.buf)
 		return r, nil
 	case 0x06: // Play sound.
-		mask, _ := readUint8(block.buf)
+		mask, err := readUint8(block.buf)
+		if err != nil {
+			return nil, err
+		}
 		if mask&0x1 != 0 {
-			readUint8(block.buf) // vol
+			_, err := readUint8(block.buf) // vol
+			if err != nil {
+				return nil, err
+			}
 		}
 		if mask&0x2 != 0 {
-			readUint8(block.buf) // attenuation
+			_, err := readUint8(block.buf) // attenuation
+			if err != nil {
+				return nil, err
+			}
 		}
-		entity_channel, _ := readUint16(block.buf)
+		entity_channel, err := readUint16(block.buf)
+		if err != nil {
+			return nil, err
+		}
 		channel := entity_channel & 0x07
 		_ = channel
 		ent := (entity_channel >> 3) & 0x1FFF
 		if debugEnt == ent {
 			log.Printf("Entity %d made a sound", ent)
 		}
-		readUint8(block.buf) // channel
-		readCoord(block.buf) // origin...
-		readCoord(block.buf)
-		readCoord(block.buf)
+		_, err = readUint8(block.buf) // channel
+		if err != nil {
+			return nil, err
+		}
+		_, err = readCoord(block.buf) // origin...
+		if err != nil {
+			return nil, err
+		}
+		_, err = readCoord(block.buf)
+		if err != nil {
+			return nil, err
+		}
+		_, err = readCoord(block.buf)
+		if err != nil {
+			return nil, err
+		}
 		return &MsgPlaySound{}, nil
 
 	case 0x07: // time
-		t, _ := readFloat(block.buf)
+		t, err := readFloat(block.buf)
 		t2 := MsgTime(t)
-		return &t2, nil
+		return &t2, err
 
 	case 0x08: // Print
-		s, _ := readString(block.buf)
+		s, err := readString(block.buf)
+		if err != nil {
+			return nil, err
+		}
 		if Verbose {
 			log.Printf("Print: %q", s)
 		}
 	case 0x09: // Stufftext
-		s, _ := readString(block.buf)
+		s, err := readString(block.buf)
+		if err != nil {
+			return nil, err
+		}
 		if Verbose {
 			log.Printf("Stufftext: %q", s)
 		}
 	case 0x0A: // Camera orientation.
-		x, _ := readAngle(block.buf)
-		y, _ := readAngle(block.buf)
-		z, _ := readAngle(block.buf)
+		x, err := readAngle(block.buf)
+		if err != nil {
+			return nil, err
+		}
+		y, err := readAngle(block.buf)
+		if err != nil {
+			return nil, err
+		}
+		z, err := readAngle(block.buf)
+		if err != nil {
+			return nil, err
+		}
 		if Verbose {
 			log.Printf("Camera orientation changed to %f %f %f", x, y, z)
 		}
@@ -606,15 +649,27 @@ func (block *Block) DecodeMessage() (Message, error) {
 		}
 		return &si, nil
 	case 0x0c: // light style
-		styleIndex, _ := readUint8(block.buf)
-		style, _ := readString(block.buf)
+		styleIndex, err := readUint8(block.buf)
+		if err != nil {
+			return nil, err
+		}
+		style, err := readString(block.buf)
+		if err != nil {
+			return nil, err
+		}
 		return &MsgLightStyle{
 			Index: styleIndex,
 			Style: style,
 		}, nil
 	case 0x0d: // set player name
-		i, _ := readUint8(block.buf)
-		name, _ := readString(block.buf)
+		i, err := readUint8(block.buf)
+		if err != nil {
+			return nil, err
+		}
+		name, err := readString(block.buf)
+		if err != nil {
+			return nil, err
+		}
 		if false {
 			log.Printf("Setting player %d name to %q", i, name)
 		}
@@ -623,14 +678,23 @@ func (block *Block) DecodeMessage() (Message, error) {
 			Name:  name,
 		}, nil
 	case 0x0e: // set frags
-		player, _ := readUint8(block.buf)
-		frags, _ := readUint16(block.buf)
+		player, err := readUint8(block.buf)
+		if err != nil {
+			return nil, err
+		}
+		frags, err := readUint16(block.buf)
+		if err != nil {
+			return nil, err
+		}
 		return &MsgFrags{
 			Player: player,
 			Frags:  frags,
 		}, nil
 	case 0x0F: // client data
-		mask, _ := readUint16(block.buf)
+		mask, err := readUint16(block.buf)
+		if err != nil {
+			return nil, err
+		}
 		if Verbose {
 			log.Printf("Mask: %04x", mask)
 		}
@@ -679,37 +743,58 @@ func (block *Block) DecodeMessage() (Message, error) {
 		if mask&SU_WEAPON != 0 {
 			readUint8(block.buf)
 		}
-		health, _ := readUint16(block.buf)
+		health, err := readUint16(block.buf)
+		if err != nil {
+			return nil, err
+		}
 		if Verbose {
 			log.Printf("Health: %v", health)
 		}
 
-		ammo, _ := readUint8(block.buf)
+		ammo, err := readUint8(block.buf)
+		if err != nil {
+			return nil, err
+		}
 		if Verbose {
 			log.Printf("Ammo: %v", ammo)
 		}
 
-		shells, _ := readUint8(block.buf)
+		shells, err := readUint8(block.buf)
+		if err != nil {
+			return nil, err
+		}
 		if Verbose {
 			log.Printf("Shells: %v", shells)
 		}
 
-		ammo_nails, _ := readUint8(block.buf)
+		ammo_nails, err := readUint8(block.buf)
+		if err != nil {
+			return nil, err
+		}
 		if Verbose {
 			log.Printf("Nails: %v", ammo_nails)
 		}
 
-		ammo_rockets, _ := readUint8(block.buf)
+		ammo_rockets, err := readUint8(block.buf)
+		if err != nil {
+			return nil, err
+		}
 		if Verbose {
 			log.Printf("Rockets: %v", ammo_rockets)
 		}
 
-		ammo_cells, _ := readUint8(block.buf)
+		ammo_cells, err := readUint8(block.buf)
+		if err != nil {
+			return nil, err
+		}
 		if Verbose {
 			log.Printf("Cells: %v", ammo_cells)
 		}
 
-		weapon, _ := readUint8(block.buf)
+		weapon, err := readUint8(block.buf)
+		if err != nil {
+			return nil, err
+		}
 		if Verbose {
 			log.Printf("Weapon: %v", weapon)
 		}
@@ -919,7 +1004,7 @@ func (d *Demo) ReadBlock() (*Block, error) {
 	}
 	data := make([]byte, block.Header.Blocksize, block.Header.Blocksize)
 	if _, err := d.r.Read(data); err != nil {
-		return nil, fmt.Errorf("Reading block of size %d: %v", block.Header.Blocksize, err)
+		return nil, fmt.Errorf("reading block of size %d: %v", block.Header.Blocksize, err)
 	}
 	block.buf = bytes.NewBuffer(data)
 	return block, nil
