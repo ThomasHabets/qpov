@@ -463,10 +463,12 @@ radiosity {
 }`
 	}
 
-	fmt.Fprintf(fo, `#version 3.6;
+	fmt.Fprintf(fo, `#version 3.7;
 #include "rad_def.inc"
 global_settings {
-  assumed_gamma 2.0
+  // 1.0 seems to be right for 3.7 & camera light.
+  // for 3.6, use 2.0?
+  assumed_gamma 1.0
   %s
 }
 #include "progs/soldier.mdl/model.inc"
