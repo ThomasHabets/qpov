@@ -7,8 +7,25 @@ https://github.com/ThomasHabets/qpov
 
 Introduction
 ============
-QPov converts Quake demos into POV-Ray files, ready to render.
+QPov takes the data files from Quake and turns them into POV-Ray,
+which is a raytracer that then renders them to png.
 [Example video](https://www.youtube.com/watch?v=jzcevsd5SGE).
+
+Why
+---
+Modern CPUs are idle too much. Ray tracing tends to be able to
+consume any and CPU cycles you give to it. QPOV generates data
+that POV-Ray can then use to solve this problem.
+
+A second reason is that Quake is getting harder to get running
+in good quality. GLQuake from Steam doesn't start on my machine,
+and if I want to watch Quake Done Quick then all the videos
+on YouTube are either low res, or has other settings that make
+them crap.
+
+I also want to experiment with POV-Ray and for example make
+programatic realistic water, and a quake demo gives me a nice 3D
+animation to work with.
 
 Installing
 ==========
@@ -23,17 +40,17 @@ You'll need the Quake data files, either shareware or full version.
 
 Optionally you can also use the
 [Quake Reforged](http://quakeone.com/reforged/downloads.html)
-replacement textures
+replacement textures.
 
 Running
 =======
 You need to convert Quake maps and models in addition to the demos.
 
 ```
-$ bsp /.../pak0.pak convert -out demo1
-$ mdl /.../pak0.pak convert -out demo1
 $ mkdir demo1
-$ dem /.../pak0.pak convert -out demo1 -fps 30 -camera_light demo1.dem
+$ bsp -pak /.../pak0.pak convert -out demo1
+$ mdl -pak /.../pak0.pak convert -out demo1
+$ dem -pak /.../pak0.pak convert -out demo1 -fps 30 -camera_light demo1.dem
 $ render -fast demo1/*.pov
 ```
 
@@ -48,6 +65,10 @@ Assuming 30fps and QDQr recam:
 * water:
   * e1m1: 232 610
   * e1m3: 300
+
+Blog posts this project
+-----------------------
+* https://blog.habets.se/2015/03/Raytracing-Quake-demos
 
 Interesting links
 -----------------
