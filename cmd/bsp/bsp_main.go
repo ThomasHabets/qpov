@@ -92,7 +92,7 @@ func convert(p pak.MultiPak, args ...string) {
 	}
 	outDir := fs.String("out", ".", "Output directory.")
 	retexturePack := fs.String("retexture", "", "Path to retexture pack.")
-	flatColor := fs.String("flat_color", "Gray25", "")
+	flatColor := fs.String("flat_color", "<0.25,0.25,0.25>", "")
 	textures := fs.Bool("textures", true, "Use textures.")
 	lights := fs.Bool("lights", false, "Export lights.")
 	maps := fs.String("maps", ".*", "Maps regex.")
