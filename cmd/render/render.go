@@ -44,8 +44,8 @@ var (
 	totalUser, totalSystem time.Duration
 )
 
-func doRender(files []string, done chan<- int) {
-	for n, f := range files {
+func doRender(files <-chan string, done chan<- bool) {
+	for f := range files {
 		func() {
 			ext := path.Ext(f)
 			base := f[:len(f)-len(ext)]
@@ -109,28 +109,31 @@ func doRender(files []string, done chan<- int) {
 				totalSystem += cmd.ProcessState.SystemTime()
 			}()
 		}()
-		done <- n
+		done <- true
 	}
 }
 
 func main() {
 	flag.Parse()
-	done := make(chan int)
+	done := make(chan bool)
 
 	if *concurrency < 0 {
 		*concurrency = runtime.NumCPU()
 	}
 
-	total := len(flag.Args())
-	step := total / *concurrency
 	st := time.Now()
-	for i := 0; i < *concurrency-1; i++ {
-		go doRender(flag.Args()[i*step:(i+1)*step], done)
+	files := make(chan string)
+	for i := 0; i < *concurrency; i++ {
+		go doRender(files, done)
 	}
-	go doRender(flag.Args()[(*concurrency-1)*step:], done)
+	for _, f := range flag.Args() {
+		files <- f
+	}
+	close(files)
 
 	finished := 0
-	for _ = range done {
+	for _ = range flag.Args() {
+		<-done
 		finished++
 		fmt.Printf("Finished %d of %d\n", finished, len(flag.Args()))
 		if finished == len(flag.Args()) {
