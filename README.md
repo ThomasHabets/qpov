@@ -62,7 +62,7 @@ Example frames
 Assuming 30fps and QDQr recam:
 * light levels:
   * e1m1: 10 610
-* water:
+* brown slime:
   * e1m1: 232 610
   * e1m3: 300
 
