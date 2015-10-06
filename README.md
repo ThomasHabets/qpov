@@ -1,18 +1,15 @@
-QPov
-====
+# QPov
 
 Copyright Thomas Habets <thomas@habets.se> 2015
 
 https://github.com/ThomasHabets/qpov
 
-Introduction
-============
+## Introduction
 QPov takes the data files from Quake and turns them into POV-Ray,
 which is a raytracer that then renders them to png.
 [Example video](https://www.youtube.com/watch?v=jzcevsd5SGE).
 
-Why
----
+## Why
 Modern CPUs are idle too much. Ray tracing tends to be able to
 consume any and CPU cycles you give to it. QPOV generates data
 that POV-Ray can then use to solve this problem.
@@ -27,8 +24,7 @@ I also want to experiment with POV-Ray and for example make
 programatic realistic water, and a quake demo gives me a nice 3D
 animation to work with.
 
-Installing
-==========
+## Installing
 ```
 $ mkdir go
 $ cd go
@@ -42,8 +38,7 @@ Optionally you can also use the
 [Quake Reforged](http://quakeone.com/reforged/downloads.html)
 replacement textures.
 
-Running
-=======
+## Running
 You need to convert Quake maps and models in addition to the demos.
 
 ```
@@ -54,11 +49,33 @@ $ dem -pak /.../pak0.pak convert -out demo1 -fps 30 -camera_light demo1.dem
 $ render -fast demo1/*.pov
 ```
 
-Hacking
-=======
+### Running a render node.
 
-Example frames
---------------
+```
+export AWS_ACCESS_KEY_ID=…
+export AWS_SECRET_ACCESS_KEY=…
+apt-get install schedtool povray{,-includes}
+mkdir qpov-wd
+drender -queue myqueue -wd qpov-wd
+```
+
+### Scheduling render work
+
+```
+export AWS_ACCESS_KEY_ID=…
+export AWS_SECRET_ACCESS_KEY=…
+dmaster \
+    -queue myqueue \
+    -package s3://mybucket/balcony.rar \
+    -dir balcony \
+    -file balcony.pov \
+    -destination s3://mybucket/balcony/ \
+    +Q11 +A0.3 +R4 +W3840 +H2160
+```
+
+## Hacking
+
+### Example frames
 Assuming 30fps and QDQr recam:
 * light levels:
   * e1m1: 10 610
@@ -66,10 +83,8 @@ Assuming 30fps and QDQr recam:
   * e1m1: 232 610
   * e1m3: 300
 
-Blog posts this project
------------------------
+### Blog posts this project
 * https://blog.habets.se/2015/03/Raytracing-Quake-demos
 
-Interesting links
------------------
+### Interesting links
 * https://www.quaddicted.com/engines/software_vs_glquake
