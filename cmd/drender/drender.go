@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"regexp"
 	"runtime"
 	"time"
 
@@ -63,8 +64,11 @@ func verifyPackage(n int, order *dist.Order) error {
 	{
 		var err error
 		s := s3.New(getAuth(), aws.USEast, nil)
-		// TODO: parse out bucket name.
-		b := s.Bucket("qpov")
+		bucket, dir, fn, err := s3Parse(order.Package)
+		if err != nil {
+			return err
+		}
+		b := s.Bucket(bucket)
 
 		of, err = ioutil.TempFile("", "")
 		if err != nil {
@@ -72,9 +76,8 @@ func verifyPackage(n int, order *dist.Order) error {
 		}
 		defer os.Remove(of.Name())
 
-		// TODO: handle subdirs.
 		log.Printf("(%d) Downloading %q...", n, order.Package)
-		r, err := b.GetReader(path.Base(order.Package))
+		r, err := b.GetReader(path.Join(dir, fn))
 		if err != nil {
 			return fmt.Errorf("getting package: %v", err)
 		}
@@ -133,11 +136,76 @@ func render(n int, order *dist.Order) error {
 	return cmd.Run()
 }
 
+func upload(n int, order *dist.Order) error {
+	log.Printf("(%d) Uploading...", n)
+
+	s := s3.New(getAuth(), aws.USEast, nil)
+
+	bucket, destDir, _, _ := s3Parse(order.Destination)
+	b := s.Bucket(bucket)
+
+	wd := path.Join(*root, path.Base(order.Package), order.Dir)
+	for _, e := range [][]string{
+		{"image/png", order.File},
+		{"text/plain", order.File + ".stdout"},
+		{"text/plain", order.File + ".stderr"},
+	} {
+		dest := path.Join(destDir, e[1])
+		log.Printf("(%d)  s3://%s/%s...", n, bucket, dest)
+		acl := s3.ACL("")
+		contentType := e[0]
+		f, err := os.Open(path.Join(wd, e[1]))
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		st, err := f.Stat()
+		if err != nil {
+			return err
+		}
+
+		if err := b.PutReader(dest, f, st.Size(), contentType, acl, s3.Options{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Return bucket, dir, fn.
+func s3Parse(s string) (string, string, string, error) {
+	r := `^s3://([^/]+)/(.*)(?:/(.*))?$`
+	re := regexp.MustCompile(r)
+	m := re.FindStringSubmatch(s)
+	if len(m) != 4 {
+		return "", "", "", fmt.Errorf("%q does not match %q", s, r)
+	}
+	return m[1], m[2], m[3], nil
+}
+
 func handle(n int, order *dist.Order) error {
+	// Sanity check order.
+	bucket, dir, fn, err := s3Parse(order.Destination)
+	if err != nil {
+		return fmt.Errorf("destination %q is not an s3 dir path", order.Destination)
+	}
+	if bucket == "" {
+		return fmt.Errorf("destination bucket is empty slash, was %q", order.Destination)
+	}
+	if dir == "" {
+		return fmt.Errorf("refusing to put results in bucket root: %q", order.Destination)
+	}
+	if fn != "" {
+		return fmt.Errorf("destination must end with slash, was %q", order.Destination)
+	}
+
+	// Run it.
 	if err := verifyPackage(n, order); err != nil {
 		return err
 	}
 	if err := render(n, order); err != nil {
+		return err
+	}
+	if err := upload(n, order); err != nil {
 		return err
 	}
 	return nil
@@ -166,7 +234,7 @@ func handler(n int, q *sqs.Queue) {
 			log.Fatalf("(%d) Receiving message: %v", n, err)
 		}
 		if len(r.Messages) == 0 {
-			log.Printf("Nothing to do...")
+			log.Printf("(%d) Nothing to do...", n)
 			time.Sleep(10 * time.Second)
 			continue
 		}
@@ -196,6 +264,8 @@ func handler(n int, q *sqs.Queue) {
 		if ok {
 			if _, err := q.DeleteMessage(&m); err != nil {
 				log.Printf("(%d) Failed to delete message %q", n, m)
+			} else {
+				log.Printf("(%d) Done", n)
 			}
 		}
 	}
