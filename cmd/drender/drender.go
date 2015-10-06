@@ -117,7 +117,7 @@ func render(n int, order *dist.Order) error {
 		bin = *povray
 	}
 	args = append(args, order.Args...)
-	args = append(args, pov)
+	args = append(args, "-D", pov)
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = wd
 	cmd.Stdout, err = os.Create(path.Join(wd, order.File+".stdout"))
@@ -168,6 +168,7 @@ func handler(n int, q *sqs.Queue) {
 
 func main() {
 	flag.Parse()
+	log.Printf("Starting up...")
 	conn := sqs.New(getAuth(), aws.USEast)
 	q, err := conn.GetQueue(*queueName)
 	if err != nil {
