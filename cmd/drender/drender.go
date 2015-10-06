@@ -171,9 +171,12 @@ func upload(n int, order *dist.Order) error {
 	bucket, destDir, _, _ := s3Parse(order.Destination)
 	b := s.Bucket(bucket)
 
+	re := regexp.MustCompile(`\.pov$`)
+	image := re.ReplaceAllString(order.File, ".png")
+
 	wd := path.Join(*root, path.Base(order.Package), order.Dir)
 	for _, e := range [][]string{
-		{"image/png", order.File},
+		{"image/png", image},
 		{"text/plain", order.File + ".stdout"},
 		{"text/plain", order.File + ".stderr"},
 		{"text/plain", order.File + ".info"},
