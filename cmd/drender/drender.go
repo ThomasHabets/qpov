@@ -122,7 +122,7 @@ func verifyPackage(n int, order *dist.Order) error {
 func render(n int, order *dist.Order) error {
 	log.Printf("(%d) Rendering...", n)
 	wd := path.Join(*root, path.Base(order.Package), order.Dir)
-	pov := path.Base(order.File)
+	pov := order.File
 
 	var err error
 	var bin string
