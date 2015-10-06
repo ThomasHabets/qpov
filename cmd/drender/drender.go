@@ -12,6 +12,7 @@ import (
 	"path"
 	"regexp"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/goamz/goamz/aws"
@@ -30,6 +31,8 @@ var (
 	schedtool   = flag.String("schedtool", "/usr/bin/schedtool", "Path to schedtool.")
 	concurrency = flag.Int("concurrency", -1, "Run this many povrays in parallel. <0 means set to number of CPUs.")
 	idle        = flag.Bool("idle", true, "Use idle priority.")
+
+	packageMutex sync.Mutex
 )
 
 func getAuth() aws.Auth {
@@ -41,6 +44,10 @@ func getAuth() aws.Auth {
 
 // verifyPackage downloads and unpacks the package, if needed.
 func verifyPackage(n int, order *dist.Order) error {
+	// Don't re-enter, to make sure we don't start the same download twice.
+	packageMutex.Lock()
+	defer packageMutex.Unlock()
+
 	wd := path.Join(*root, path.Base(order.Package))
 
 	// Verify working dir.
