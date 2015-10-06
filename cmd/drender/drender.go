@@ -22,7 +22,7 @@ import (
 )
 
 var (
-	queueName   = flag.String("queue", "qpov", "Name of SQS queue.")
+	queueName   = flag.String("queue", "", "Name of SQS queue.")
 	povray      = flag.String("povray", "/usr/bin/povray", "Path to POV-Ray.")
 	refreshTime = flag.Duration("lease", 30*time.Second, "Lease time.")
 	root        = flag.String("wd", "root", "Working directory")
