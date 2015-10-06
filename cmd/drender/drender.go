@@ -107,6 +107,11 @@ func verifyPackage(n int, order *dist.Order) error {
 }
 
 // render renders the order.
+// produces:
+// * png file
+// * pov.stderr
+// * pov.stdout
+// * pov.info
 func render(n int, order *dist.Order) error {
 	log.Printf("(%d) Rendering...", n)
 	wd := path.Join(*root, path.Base(order.Package), order.Dir)
@@ -133,7 +138,22 @@ func render(n int, order *dist.Order) error {
 	if err != nil {
 		return err
 	}
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	// Write process info.
+	{
+		f, err := os.Create(path.Join(wd, order.File+".info"))
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		s := cmd.ProcessState
+		fmt.Fprintf(f, "system %f\n", s.SystemTime().Seconds())
+		fmt.Fprintf(f, "user %f\n", s.UserTime().Seconds())
+	}
+	return nil
 }
 
 func upload(n int, order *dist.Order) error {
@@ -149,6 +169,7 @@ func upload(n int, order *dist.Order) error {
 		{"image/png", order.File},
 		{"text/plain", order.File + ".stdout"},
 		{"text/plain", order.File + ".stderr"},
+		{"text/plain", order.File + ".info"},
 	} {
 		dest := path.Join(destDir, e[1])
 		log.Printf("(%d)  s3://%s/%s...", n, bucket, dest)
