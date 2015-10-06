@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path"
 	"runtime"
+	"time"
 
 	"github.com/goamz/goamz/aws"
 	"github.com/goamz/goamz/s3"
@@ -22,6 +23,7 @@ import (
 var (
 	queueName   = flag.String("queue", "qpov", "Name of SQS queue.")
 	povray      = flag.String("povray", "/usr/bin/povray", "Path to POV-Ray.")
+	refreshTime = flag.Duration("lease", 30*time.Second, "Lease time.")
 	root        = flag.String("wd", "root", "Working directory")
 	flush       = flag.Bool("flush", false, "Flush all render jobs.")
 	schedtool   = flag.String("schedtool", "/usr/bin/schedtool", "Path to schedtool.")
@@ -141,24 +143,57 @@ func handle(n int, order *dist.Order) error {
 	return nil
 }
 
+func refresh(q *sqs.Queue, m *sqs.Message, refreshCh, doneCh chan struct{}) {
+	defer close(doneCh)
+	t := time.NewTicker(*refreshTime)
+	defer t.Stop()
+	for {
+		select {
+		case <-refreshCh:
+			return
+		case <-t.C:
+			if _, err := q.ChangeMessageVisibility(m, int(refreshTime.Seconds())*2); err != nil {
+				log.Printf("Failed to refresh message: %v", err)
+			}
+		}
+	}
+}
+
 func handler(n int, q *sqs.Queue) {
 	for {
 		r, err := q.ReceiveMessage(1)
 		if err != nil {
 			log.Fatalf("(%d) Receiving message: %v", n, err)
 		}
-		for _, m := range r.Messages {
+		if len(r.Messages) == 0 {
+			log.Printf("Nothing to do...")
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		m := r.Messages[0]
+		refreshChan := make(chan struct{})
+		doneChan := make(chan struct{})
+		go refresh(q, &m, refreshChan, doneChan)
+		ok := func() bool {
+			defer func() {
+				<-doneChan
+			}()
+			defer close(refreshChan)
 			log.Printf("(%d) Got job: %+v", n, m)
 			var order dist.Order
 			if err := json.Unmarshal([]byte(m.Body), &order); err != nil {
-				log.Fatalf("(%d) Failed to unmarshal message %q: %v", n, m.Body, err)
+				log.Printf("(%d) Failed to unmarshal message %q: %v", n, m.Body, err)
+				return false
 			}
 			if !*flush {
 				if err := handle(n, &order); err != nil {
 					log.Printf("(%d) Failed to handle order %+v: %v", n, order, err)
-					continue
+					return false
 				}
 			}
+			return true
+		}()
+		if ok {
 			if _, err := q.DeleteMessage(&m); err != nil {
 				log.Printf("(%d) Failed to delete message %q", n, m)
 			}
