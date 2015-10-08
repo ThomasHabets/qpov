@@ -29,7 +29,7 @@ var (
 	root        = flag.String("wd", "root", "Working directory")
 	flush       = flag.Bool("flush", false, "Flush all render jobs.")
 	schedtool   = flag.String("schedtool", "/usr/bin/schedtool", "Path to schedtool.")
-	concurrency = flag.Int("concurrency", -1, "Run this many povrays in parallel. <0 means set to number of CPUs.")
+	concurrency = flag.Int("concurrency", 1, "Run this many povrays in parallel. <=0 means set to number of CPUs.")
 	idle        = flag.Bool("idle", true, "Use idle priority.")
 
 	packageMutex sync.Mutex
