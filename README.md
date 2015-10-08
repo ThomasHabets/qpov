@@ -26,10 +26,10 @@ animation to work with.
 
 ## Installing
 ```
-$ mkdir go
-$ cd go
-$ GOPATH=$(pwd) go get github.com/ThomasHabets/qpov
-$ GOPATH=$(pwd) go build github.com/ThomasHabets/qpov/cmd/{bsp,dem,mdl,pak,render}
+mkdir go
+cd go
+GOPATH=$(pwd) go get github.com/ThomasHabets/qpov
+GOPATH=$(pwd) go build github.com/ThomasHabets/qpov/cmd/{bsp,dem,mdl,pak,render}
 ```
 
 You'll need the Quake data files, either shareware or full version.
@@ -42,11 +42,17 @@ replacement textures.
 You need to convert Quake maps and models in addition to the demos.
 
 ```
-$ mkdir demo1
-$ bsp -pak /.../pak0.pak convert -out demo1
-$ mdl -pak /.../pak0.pak convert -out demo1
-$ dem -pak /.../pak0.pak convert -out demo1 -fps 30 -camera_light demo1.dem
-$ render -fast demo1/*.pov
+mkdir demo1
+bsp -pak /.../pak0.pak convert -lights=false -out demo1
+mdl -pak /.../pak0.pak convert -out demo1
+dem -pak /.../pak0.pak convert -out demo1 -fps 30 -camera_light=true demo1.dem
+render -fast demo1/*.pov
+avconv -r 30 -i demo1/frame-%08d.png -f mp4 -q:v 0 -vcodec mpeg4 demo1.mp4
+```
+
+To mix in audio (can be created using `sound.sh` in `demo1` directory), run:
+```
+avconv -i demo1.mp4 -i sound.wav -c copy demo1-sound.mp4
 ```
 
 ### Running a render node.
