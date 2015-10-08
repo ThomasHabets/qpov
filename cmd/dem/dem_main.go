@@ -182,6 +182,10 @@ func convert(p pak.MultiPak, args ...string) {
 				if false {
 					fmt.Printf("Spawning %d: %+v\n", m.Entity, newState.ServerInfo.Models[m.Model])
 				}
+			} else if m, ok := msg.(*dem.MsgPlaySound); ok {
+				if false {
+					fmt.Printf("Play sound %d: %+v at %f\n", m.Sound, newState.ServerInfo.Sounds[m.Sound], newState.Time)
+				}
 			} else if m, ok := msg.(*dem.MsgUpdate); ok {
 				if false {
 					debugEnt := uint16(1)
@@ -227,6 +231,20 @@ func convert(p pak.MultiPak, args ...string) {
 				newState.SeenEntity = make(map[uint16]bool)
 			}
 		}
+	}
+	{
+		fs, err := os.Create(path.Join(*outDir, "sound.sh"))
+		if err != nil {
+			log.Fatalf("Failed to open sounds script: %v", err)
+		}
+		defer fs.Close()
+		var files []string
+		var delays []string
+		for _, s := range newState.Sounds {
+			files = append(files, newState.ServerInfo.Sounds[s.Sound.Sound])
+			delays = append(delays, fmt.Sprint(s.Time))
+		}
+		fmt.Fprintf(fs, "sox -M %s -b 16 -c 1 -r 44100 out.wav delay %s remix -p -\n", strings.Join(files, " "), strings.Join(delays, " "))
 	}
 }
 
@@ -288,6 +306,8 @@ func interpolateAngle(v0, v1 dem.Vertex, t float64) dem.Vertex {
 	return ret
 }
 
+// return true if object is moving too fast to be interpolated, and should instead jump into place.
+// This is for teleportations.
 func tooFast(s0, s1 *dem.State) bool {
 	const maxSpeed = 50.0
 	const maxAngleSpeed = 45.0

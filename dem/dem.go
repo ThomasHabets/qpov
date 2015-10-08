@@ -294,6 +294,10 @@ func readInt16(r io.Reader) (int16, error) {
 	return ret, nil
 }
 
+type SoundEvent struct {
+	Time  float64
+	Sound MsgPlaySound
+}
 type State struct {
 	Time       float64
 	Entities   []Entity
@@ -308,6 +312,8 @@ type State struct {
 	ViewAngle          Vertex
 	ServerInfo         ServerInfo
 	Level              *bsp.BSP
+
+	Sounds []SoundEvent
 }
 
 func NewState() *State {
@@ -480,9 +486,22 @@ type MsgPlayerState struct {
 
 func (m MsgPlayerState) Apply(s *State) {}
 
-type MsgPlaySound struct{}
+type MsgPlaySound struct {
+	Sound         int
+	X, Y, Z       float32
+	Channel       int // Auto, weapon, voice, item, body
+	Entity        uint16
+	EntityChannel int
+	Volume        int
+	Attenuation   int
+}
 
-func (m MsgPlaySound) Apply(s *State) {}
+func (m MsgPlaySound) Apply(s *State) {
+	s.Sounds = append(s.Sounds, SoundEvent{
+		Time:  s.Time,
+		Sound: m,
+	})
+}
 
 type MsgCameraPos struct {
 	Entity uint16
@@ -553,49 +572,56 @@ func (block *Block) DecodeMessage() (Message, error) {
 		r.Entity, _ = readUint16(block.buf)
 		return r, nil
 	case 0x06: // Play sound.
+		snd := MsgPlaySound{}
 		mask, err := readUint8(block.buf)
 		if err != nil {
 			return nil, err
 		}
 		if mask&0x1 != 0 {
-			_, err := readUint8(block.buf) // vol
+			t, err := readUint8(block.buf) // vol
 			if err != nil {
 				return nil, err
 			}
+			snd.Volume = int(t)
 		}
 		if mask&0x2 != 0 {
-			_, err := readUint8(block.buf) // attenuation
+			t, err := readUint8(block.buf) // attenuation
 			if err != nil {
 				return nil, err
 			}
+			snd.Attenuation = int(t)
 		}
-		entity_channel, err := readUint16(block.buf)
+		{
+			entityChannel, err := readUint16(block.buf)
+			if err != nil {
+				return nil, err
+			}
+			snd.Channel = int(entityChannel) & 0x07
+			snd.Entity = (uint16(entityChannel) >> 3) & 0x1FFF
+			if debugEnt == snd.Entity {
+				log.Printf("Entity %d made a sound", snd.Entity)
+			}
+		}
+		{
+			t, err := readUint8(block.buf)
+			if err != nil {
+				return nil, err
+			}
+			snd.Sound = int(t)
+		}
+		snd.X, err = readCoord(block.buf)
 		if err != nil {
 			return nil, err
 		}
-		channel := entity_channel & 0x07
-		_ = channel
-		ent := (entity_channel >> 3) & 0x1FFF
-		if debugEnt == ent {
-			log.Printf("Entity %d made a sound", ent)
-		}
-		_, err = readUint8(block.buf) // channel
+		snd.Y, err = readCoord(block.buf)
 		if err != nil {
 			return nil, err
 		}
-		_, err = readCoord(block.buf) // origin...
+		snd.Z, err = readCoord(block.buf)
 		if err != nil {
 			return nil, err
 		}
-		_, err = readCoord(block.buf)
-		if err != nil {
-			return nil, err
-		}
-		_, err = readCoord(block.buf)
-		if err != nil {
-			return nil, err
-		}
-		return &MsgPlaySound{}, nil
+		return &snd, nil
 
 	case 0x07: // time
 		t, err := readFloat(block.buf)
