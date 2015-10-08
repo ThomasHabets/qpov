@@ -73,6 +73,15 @@ dmaster \
     +Q11 +A0.3 +R4 +W3840 +H2160
 ```
 
+### Using retextures
+```
+7zr x QRP_map_textures_v.1.00.pk3.7z
+unzip QRP_map_textures_v.1.00.pk3
+for d in . *; do (cd $d && for i in *.tga; do convert $i $(basename $i .tga).png; done); done
+```
+
+And then use `-retexture=/path/to/textures` with `bsp`.
+
 ## Hacking
 
 ### Example frames
