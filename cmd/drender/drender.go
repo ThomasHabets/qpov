@@ -204,7 +204,7 @@ func upload(n int, order *dist.Order) error {
 
 // Return bucket, dir, fn.
 func s3Parse(s string) (string, string, string, error) {
-	r := `^s3://([^/]+)/(.*)(?:/(.*))?$`
+	r := `^s3://([^/]+)/(?:(.*)/)?(.*)$`
 	re := regexp.MustCompile(r)
 	m := re.FindStringSubmatch(s)
 	if len(m) != 4 {
