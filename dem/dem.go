@@ -37,6 +37,9 @@ import (
 )
 
 const (
+	version15         = 15
+	versionQuakeSpasm = 666
+
 	// States
 	//	1after model/sound precache, start spawning entities (``prespawn'')
 	//	2start initialising light effects
@@ -192,8 +195,8 @@ func parseServerInfo(r io.Reader) (ServerInfo, error) {
 	if err := binary.Read(r, binary.LittleEndian, &si.ServerVersion); err != nil {
 		log.Fatalf("Reading server version: %v", err)
 	}
-	if si.ServerVersion != 15 {
-		return si, fmt.Errorf("ServerVersion != 15: %v", si.ServerVersion)
+	if (si.ServerVersion != version15) && (si.ServerVersion != versionQuakeSpasm) {
+		return si, fmt.Errorf("ServerVersion %v not supported", si.ServerVersion)
 	}
 	if err := binary.Read(r, binary.LittleEndian, &si.MaxClients); err != nil {
 		log.Fatalf("Reading max clients: %v", err)
