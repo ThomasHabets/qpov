@@ -256,12 +256,10 @@ func convert(p pak.MultiPak, args ...string) {
 		var files []string
 		var delays []string
 		for _, s := range newState.Sounds {
-			fn := newState.ServerInfo.Sounds[s.Sound.Sound]
-			fmt.Printf("At %f: %s\n", s.Time, fn)
-			files = append(files, fn)
+			files = append(files, newState.ServerInfo.Sounds[s.Sound.Sound])
 			delays = append(delays, fmt.Sprint(s.Time))
 		}
-		fmt.Fprintf(fs, "sox -M %s -b 16 -c 1 -r 44100 out.wav delay %s remix -p -\n", strings.Join(files, " "), strings.Join(delays, " "))
+		fmt.Fprintf(fs, "sox -M %s -b 16 -c 1 -r 44100 out.wav delay %s remix -p - trim 1.5\n", strings.Join(files, " "), strings.Join(delays, " "))
 	}
 }
 

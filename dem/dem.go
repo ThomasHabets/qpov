@@ -20,6 +20,7 @@ package dem
 //   with this program; if not, write to the Free Software Foundation, Inc.,
 //   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
+// http://demospecs.half-empty.de/lmpc-alpha/
 // http://www.quakewiki.net/archives/demospecs/dem/dem.html
 //
 // TODO
@@ -224,6 +225,7 @@ func parseServerInfo(r io.Reader) (ServerInfo, error) {
 	}
 
 	// Read sound list.
+	si.Sounds = []string{""} // First sound is empty.
 	for {
 		s, err := readString(r)
 		if err != nil {
