@@ -7,12 +7,14 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path"
 	"regexp"
 	"runtime"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/goamz/goamz/aws"
@@ -31,9 +33,44 @@ var (
 	schedtool   = flag.String("schedtool", "/usr/bin/schedtool", "Path to schedtool.")
 	concurrency = flag.Int("concurrency", 1, "Run this many povrays in parallel. <=0 means set to number of CPUs.")
 	idle        = flag.Bool("idle", true, "Use idle priority.")
+	comment     = flag.String("comment", "", "Comment to record for stats, for this instance.")
 
 	packageMutex sync.Mutex
 )
+
+const (
+	amazonCloud        = "Amazon"
+	ec2InstanceTypeURL = "http://instance-data/latest/meta-data/instance-type"
+
+	infoSuffix = ".json"
+)
+
+type stats struct {
+	User string // TODO
+
+	// Run stats of POV-Ray.
+	Start                time.Time
+	End                  time.Time
+	SystemTime, UserTime time.Duration
+	Rusage               syscall.Rusage
+
+	// System info.
+	Hostname string   // os.Hostname
+	Uname    struct { // syscall.Uname
+		Sysname    string
+		Nodename   string
+		Release    string
+		Version    string
+		Machine    string
+		Domainname string
+	}
+	NumCPU       int    // runtime.CPUInfo
+	Version      string // runtime.Version
+	Cloud        string // Type of cloud. "Google" or "Amazon"
+	InstanceType string // E.g. "c4.8xlarge"
+	Comment      string // Custom comment.
+	CPUInfo      string // /proc/cpuinfo
+}
 
 func getAuth() aws.Auth {
 	return aws.Auth{
@@ -118,7 +155,7 @@ func verifyPackage(n int, order *dist.Order) error {
 // * png file
 // * pov.stderr
 // * pov.stdout
-// * pov.info
+// * pov<.infoSuffix>
 func render(n int, order *dist.Order) error {
 	log.Printf("(%d) Rendering...", n)
 	wd := path.Join(*root, path.Base(order.Package), order.Dir)
@@ -145,22 +182,92 @@ func render(n int, order *dist.Order) error {
 	if err != nil {
 		return err
 	}
+	startTime := time.Now()
 	if err := cmd.Run(); err != nil {
 		return err
 	}
 
 	// Write process info.
 	{
-		f, err := os.Create(path.Join(wd, order.File+".info"))
+		s := makeStats()
+		s.Start = startTime
+		s.End = time.Now()
+		if t, _ := cmd.ProcessState.SysUsage().(*syscall.Rusage); t != nil {
+			s.Rusage = *t
+		}
+		s.SystemTime = cmd.ProcessState.SystemTime()
+		s.UserTime = cmd.ProcessState.UserTime()
+
+		f, err := os.Create(path.Join(wd, order.File+infoSuffix))
 		if err != nil {
 			return err
 		}
 		defer f.Close()
-		s := cmd.ProcessState
-		fmt.Fprintf(f, "system %f\n", s.SystemTime().Seconds())
-		fmt.Fprintf(f, "user %f\n", s.UserTime().Seconds())
+		if str, err := json.Marshal(s); err != nil {
+			return err
+		} else {
+			if _, err := f.Write(str); err != nil {
+				return err
+			}
+			if err := f.Close(); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
+}
+
+func getCloud() string {
+	re := regexp.MustCompile(`.*\.amazonaws\.com$`)
+	h, _ := os.Hostname()
+	if re.MatchString(h) {
+		return amazonCloud
+	}
+	return ""
+}
+func cToStr(c [65]int8) string {
+	s := make([]byte, len(c))
+	l := 0
+	for ; l < len(c); l++ {
+		if c[l] == 0 {
+			break
+		}
+		s[l] = uint8(c[l])
+	}
+	return string(s[0:l])
+}
+
+func makeStats() *stats {
+	s := &stats{
+		Comment: *comment,
+	}
+	s.Hostname, _ = os.Hostname()
+
+	var u syscall.Utsname
+	if err := syscall.Uname(&u); err == nil {
+		s.Uname.Sysname = cToStr(u.Sysname)
+		s.Uname.Nodename = cToStr(u.Nodename)
+		s.Uname.Release = cToStr(u.Release)
+		s.Uname.Version = cToStr(u.Version)
+		s.Uname.Machine = cToStr(u.Machine)
+		s.Uname.Domainname = cToStr(u.Domainname)
+	}
+	s.NumCPU = runtime.NumCPU()
+	s.Version = runtime.Version()
+	s.Cloud = getCloud()
+	if s.Cloud == amazonCloud {
+		r, err := http.Get(ec2InstanceTypeURL)
+		if err == nil {
+			defer r.Body.Close()
+			body, err := ioutil.ReadAll(r.Body)
+			if err == nil {
+				s.InstanceType = string(body)
+			}
+		}
+	}
+	t, _ := ioutil.ReadFile("/proc/cpuinfo")
+	s.CPUInfo = string(t)
+	return s
 }
 
 func upload(n int, order *dist.Order) error {
@@ -179,7 +286,7 @@ func upload(n int, order *dist.Order) error {
 		{"image/png", image},
 		{"text/plain", order.File + ".stdout"},
 		{"text/plain", order.File + ".stderr"},
-		{"text/plain", order.File + ".info"},
+		{"text/plain", order.File + infoSuffix},
 	} {
 		dest := path.Join(destDir, e[1])
 		log.Printf("(%d)  s3://%s/%s...", n, bucket, dest)
