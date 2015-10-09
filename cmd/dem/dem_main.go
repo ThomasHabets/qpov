@@ -126,6 +126,8 @@ func convert(p pak.MultiPak, args ...string) {
 	fps := fs.Float64("fps", 30.0, "Frames per second.")
 	outDir := fs.String("out", "render", "Output directory.")
 	cameraLight := fs.Bool("camera_light", false, "Add camera light.")
+	outputSound := fs.Bool("output_sound", true, "Output sounds to .wav file.")
+	outputPOV := fs.Bool("output_pov", true, "Write POV files.")
 	fs.Parse(args)
 	if fs.NArg() == 0 {
 		log.Fatalf("Need to specify a demo name.")
@@ -219,7 +221,9 @@ func convert(p pak.MultiPak, args ...string) {
 					if *verbose {
 						log.Printf("Generating frame %d", frameNum)
 					}
-					generateFrame(p, *outDir, oldState, newState, frameNum, t, *cameraLight, *radiosity)
+					if *outputPOV {
+						generateFrame(p, *outDir, oldState, newState, frameNum, t, *cameraLight, *radiosity)
+					}
 					anyFrame = true
 					frameNum++
 				}
@@ -232,7 +236,9 @@ func convert(p pak.MultiPak, args ...string) {
 			}
 		}
 	}
-	{
+
+	// Output audio.
+	if *outputSound {
 		fs, err := os.Create(path.Join(*outDir, "sound.sh"))
 		if err != nil {
 			log.Fatalf("Failed to open sounds script: %v", err)
@@ -241,7 +247,9 @@ func convert(p pak.MultiPak, args ...string) {
 		var files []string
 		var delays []string
 		for _, s := range newState.Sounds {
-			files = append(files, newState.ServerInfo.Sounds[s.Sound.Sound])
+			fn := newState.ServerInfo.Sounds[s.Sound.Sound]
+			fmt.Printf("At %f: %s\n", s.Time, fn)
+			files = append(files, fn)
 			delays = append(delays, fmt.Sprint(s.Time))
 		}
 		fmt.Fprintf(fs, "sox -M %s -b 16 -c 1 -r 44100 out.wav delay %s remix -p -\n", strings.Join(files, " "), strings.Join(delays, " "))
@@ -332,6 +340,7 @@ func tooFast(s0, s1 *dem.State) bool {
 	return false
 }
 
+// generateFrame generates frame number `frameNum`
 func generateFrame(p pak.MultiPak, outDir string, oldState, newState *dem.State, frameNum int, t float64, cameraLight, radiosity bool) {
 	if newState.ServerInfo.Models == nil {
 		return
