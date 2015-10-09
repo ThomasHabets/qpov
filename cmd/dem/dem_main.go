@@ -134,9 +134,19 @@ func convert(p pak.MultiPak, args ...string) {
 	}
 	demo := fs.Arg(0)
 
-	df, err := p.Get(demo)
-	if err != nil {
-		log.Fatalf("Getting %q: %v", demo, err)
+	var df io.Reader
+	if _, err := os.Stat(demo); err == nil {
+		if dft, err := os.Open(demo); err != nil {
+			log.Fatalf("Opening %q: %v", demo, err)
+		} else {
+			defer dft.Close()
+			df = dft
+		}
+	} else {
+		df, err = p.Get(demo)
+		if err != nil {
+			log.Fatalf("Getting %q: %v", demo, err)
+		}
 	}
 	d := dem.Open(df)
 
@@ -237,7 +247,6 @@ func convert(p pak.MultiPak, args ...string) {
 		}
 	}
 
-	// Output audio.
 	if *outputSound {
 		fs, err := os.Create(path.Join(*outDir, "sound.sh"))
 		if err != nil {
