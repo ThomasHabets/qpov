@@ -48,6 +48,8 @@ const (
 type stats struct {
 	User string // TODO
 
+	Order string
+
 	// Run stats of POV-Ray.
 	Start                time.Time
 	End                  time.Time
@@ -193,6 +195,8 @@ func render(n int, order *dist.Order) error {
 	// Write process info.
 	{
 		s := makeStats()
+		t, _ := json.Marshal(order)
+		s.Order = string(t)
 		s.Start = startTime
 		s.End = time.Now()
 		if t, _ := cmd.ProcessState.SysUsage().(*syscall.Rusage); t != nil {
