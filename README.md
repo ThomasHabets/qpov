@@ -55,7 +55,7 @@ To mix in audio (can be created using `sound.sh` in `demo1` directory), run:
 avconv -i demo1.mp4 -i sound.wav -c copy demo1-sound.mp4
 ```
 
-### Running a render node.
+### Running a render node
 
 Suitable for EC2 Ubuntu:
 ```
