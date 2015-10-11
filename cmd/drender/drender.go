@@ -144,6 +144,9 @@ func verifyPackage(n int, order *dist.Order) error {
 		cmd := exec.Command("rar", "x", of.Name())
 		cmd.Dir = wd
 		if err := cmd.Run(); err != nil {
+			if err := os.RemoveAll(wd); err != nil {
+				log.Fatalf("Unrar failed, and deleting working dir failed too, can't recover: %v", err)
+			}
 			return err
 		}
 	}
