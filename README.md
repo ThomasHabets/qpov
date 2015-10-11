@@ -57,10 +57,13 @@ avconv -i demo1.mp4 -i sound.wav -c copy demo1-sound.mp4
 
 ### Running a render node.
 
+Suitable for EC2 Ubuntu:
 ```
 export AWS_ACCESS_KEY_ID=…
 export AWS_SECRET_ACCESS_KEY=…
-apt-get install schedtool povray{,-includes}
+sed -i 's/^# deb / deb /' /etc/apt/sources.list
+apt-get update
+apt-get install schedtool povray{,-includes} screen rar
 mkdir qpov-wd
 drender -queue myqueue -wd qpov-wd
 ```
