@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -40,7 +41,8 @@ var (
 
 const (
 	amazonCloud        = "Amazon"
-	ec2InstanceTypeURL = "http://instance-data/latest/meta-data/instance-type"
+	googleCloud        = "Google"
+	gceInstanceTypeURL = "http://metadata.google.internal./computeMetadata/v1/instance/machine-type"
 
 	infoSuffix = ".json"
 )
@@ -224,14 +226,40 @@ func render(n int, order *dist.Order) error {
 	return nil
 }
 
-func getCloud() string {
-	re := regexp.MustCompile(`.*\.amazonaws\.com$`)
-	h, _ := os.Hostname()
-	if re.MatchString(h) {
-		return amazonCloud
+func getCloud() (string, string) {
+	// Check for EC2.
+	{
+		var b bytes.Buffer
+		cmd := exec.Command("ec2metadata", "--instance-type")
+		cmd.Stdout = &b
+		if cmd.Run() == nil {
+			return amazonCloud, b.String()
+		}
 	}
-	return ""
+
+	// Check for GCE.
+	{
+		client := http.Client{
+			Timeout: 10 * time.Second,
+		}
+		req, err := http.NewRequest("GET", gceInstanceTypeURL, nil)
+		if err != nil {
+			log.Printf("Failed to create GCE request: %v", err)
+		}
+		req.Header.Add("Metadata-Flavor", "Google")
+		if resp, err := client.Do(req); err == nil && resp.StatusCode == http.StatusOK {
+			defer resp.Body.Close()
+			b, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				re := regexp.MustCompile(`.*/`)
+				return googleCloud, re.ReplaceAllString(string(b), "")
+			}
+		}
+	}
+
+	return "", ""
 }
+
 func cToStr(c [65]int8) string {
 	s := make([]byte, len(c))
 	l := 0
@@ -261,17 +289,7 @@ func makeStats() *stats {
 	}
 	s.NumCPU = runtime.NumCPU()
 	s.Version = runtime.Version()
-	s.Cloud = getCloud()
-	if s.Cloud == amazonCloud {
-		r, err := http.Get(ec2InstanceTypeURL)
-		if err == nil {
-			defer r.Body.Close()
-			body, err := ioutil.ReadAll(r.Body)
-			if err == nil {
-				s.InstanceType = string(body)
-			}
-		}
-	}
+	s.Cloud, s.InstanceType = getCloud()
 	t, _ := ioutil.ReadFile("/proc/cpuinfo")
 	s.CPUInfo = string(t)
 	return s
