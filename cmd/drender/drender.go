@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html/template"
 	"io"
 	"io/ioutil"
 	"log"
@@ -26,6 +27,7 @@ import (
 )
 
 var (
+	addr        = flag.String("addr", ":4900", "Status port to listen to.")
 	queueName   = flag.String("queue", "", "Name of SQS queue.")
 	povray      = flag.String("povray", "/usr/bin/povray", "Path to POV-Ray.")
 	refreshTime = flag.Duration("lease", 30*time.Second, "Lease time.")
@@ -37,7 +39,14 @@ var (
 	comment     = flag.String("comment", "", "Comment to record for stats, for this instance.")
 
 	packageMutex sync.Mutex
+	states       []state
 )
+
+type state struct {
+	sync.Mutex
+	Start time.Time
+	Order dist.Order
+}
 
 const (
 	amazonCloud        = "Amazon"
@@ -390,6 +399,7 @@ func refresh(q *sqs.Queue, m *sqs.Message, refreshCh, doneCh chan struct{}) {
 	}
 }
 
+// goroutine main() handling rendering.
 func handler(n int, q *sqs.Queue) {
 	for {
 		r, err := q.ReceiveMessage(1)
@@ -407,6 +417,9 @@ func handler(n int, q *sqs.Queue) {
 		go refresh(q, &m, refreshChan, doneChan)
 		ok := func() bool {
 			defer func() {
+				states[n].Lock()
+				defer states[n].Unlock()
+				states[n].Order = dist.Order{}
 				<-doneChan
 			}()
 			defer close(refreshChan)
@@ -416,6 +429,10 @@ func handler(n int, q *sqs.Queue) {
 				log.Printf("(%d) Failed to unmarshal message %q: %v", n, m.Body, err)
 				return false
 			}
+			states[n].Lock()
+			states[n].Start = time.Now()
+			states[n].Order = order
+			states[n].Unlock()
 			if !*flush {
 				if err := handle(n, &order); err != nil {
 					log.Printf("(%d) Failed to handle order %+v: %v", n, order, err)
@@ -434,6 +451,63 @@ func handler(n int, q *sqs.Queue) {
 	}
 }
 
+func handleRoot(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	st := makeStats()
+	t := template.Must(template.New("root").Parse(`
+<html>
+  <head>
+    <title>drender on {{.Stats.Hostname}}</title>
+    <style>
+#activity td {
+  border: 1px black solid;
+}
+    </style>
+  </head>
+  <body>
+    <h1>drender on {{.Stats.Hostname}}</h1>
+    <h2>System</h2>
+    <table>
+      <tr><th>NumCPU</th><td>{{.Stats.NumCPU}}</td></tr>
+    </table>
+    <h2>Activity</h2>
+    <table id="activity">
+      <tr>
+        <th>Start</th>
+        <th>Package</th>
+        <th>Dir</th>
+        <th>File</th>
+        <th>Destination</th>
+        <th>Args</th>
+      </tr>
+      {{range .States}}
+        <tr>
+          <td>{{.Start}}</td>
+          <td>{{.Order.Package}}</td>
+          <td>{{.Order.Dir}}</td>
+          <td>{{.Order.File}}</td>
+          <td>{{.Order.Destination}}</td>
+          <td>{{.Order.Args}}</td>
+        </tr>
+      {{end}}
+    </table>
+  </body>
+</html>`))
+	for n := range states {
+		states[n].Lock()
+		defer states[n].Unlock()
+	}
+	if err := t.Execute(w, struct {
+		Stats  *stats
+		States []state
+	}{
+		Stats:  st,
+		States: states,
+	}); err != nil {
+		log.Printf("Template rendering error: %v", err)
+	}
+}
+
 func main() {
 	flag.Parse()
 	log.Printf("Starting up...")
@@ -446,8 +520,10 @@ func main() {
 		*concurrency = runtime.NumCPU()
 	}
 
+	states = make([]state, *concurrency, *concurrency)
 	for c := 0; c < *concurrency; c++ {
 		go handler(c, q)
 	}
-	select {}
+	http.HandleFunc("/", handleRoot)
+	log.Fatal(http.ListenAndServe(*addr, nil))
 }
