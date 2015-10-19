@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"strings"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -148,7 +149,7 @@ func verifyPackage(n int, order *dist.Order) error {
 	}
 
 	// Unpack.
-	{
+	if strings.EqualFold(path.Ext(order.Package), ".rar") {
 		err := os.Mkdir(wd, 0700)
 		if err != nil && !os.IsExist(err) {
 			return fmt.Errorf("creating working dir %q: %v", wd, err)
@@ -162,6 +163,22 @@ func verifyPackage(n int, order *dist.Order) error {
 			}
 			return err
 		}
+	} else if strings.HasSuffix(strings.ToLower(order.Package), ".tar.gz") {
+		err := os.Mkdir(wd, 0700)
+		if err != nil && !os.IsExist(err) {
+			return fmt.Errorf("creating working dir %q: %v", wd, err)
+		}
+		log.Printf("(%d) Unpacking %q into %q...", n, order.Package, wd)
+		cmd := exec.Command("tar", "xzf", of.Name())
+		cmd.Dir = wd
+		if err := cmd.Run(); err != nil {
+			if err := os.RemoveAll(wd); err != nil {
+				log.Fatalf("Untar failed, and deleting working dir failed too, can't recover: %v", err)
+			}
+			return err
+		}
+	} else {
+		return fmt.Errorf("unknown package file type for %q", order.Package)
 	}
 	return nil
 }
