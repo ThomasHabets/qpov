@@ -44,6 +44,7 @@ var (
 	cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 	entities   = flag.Bool("entities", true, "Render entities too.")
 	verbose    = flag.Bool("v", false, "Verbose output.")
+	gamma      = flag.Float64("gamma", 1.0, "Gamma to use. 1.0 is good for POV-Ray 3.7, 2.0 for POV-Ray 3.6.")
 	pakFiles   = flag.String("pak", "", "Comma-separated list of pakfiles to search for resources.")
 	version    = flag.String("version", "3.7", "POV-Ray version to generate data for.")
 	prefix     = flag.String("prefix", "", "Add this prefix to all paths to maps and models.")
@@ -521,13 +522,8 @@ camera {
   translate <{{.EyeLevel}}>
 }
 `))
-	gamma := "1.0"
-	switch *version {
-	case "3.6":
-		gamma = "2.0"
-	}
 	if err := tmpl.Execute(fo, struct {
-		Gamma                  string
+		Gamma                  float64
 		Prefix                 string
 		Version                string
 		Radiosity              bool
@@ -540,7 +536,7 @@ camera {
 	}{
 		Prefix:    *prefix,
 		Version:   *version,
-		Gamma:     gamma,
+		Gamma:     *gamma,
 		Radiosity: radiosity,
 		Level:     state.ServerInfo.Models[0],
 		Models:    models,

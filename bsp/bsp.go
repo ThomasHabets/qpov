@@ -26,6 +26,7 @@
 package bsp
 
 import (
+	"flag"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -33,17 +34,20 @@ import (
 )
 
 const (
-	// POV output parameters to add to all light_sources.
-	// Values found by experimentation.
-	lightMultiplier   = 0.7   // Multiplier to light intensity.
-	lightFadeDistance = 120.0 // fade_distance
-	lightFadePower    = 2.0   // fade_power
-
 	// Prefix for all BSP file macros.
 	macroPrefix = "modelprefix_"
 )
 
 var (
+	// POV output parameters to add to all light_sources.
+	// Values found by experimentation.
+	// Test values that have worked out:
+	//  Package        Demo        Level    Light values     Gamma
+	//  base install   demo1.dem   e1m3     3, 20, 3         2.0
+	lightMultiplier   = flag.Float64("light_multiplier", 3.0, "Light strength multiplier.")
+	lightFadeDistance = flag.Float64("light_fade_distance", 20.0, "Light fade distance.")
+	lightFadePower    = flag.Float64("light_fade_power", 2.0, "Light fade power.")
+
 	Verbose = false
 )
 
@@ -113,13 +117,14 @@ func (bsp *BSP) POVLights() string {
 				brightness = 200.0
 			}
 			brightness /= 200.0 // 200.0 is Quake baseline.
+			// TODO: I think brightness should actually multiply with fade_distance, not color.
 			ret = append(ret, fmt.Sprintf(`
 light_source {
   <%v>
   rgb<1,1,1>*%g*%g
   fade_distance %g
   fade_power %g
-}`, ent.Pos.String(), brightness, lightMultiplier, lightFadeDistance, lightFadePower))
+}`, ent.Pos.String(), brightness, *lightMultiplier, *lightFadeDistance, *lightFadePower))
 		}
 	}
 	return strings.Join(ret, "\n")
