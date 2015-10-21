@@ -46,7 +46,7 @@ var (
 type scheduler interface {
 	get() (string, string, error)
 	renew(id string, dur time.Duration) error
-	done(id string) error
+	done(id string, img, stdout, stderr []byte, j string) error
 }
 
 type state struct {
@@ -92,13 +92,6 @@ type stats struct {
 	CPUInfo      string // /proc/cpuinfo
 }
 
-func getAuth() aws.Auth {
-	return aws.Auth{
-		AccessKey: os.Getenv("AWS_ACCESS_KEY_ID"),
-		SecretKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
-	}
-}
-
 // verifyPackage downloads and unpacks the package, if needed.
 func verifyPackage(n int, order *dist.Order) error {
 	// Don't re-enter, to make sure we don't start the same download twice.
@@ -128,7 +121,7 @@ func verifyPackage(n int, order *dist.Order) error {
 	{
 		var err error
 		s := s3.New(getAuth(), aws.USEast, nil)
-		bucket, dir, fn, err := s3Parse(order.Package)
+		bucket, dir, fn, err := dist.S3Parse(order.Package)
 		if err != nil {
 			return err
 		}
@@ -332,7 +325,7 @@ func upload(n int, order *dist.Order) error {
 
 	s := s3.New(getAuth(), aws.USEast, nil)
 
-	bucket, destDir, _, _ := s3Parse(order.Destination)
+	bucket, destDir, _, _ := dist.S3Parse(order.Destination)
 	b := s.Bucket(bucket)
 
 	re := regexp.MustCompile(`\.pov$`)
@@ -366,20 +359,9 @@ func upload(n int, order *dist.Order) error {
 	return nil
 }
 
-// Return bucket, dir, fn.
-func s3Parse(s string) (string, string, string, error) {
-	r := `^s3://([^/]+)/(?:(.*)/)?(.*)$`
-	re := regexp.MustCompile(r)
-	m := re.FindStringSubmatch(s)
-	if len(m) != 4 {
-		return "", "", "", fmt.Errorf("%q does not match %q", s, r)
-	}
-	return m[1], m[2], m[3], nil
-}
-
 func handle(n int, order *dist.Order) error {
 	// Sanity check order.
-	bucket, dir, fn, err := s3Parse(order.Destination)
+	bucket, dir, fn, err := dist.S3Parse(order.Destination)
 	if err != nil {
 		return fmt.Errorf("destination %q is not an s3 dir path", order.Destination)
 	}
@@ -400,8 +382,10 @@ func handle(n int, order *dist.Order) error {
 	if err := render(n, order); err != nil {
 		return err
 	}
-	if err := upload(n, order); err != nil {
-		return err
+	if *schedAddr == "" {
+		if err := upload(n, order); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -437,6 +421,7 @@ func handler(n int, q scheduler) {
 		refreshChan := make(chan struct{})
 		doneChan := make(chan struct{})
 		go refresh(q, id, refreshChan, doneChan)
+		var order dist.Order
 		ok := func() bool {
 			defer func() {
 				states[n].Lock()
@@ -446,7 +431,6 @@ func handler(n int, q scheduler) {
 			}()
 			defer close(refreshChan)
 			log.Printf("(%d) Got job: %q: %q", n, id, encodedOrder)
-			var order dist.Order
 			if err := json.Unmarshal([]byte(encodedOrder), &order); err != nil {
 				log.Printf("(%d) Failed to unmarshal message %q: %v", n, encodedOrder, err)
 				return false
@@ -464,7 +448,29 @@ func handler(n int, q scheduler) {
 			return true
 		}()
 		if ok {
-			if err := q.done(id); err != nil {
+			base := path.Join(*root, path.Base(order.Package), order.Dir)
+			re := regexp.MustCompile(`\.pov$`)
+			img, err := ioutil.ReadFile(path.Join(base, re.ReplaceAllString(order.File, ".png")))
+			if err != nil {
+				log.Printf("(%d) Failed to read output png: %v", err)
+				continue
+			}
+			stdout, err := ioutil.ReadFile(path.Join(base, order.File+".stderr"))
+			if err != nil {
+				log.Printf("(%d) Failed to read stdout: %v", err)
+				continue
+			}
+			stderr, err := ioutil.ReadFile(path.Join(base, order.File+".stderr"))
+			if err != nil {
+				log.Printf("(%d) Failed to read stderr: %v", err)
+				continue
+			}
+			j, err := ioutil.ReadFile(path.Join(base, order.File+infoSuffix))
+			if err != nil {
+				log.Printf("(%d) Failed to read json: %v", err)
+				continue
+			}
+			if err := q.done(id, img, stdout, stderr, string(j)); err != nil {
 				log.Printf("(%d) Failed to delete message %q", n, id)
 			} else {
 				log.Printf("(%d) Done", n)

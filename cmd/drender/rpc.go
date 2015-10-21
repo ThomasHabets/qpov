@@ -27,9 +27,13 @@ func (s *rpcScheduler) renew(id string, dur time.Duration) error {
 	return err
 }
 
-func (s *rpcScheduler) done(id string) error {
+func (s *rpcScheduler) done(id string, img, stdout, stderr []byte, j string) error {
 	_, err := s.client.Done(context.Background(), &pb.DoneRequest{
-		LeaseId: proto.String(id),
+		LeaseId:      proto.String(id),
+		Image:        img,
+		Stdout:       stdout,
+		Stderr:       stderr,
+		JsonMetadata: proto.String(j),
 	})
 	return err
 }

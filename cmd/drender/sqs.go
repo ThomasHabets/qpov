@@ -3,11 +3,19 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/goamz/goamz/aws"
 	"github.com/goamz/goamz/sqs"
 )
+
+func getAuth() aws.Auth {
+	return aws.Auth{
+		AccessKey: os.Getenv("AWS_ACCESS_KEY_ID"),
+		SecretKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
+	}
+}
 
 type sqsScheduler struct {
 	q *sqs.Queue
@@ -32,7 +40,7 @@ func (s *sqsScheduler) renew(id string, dur time.Duration) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (s *sqsScheduler) done(id string) error {
+func (s *sqsScheduler) done(id string, img, stdout, stderr []byte, j string) error {
 	//_, err := s.q.DeleteMessage(&m)
 	return fmt.Errorf("not implemented")
 }

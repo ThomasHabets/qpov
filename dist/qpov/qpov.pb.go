@@ -92,6 +92,10 @@ func (*RenewReply) ProtoMessage()    {}
 
 type DoneRequest struct {
 	LeaseId          *string `protobuf:"bytes,1,req,name=lease_id" json:"lease_id,omitempty"`
+	Image            []byte  `protobuf:"bytes,2,req,name=image" json:"image,omitempty"`
+	Stdout           []byte  `protobuf:"bytes,3,req,name=stdout" json:"stdout,omitempty"`
+	Stderr           []byte  `protobuf:"bytes,4,req,name=stderr" json:"stderr,omitempty"`
+	JsonMetadata     *string `protobuf:"bytes,5,opt,name=json_metadata" json:"json_metadata,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
 }
 
@@ -102,6 +106,34 @@ func (*DoneRequest) ProtoMessage()    {}
 func (m *DoneRequest) GetLeaseId() string {
 	if m != nil && m.LeaseId != nil {
 		return *m.LeaseId
+	}
+	return ""
+}
+
+func (m *DoneRequest) GetImage() []byte {
+	if m != nil {
+		return m.Image
+	}
+	return nil
+}
+
+func (m *DoneRequest) GetStdout() []byte {
+	if m != nil {
+		return m.Stdout
+	}
+	return nil
+}
+
+func (m *DoneRequest) GetStderr() []byte {
+	if m != nil {
+		return m.Stderr
+	}
+	return nil
+}
+
+func (m *DoneRequest) GetJsonMetadata() string {
+	if m != nil && m.JsonMetadata != nil {
+		return *m.JsonMetadata
 	}
 	return ""
 }
