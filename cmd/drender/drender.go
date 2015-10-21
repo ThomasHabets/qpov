@@ -455,7 +455,7 @@ func handler(n int, q scheduler) {
 				log.Printf("(%d) Failed to read output png: %v", err)
 				continue
 			}
-			stdout, err := ioutil.ReadFile(path.Join(base, order.File+".stderr"))
+			stdout, err := ioutil.ReadFile(path.Join(base, order.File+".stdout"))
 			if err != nil {
 				log.Printf("(%d) Failed to read stdout: %v", err)
 				continue
