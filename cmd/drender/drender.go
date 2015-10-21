@@ -445,7 +445,7 @@ func handler(n int, q scheduler) {
 				<-doneChan
 			}()
 			defer close(refreshChan)
-			log.Printf("(%d) Got job: %+v", n, id)
+			log.Printf("(%d) Got job: %q: %q", n, id, encodedOrder)
 			var order dist.Order
 			if err := json.Unmarshal([]byte(encodedOrder), &order); err != nil {
 				log.Printf("(%d) Failed to unmarshal message %q: %v", n, encodedOrder, err)
