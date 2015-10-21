@@ -85,7 +85,9 @@ func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, erro
 	if err != nil {
 		return nil, err
 	}
-	return &pb.AddReply{}, nil
+	return &pb.AddReply{
+		OrderId: proto.String(id),
+	}, nil
 }
 
 func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply, error) {

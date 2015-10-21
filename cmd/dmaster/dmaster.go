@@ -5,13 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/goamz/goamz/aws"
-	"github.com/goamz/goamz/sqs"
 
 	"github.com/ThomasHabets/qpov/dist"
 )
@@ -23,12 +19,18 @@ var (
 	file      = flag.String("file", "", "POV file to render.")
 	dst       = flag.String("destination", "", "S3 directory to store results in.")
 	dryRun    = flag.Bool("dry_run", false, "Don't actually enqueue.")
+	schedAddr = flag.String("scheduler", "", "Scheduler address.")
 
 	frames Range
 )
 
 func init() {
 	flag.Var(&frames, "frames", "Order many frames to be rendered. In format '1-10' or '1-10+2' for only doing odd numbered frames.")
+}
+
+type scheduler interface {
+	add(string) error
+	close()
 }
 
 type Range struct {
@@ -65,18 +67,11 @@ func (r *Range) String() string {
 	return fmt.Sprintf("%d-%d+%d", r.From, r.To, r.Skip)
 }
 
-func getAuth() aws.Auth {
-	return aws.Auth{
-		AccessKey: os.Getenv("AWS_ACCESS_KEY_ID"),
-		SecretKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
-	}
-}
-
 func main() {
 	flag.Parse()
 
-	if *queueName == "" {
-		log.Fatalf("Must supply -queue")
+	if *schedAddr == "" && *queueName == "" {
+		log.Fatalf("Must supply -queue or -scheduler")
 	}
 	if *pkg == "" {
 		log.Fatalf("Must supply -package")
@@ -88,11 +83,9 @@ func main() {
 		log.Fatalf("Must supply -destination")
 	}
 
-	conn := sqs.New(getAuth(), aws.USEast)
-	q, err := conn.GetQueue(*queueName)
-	if err != nil {
-		log.Fatalf("Getting queue: %v", err)
-	}
+	var q scheduler
+	q = newRPCScheduler()
+	defer q.close()
 
 	if frames.Skip == 0 {
 		// Just one.
@@ -111,7 +104,7 @@ func main() {
 		if *dryRun {
 			log.Printf("Would have scheduled %v", string(order))
 		} else {
-			if _, err := q.SendMessage(string(order)); err != nil {
+			if err := q.add(string(order)); err != nil {
 				log.Fatalf("Failed to enqueue: %v", err)
 			}
 		}
@@ -152,7 +145,7 @@ OK (y/N)?
 			if *dryRun {
 				log.Printf("Would have scheduled %v", string(order))
 			} else {
-				if _, err := q.SendMessage(string(order)); err != nil {
+				if err := q.add(string(order)); err != nil {
 					log.Fatalf("Failed to enqueue: %v", err)
 				}
 			}

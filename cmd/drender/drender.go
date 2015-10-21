@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"strings"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -16,13 +15,13 @@ import (
 	"path"
 	"regexp"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/goamz/goamz/aws"
 	"github.com/goamz/goamz/s3"
-	"github.com/goamz/goamz/sqs"
 
 	"github.com/ThomasHabets/qpov/dist"
 )
@@ -38,10 +37,17 @@ var (
 	concurrency = flag.Int("concurrency", 1, "Run this many povrays in parallel. <=0 means set to number of CPUs.")
 	idle        = flag.Bool("idle", true, "Use idle priority.")
 	comment     = flag.String("comment", "", "Comment to record for stats, for this instance.")
+	schedAddr   = flag.String("scheduler", "", "Scheduler address.")
 
 	packageMutex sync.Mutex
 	states       []state
 )
+
+type scheduler interface {
+	get() (string, string, error)
+	renew(id string, dur time.Duration) error
+	done(id string) error
+}
 
 type state struct {
 	sync.Mutex
@@ -400,7 +406,7 @@ func handle(n int, order *dist.Order) error {
 	return nil
 }
 
-func refresh(q *sqs.Queue, m *sqs.Message, refreshCh, doneCh chan struct{}) {
+func refresh(q scheduler, id string, refreshCh, doneCh chan struct{}) {
 	defer close(doneCh)
 	t := time.NewTicker(*refreshTime)
 	defer t.Stop()
@@ -409,7 +415,7 @@ func refresh(q *sqs.Queue, m *sqs.Message, refreshCh, doneCh chan struct{}) {
 		case <-refreshCh:
 			return
 		case <-t.C:
-			if _, err := q.ChangeMessageVisibility(m, int(refreshTime.Seconds())*2); err != nil {
+			if err := q.renew(id, 2**refreshTime); err != nil {
 				log.Printf("Failed to refresh message: %v", err)
 			}
 		}
@@ -417,21 +423,20 @@ func refresh(q *sqs.Queue, m *sqs.Message, refreshCh, doneCh chan struct{}) {
 }
 
 // goroutine main() handling rendering.
-func handler(n int, q *sqs.Queue) {
+func handler(n int, q scheduler) {
 	for {
-		r, err := q.ReceiveMessage(1)
+		id, encodedOrder, err := q.get()
 		if err != nil {
 			log.Fatalf("(%d) Receiving message: %v", n, err)
 		}
-		if len(r.Messages) == 0 {
+		if id == "" {
 			log.Printf("(%d) Nothing to do...", n)
 			time.Sleep(10 * time.Second)
 			continue
 		}
-		m := r.Messages[0]
 		refreshChan := make(chan struct{})
 		doneChan := make(chan struct{})
-		go refresh(q, &m, refreshChan, doneChan)
+		go refresh(q, id, refreshChan, doneChan)
 		ok := func() bool {
 			defer func() {
 				states[n].Lock()
@@ -440,10 +445,10 @@ func handler(n int, q *sqs.Queue) {
 				<-doneChan
 			}()
 			defer close(refreshChan)
-			log.Printf("(%d) Got job: %+v", n, m)
+			log.Printf("(%d) Got job: %+v", n, id)
 			var order dist.Order
-			if err := json.Unmarshal([]byte(m.Body), &order); err != nil {
-				log.Printf("(%d) Failed to unmarshal message %q: %v", n, m.Body, err)
+			if err := json.Unmarshal([]byte(encodedOrder), &order); err != nil {
+				log.Printf("(%d) Failed to unmarshal message %q: %v", n, encodedOrder, err)
 				return false
 			}
 			states[n].Lock()
@@ -459,8 +464,8 @@ func handler(n int, q *sqs.Queue) {
 			return true
 		}()
 		if ok {
-			if _, err := q.DeleteMessage(&m); err != nil {
-				log.Printf("(%d) Failed to delete message %q", n, m)
+			if err := q.done(id); err != nil {
+				log.Printf("(%d) Failed to delete message %q", n, id)
 			} else {
 				log.Printf("(%d) Done", n)
 			}
@@ -528,18 +533,17 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 func main() {
 	flag.Parse()
 	log.Printf("Starting up...")
-	conn := sqs.New(getAuth(), aws.USEast)
-	q, err := conn.GetQueue(*queueName)
-	if err != nil {
-		log.Fatalf("Getting queue: %v", err)
-	}
+
+	var s scheduler
+	s = newRPCScheduler()
+
 	if *concurrency <= 0 {
 		*concurrency = runtime.NumCPU()
 	}
 
 	states = make([]state, *concurrency, *concurrency)
 	for c := 0; c < *concurrency; c++ {
-		go handler(c, q)
+		go handler(c, s)
 	}
 	http.HandleFunc("/", handleRoot)
 	log.Fatal(http.ListenAndServe(*addr, nil))
