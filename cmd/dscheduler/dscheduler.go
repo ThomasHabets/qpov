@@ -19,7 +19,7 @@ import (
 
 var (
 	dbConnect        = flag.String("db", "", "")
-	defaultLeaseTime = 60 * time.Second
+	defaultLeaseTime = time.Hour
 	db               *sql.DB
 	addr             = flag.String("port", ":9999", "Addr to listen to.")
 )
