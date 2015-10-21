@@ -20,9 +20,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/goamz/goamz/aws"
-	"github.com/goamz/goamz/s3"
-
 	"github.com/ThomasHabets/qpov/dist"
 )
 
@@ -117,34 +114,32 @@ func verifyPackage(n int, order *dist.Order) error {
 	}
 
 	// Download package.
-	var of *os.File
-	{
+	var ofName string
+	if strings.HasPrefix(order.Package, "s3://") {
 		var err error
-		s := s3.New(getAuth(), aws.USEast, nil)
-		bucket, dir, fn, err := dist.S3Parse(order.Package)
+		ofName, err = s3Download(n, order)
 		if err != nil {
 			return err
 		}
-		b := s.Bucket(bucket)
-
-		of, err = ioutil.TempFile("", "")
+	} else {
+		log.Printf("(%d) Downloading %q...", n, order.Package)
+		r, err := http.Get(order.Package)
+		if err != nil {
+			return err
+		}
+		defer r.Body.Close()
+		of, err := ioutil.TempFile("", "")
 		if err != nil {
 			return err
 		}
 		defer os.Remove(of.Name())
-
-		log.Printf("(%d) Downloading %q...", n, order.Package)
-		r, err := b.GetReader(path.Join(dir, fn))
-		if err != nil {
-			return fmt.Errorf("getting package: %v", err)
-		}
-		defer r.Close()
-		if _, err := io.Copy(of, r); err != nil {
+		if _, err := io.Copy(of, r.Body); err != nil {
 			return fmt.Errorf("downloading package: %v", err)
 		}
 		if err := of.Close(); err != nil {
 			return fmt.Errorf("closing package file: %v", err)
 		}
+		ofName = of.Name()
 	}
 
 	// Unpack.
@@ -154,7 +149,7 @@ func verifyPackage(n int, order *dist.Order) error {
 			return fmt.Errorf("creating working dir %q: %v", wd, err)
 		}
 		log.Printf("(%d) Unpacking %q into %q...", n, order.Package, wd)
-		cmd := exec.Command("rar", "x", of.Name())
+		cmd := exec.Command("rar", "x", ofName)
 		cmd.Dir = wd
 		if err := cmd.Run(); err != nil {
 			if err := os.RemoveAll(wd); err != nil {
@@ -168,7 +163,7 @@ func verifyPackage(n int, order *dist.Order) error {
 			return fmt.Errorf("creating working dir %q: %v", wd, err)
 		}
 		log.Printf("(%d) Unpacking %q into %q...", n, order.Package, wd)
-		cmd := exec.Command("tar", "xzf", of.Name())
+		cmd := exec.Command("tar", "xzf", ofName)
 		cmd.Dir = wd
 		if err := cmd.Run(); err != nil {
 			if err := os.RemoveAll(wd); err != nil {
@@ -318,45 +313,6 @@ func makeStats() *stats {
 	t, _ := ioutil.ReadFile("/proc/cpuinfo")
 	s.CPUInfo = string(t)
 	return s
-}
-
-func upload(n int, order *dist.Order) error {
-	log.Printf("(%d) Uploading...", n)
-
-	s := s3.New(getAuth(), aws.USEast, nil)
-
-	bucket, destDir, _, _ := dist.S3Parse(order.Destination)
-	b := s.Bucket(bucket)
-
-	re := regexp.MustCompile(`\.pov$`)
-	image := re.ReplaceAllString(order.File, ".png")
-
-	wd := path.Join(*root, path.Base(order.Package), order.Dir)
-	for _, e := range [][]string{
-		{"image/png", image},
-		{"text/plain", order.File + ".stdout"},
-		{"text/plain", order.File + ".stderr"},
-		{"text/plain", order.File + infoSuffix},
-	} {
-		dest := path.Join(destDir, e[1])
-		log.Printf("(%d)  s3://%s/%s...", n, bucket, dest)
-		acl := s3.ACL("")
-		contentType := e[0]
-		f, err := os.Open(path.Join(wd, e[1]))
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		st, err := f.Stat()
-		if err != nil {
-			return err
-		}
-
-		if err := b.PutReader(dest, f, st.Size(), contentType, acl, s3.Options{}); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func handle(n int, order *dist.Order) error {
