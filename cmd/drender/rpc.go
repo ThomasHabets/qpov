@@ -10,6 +10,10 @@ import (
 	pb "github.com/ThomasHabets/qpov/dist/qpov"
 )
 
+const (
+	userAgent = "drender"
+)
+
 type rpcScheduler struct {
 	client pb.SchedulerClient
 }
@@ -38,7 +42,7 @@ func (s *rpcScheduler) done(id string, img, stdout, stderr []byte, j string) err
 }
 
 func newRPCScheduler() scheduler {
-	conn, err := grpc.Dial(*schedAddr, grpc.WithInsecure())
+	conn, err := grpc.Dial(*schedAddr, grpc.WithInsecure(), grpc.WithUserAgent(userAgent))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
