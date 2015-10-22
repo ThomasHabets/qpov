@@ -16,7 +16,6 @@ import (
 	"github.com/ThomasHabets/go-uuid/uuid"
 	"github.com/goamz/goamz/aws"
 	"github.com/goamz/goamz/s3"
-	"github.com/golang/protobuf/proto"
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -80,13 +79,13 @@ VALUES($1, false, $2, $3, NOW(), NOW(), $4)`, lease, orderID, 1, time.Now().Add(
 		return nil, fmt.Errorf("database error")
 	}
 	return &pb.GetReply{
-		LeaseId:         proto.String(lease),
-		OrderDefinition: proto.String(def),
+		LeaseId:         lease,
+		OrderDefinition: def,
 	}, nil
 }
 
 func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply, error) {
-	_, err := db.Exec(`UPDATE leases SET updated=NOW(), expires=$1 WHERE lease_id=$2`, time.Now().Add(defaultLeaseTime), in.GetLeaseId())
+	_, err := db.Exec(`UPDATE leases SET updated=NOW(), expires=$1 WHERE lease_id=$2`, time.Now().Add(defaultLeaseTime), in.LeaseId)
 	if err != nil {
 		return nil, err
 	}
@@ -123,10 +122,10 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	}
 
 	// Fetch the order. Needed for the destination.
-	destination, file, err := getOrderDestByLeaseID(in.GetLeaseId())
+	destination, file, err := getOrderDestByLeaseID(in.LeaseId)
 	if err != nil {
-		log.Printf("Can't find order with lease %q: %v", in.GetLeaseId(), err)
-		return nil, fmt.Errorf("unknown lease %q", in.GetLeaseId())
+		log.Printf("Can't find order with lease %q: %v", in.LeaseId, err)
+		return nil, fmt.Errorf("unknown lease %q", in.LeaseId)
 	}
 
 	sthree := s3.New(getAuth(), aws.USEast, nil)
@@ -143,10 +142,10 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 		fn   string
 		data []byte
 	}{
-		{"image/png", image, in.GetImage()},
-		{"text/plain", file + ".stdout", in.GetStdout()},
-		{"text/plain", file + ".stderr", in.GetStderr()},
-		{"text/plain", file + infoSuffix, []byte(in.GetJsonMetadata())},
+		{"image/png", image, in.Image},
+		{"text/plain", file + ".stdout", in.Stdout},
+		{"text/plain", file + ".stderr", in.Stderr},
+		{"text/plain", file + infoSuffix, []byte(in.JsonMetadata)},
 	}
 	errCh := make(chan error, len(files))
 	wg.Add(len(files))
@@ -169,7 +168,7 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 		return nil, err
 	}
 	// Mark as completed.
-	if _, err := db.Exec(`UPDATE leases SET done=TRUE WHERE lease_id=$1`, in.GetLeaseId()); err != nil {
+	if _, err := db.Exec(`UPDATE leases SET done=TRUE WHERE lease_id=$1`, in.LeaseId); err != nil {
 		return nil, err
 	}
 	return &pb.DoneReply{}, nil
@@ -177,12 +176,12 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 
 func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, error) {
 	id := uuid.New()
-	_, err := db.Exec(`INSERT INTO orders(order_id, owner, definition) VALUES($1,$2,$3)`, id, 1, in.GetOrderDefinition())
+	_, err := db.Exec(`INSERT INTO orders(order_id, owner, definition) VALUES($1,$2,$3)`, id, 1, in.OrderDefinition)
 	if err != nil {
 		return nil, err
 	}
 	return &pb.AddReply{
-		OrderId: proto.String(id),
+		OrderId: id,
 	}, nil
 }
 

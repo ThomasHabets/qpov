@@ -1,3 +1,4 @@
+// distributed pov-ray rendering client.
 package main
 
 import (
@@ -25,16 +26,18 @@ import (
 
 var (
 	addr        = flag.String("addr", ":4900", "Status port to listen to.")
-	queueName   = flag.String("queue", "", "Name of SQS queue.")
 	povray      = flag.String("povray", "/usr/bin/povray", "Path to POV-Ray.")
 	refreshTime = flag.Duration("lease", 30*time.Second, "Lease time.")
 	root        = flag.String("wd", "root", "Working directory")
-	flush       = flag.Bool("flush", false, "Flush all render jobs.")
 	schedtool   = flag.String("schedtool", "/usr/bin/schedtool", "Path to schedtool.")
 	concurrency = flag.Int("concurrency", 1, "Run this many povrays in parallel. <=0 means set to number of CPUs.")
 	idle        = flag.Bool("idle", true, "Use idle priority.")
 	comment     = flag.String("comment", "", "Comment to record for stats, for this instance.")
 	schedAddr   = flag.String("scheduler", "", "Scheduler address.")
+
+	// DEPRECATED: AWS options.
+	queueName = flag.String("queue", "", "Name of SQS queue, if using SQS and S3.")
+	flush     = flag.Bool("flush", false, "Flush all render jobs.")
 
 	packageMutex sync.Mutex
 	states       []state

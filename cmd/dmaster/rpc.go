@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 
-	"github.com/golang/protobuf/proto"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
@@ -21,7 +20,7 @@ func (s *rpcScheduler) close() {
 
 func (s *rpcScheduler) add(order string) error {
 	_, err := s.client.Add(context.Background(), &pb.AddRequest{
-		OrderDefinition: proto.String(order),
+		OrderDefinition: order,
 	})
 	return err
 }
