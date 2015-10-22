@@ -1,0 +1,9 @@
+syntax = "proto3";
+package qpov;
+
+message Order {
+        string pkg = 1; // URL/S3 path to package.
+        string dir = 2; // Dir to chdir into before rendering.
+        string file = 3; // File in package and dir to render.
+        repeated string args = 4; // POV-Ray args.
+}

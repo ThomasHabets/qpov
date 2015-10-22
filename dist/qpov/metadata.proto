@@ -1,0 +1,59 @@
+syntax = "proto3";
+package qpov;
+
+// From getrusage(2).
+message Rusage {
+        int64 utime = 1;
+        int64 stime = 2;
+        int64 maxrss = 3;
+        int64 ixrss = 4;
+        int64 idrss = 5;
+        int64 isrss = 6;
+        int64 minflt = 7;
+        int64 majflt = 8;
+        int64 nswap = 9;
+        int64 inblock = 10;
+        int64 oublock = 11;
+        int64 msgsnd = 12;
+        int64 msgrcv = 13;
+        int64 nsignals = 14;
+        int64 nvcsw = 15;
+        int64 nivcsw = 16;
+}
+
+// From uname(2).
+message Uname {
+        string sysname = 1;
+        string nodename = 2;
+        string release = 3;
+        string version = 4;
+        string machine = 5;
+        string domainname = 6;
+}
+
+message Cloud {
+        string provider = 1;
+        string instance_type = 2;
+}
+
+message RenderingMetadata {
+        // Who and what.
+        string user = 1;
+        string order_string = 2;
+
+        // POV-Ray run stats.
+        int64 start_ms = 10;
+        int64 end_ms = 11;
+        int64 system_time = 12;
+        int64 user_time = 13;
+        Rusage rusage = 14;
+
+        // System info.
+        string hostname = 20; // os.HostName()
+        Uname uname = 21;     // syscall.Uname()
+        int32 num_cpu = 22;   // runtime.NumCPU()
+        string version = 23;  // runtime.Version()
+        Cloud cloud = 24;
+        string comment = 25;  // Custom comment from command line.
+        string cpuinfo = 26;  // /proc/cpuinfo
+}

@@ -91,9 +91,11 @@ var _ grpc.ClientConn
 // Client API for Scheduler service
 
 type SchedulerClient interface {
+	// Render client API.
 	Get(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetReply, error)
 	Renew(ctx context.Context, in *RenewRequest, opts ...grpc.CallOption) (*RenewReply, error)
 	Done(ctx context.Context, in *DoneRequest, opts ...grpc.CallOption) (*DoneReply, error)
+	// Order handling API.
 	Add(ctx context.Context, in *AddRequest, opts ...grpc.CallOption) (*AddReply, error)
 }
 
@@ -144,9 +146,11 @@ func (c *schedulerClient) Add(ctx context.Context, in *AddRequest, opts ...grpc.
 // Server API for Scheduler service
 
 type SchedulerServer interface {
+	// Render client API.
 	Get(context.Context, *GetRequest) (*GetReply, error)
 	Renew(context.Context, *RenewRequest) (*RenewReply, error)
 	Done(context.Context, *DoneRequest) (*DoneReply, error)
+	// Order handling API.
 	Add(context.Context, *AddRequest) (*AddReply, error)
 }
 

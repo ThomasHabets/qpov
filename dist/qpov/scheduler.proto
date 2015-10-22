@@ -30,12 +30,14 @@ message DoneRequest {
         bytes stdout = 3;
         bytes stderr = 4;
         string json_metadata = 5;
+        // RenderingMetadata metadata = 6;
 }
 
 message DoneReply {}
 
 message AddRequest {
         string order_definition = 1;
+        // string destination = 2; // Directory to store the results as <file>.png and <file>.proto.
 }
 
 message AddReply {
