@@ -27,7 +27,7 @@ import (
 var (
 	addr        = flag.String("addr", ":4900", "Status port to listen to.")
 	povray      = flag.String("povray", "/usr/bin/povray", "Path to POV-Ray.")
-	refreshTime = flag.Duration("lease", 30*time.Second, "Lease time.")
+	refreshTime = flag.Duration("lease", 30*time.Minute, "Lease time.")
 	root        = flag.String("wd", "root", "Working directory")
 	schedtool   = flag.String("schedtool", "/usr/bin/schedtool", "Path to schedtool.")
 	concurrency = flag.Int("concurrency", 1, "Run this many povrays in parallel. <=0 means set to number of CPUs.")
@@ -283,7 +283,7 @@ func getCloud() (string, string) {
 	return "", ""
 }
 
-func cToStr(c [65]int8) string {
+func cToStr(c [65]uint8) string {
 	s := make([]byte, len(c))
 	l := 0
 	for ; l < len(c); l++ {
@@ -351,14 +351,14 @@ func handle(n int, order *dist.Order) error {
 
 func refresh(q scheduler, id string, refreshCh, doneCh chan struct{}) {
 	defer close(doneCh)
-	t := time.NewTicker(*refreshTime)
+	t := time.NewTicker(*refreshTime / 2)
 	defer t.Stop()
 	for {
 		select {
 		case <-refreshCh:
 			return
 		case <-t.C:
-			if err := q.renew(id, 2**refreshTime); err != nil {
+			if err := q.renew(id, *refreshTime); err != nil {
 				log.Printf("Failed to refresh message: %v", err)
 			}
 		}
@@ -500,8 +500,11 @@ func main() {
 	log.Printf("Starting up...")
 
 	var s scheduler
-	s = newRPCScheduler()
-
+	var err error
+	s, err = newRPCScheduler(*schedAddr)
+	if err != nil {
+		log.Fatalf("Failed to set up scheduler: %v", err)
+	}
 	if *concurrency <= 0 {
 		*concurrency = runtime.NumCPU()
 	}

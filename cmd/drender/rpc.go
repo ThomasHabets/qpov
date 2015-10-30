@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"time"
 
 	"golang.org/x/net/context"
@@ -20,7 +20,10 @@ type rpcScheduler struct {
 
 func (s *rpcScheduler) get() (string, string, error) {
 	r, err := s.client.Get(context.Background(), &pb.GetRequest{})
-	return r.LeaseId, r.OrderDefinition, err
+	if err != nil {
+		return "", "", err
+	}
+	return r.LeaseId, r.OrderDefinition, nil
 }
 
 func (s *rpcScheduler) renew(id string, dur time.Duration) error {
@@ -41,10 +44,10 @@ func (s *rpcScheduler) done(id string, img, stdout, stderr []byte, j string) err
 	return err
 }
 
-func newRPCScheduler() scheduler {
-	conn, err := grpc.Dial(*schedAddr, grpc.WithInsecure(), grpc.WithUserAgent(userAgent))
+func newRPCScheduler(addr string) (scheduler, error) {
+	conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithUserAgent(userAgent))
 	if err != nil {
-		log.Fatalf("did not connect: %v", err)
+		return nil, fmt.Errorf("dialing scheduler %q: %v", addr, err)
 	}
-	return &rpcScheduler{client: pb.NewSchedulerClient(conn)}
+	return &rpcScheduler{client: pb.NewSchedulerClient(conn)}, nil
 }
