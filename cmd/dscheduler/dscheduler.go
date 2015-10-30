@@ -19,6 +19,9 @@ import (
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/grpclog"
+	"google.golang.org/grpc/transport"
 
 	"github.com/ThomasHabets/qpov/dist"
 	pb "github.com/ThomasHabets/qpov/dist/qpov"
@@ -29,6 +32,8 @@ var (
 	defaultLeaseTime = time.Hour
 	db               *sql.DB
 	addr             = flag.String("port", ":9999", "Addr to listen to.")
+	certFile         = flag.String("cert_file", "", "The TLS cert file")
+	keyFile          = flag.String("key_file", "", "The TLS key file")
 )
 
 const (
@@ -78,6 +83,7 @@ VALUES($1, false, $2, $3, NOW(), NOW(), $4)`, lease, orderID, 1, time.Now().Add(
 		log.Printf("Database error committing: %v", err)
 		return nil, fmt.Errorf("database error")
 	}
+	log.Printf("RPC(Get): Order: %q, Lease: %q", orderID, lease)
 	return &pb.GetReply{
 		LeaseId:         lease,
 		OrderDefinition: def,
@@ -89,6 +95,7 @@ func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("RPC(Renew): Lease: %q", in.LeaseId)
 	return &pb.RenewReply{}, nil
 }
 
@@ -171,15 +178,32 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	if _, err := db.Exec(`UPDATE leases SET done=TRUE WHERE lease_id=$1`, in.LeaseId); err != nil {
 		return nil, err
 	}
+	log.Printf("RPC(Done): Lease: %q", in.LeaseId)
 	return &pb.DoneReply{}, nil
 }
 
 func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, error) {
+	{
+		t, ok := transport.StreamFromContext(ctx)
+		if !ok {
+			return nil, fmt.Errorf("internal error: no stream context")
+		}
+		st := t.ServerTransport()
+		log.Printf("Called from %v", st.RemoteAddr())
+		a, ok := credentials.FromContext(ctx)
+		if !ok {
+			return nil, fmt.Errorf("can't add orders unauthenticated")
+		}
+		log.Printf("Authtype: %v", a.AuthType())
+	}
+	return nil, fmt.Errorf("adding temporarily disabled")
+
 	id := uuid.New()
 	_, err := db.Exec(`INSERT INTO orders(order_id, owner, definition) VALUES($1,$2,$3)`, id, 1, in.OrderDefinition)
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("RPC(Add): Order: %q", id)
 	return &pb.AddReply{
 		OrderId: id,
 	}, nil
@@ -200,7 +224,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
-	s := grpc.NewServer()
+	var opts []grpc.ServerOption
+	if *certFile != "" {
+		creds, err := credentials.NewServerTLSFromFile(*certFile, *keyFile)
+		if err != nil {
+			grpclog.Fatalf("Failed to generate credentials %v", err)
+		}
+		opts = []grpc.ServerOption{grpc.Creds(creds)}
+	}
+	s := grpc.NewServer(opts...)
 	pb.RegisterSchedulerServer(s, &server{})
 	log.Printf("Running...")
 	log.Fatal(s.Serve(lis))

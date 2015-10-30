@@ -84,7 +84,11 @@ func main() {
 	}
 
 	var q scheduler
-	q = newRPCScheduler()
+	var err error
+	q, err = newRPCScheduler(*schedAddr)
+	if err != nil {
+		log.Fatalf("Connecting to scheduler %q: %v", *schedAddr, err)
+	}
 	defer q.close()
 
 	if frames.Skip == 0 {
