@@ -30,13 +30,14 @@ import (
 )
 
 var (
-	dbConnect        = flag.String("db", "", "")
-	defaultLeaseTime = time.Hour
-	db               *sql.DB
-	addr             = flag.String("port", ":9999", "Addr to listen to.")
-	certFile         = flag.String("cert_file", "", "The TLS cert file")
-	keyFile          = flag.String("key_file", "", "The TLS key file")
-	clientCAFile     = flag.String("client_ca_file", "", "The client CA file.")
+	dbConnect            = flag.String("db", "", "")
+	defaultLeaseTime     = time.Hour
+	db                   *sql.DB
+	addr                 = flag.String("port", ":9999", "Addr to listen to.")
+	certFile             = flag.String("cert_file", "", "The TLS cert file")
+	keyFile              = flag.String("key_file", "", "The TLS key file")
+	clientCAFile         = flag.String("client_ca_file", "", "The client CA file.")
+	maxConcurrentStreams = flag.Int("max_concurrent_streams", 10000, "Max concurrent RPC streams.")
 )
 
 const (
@@ -283,7 +284,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
-	var opts []grpc.ServerOption
+	opts := []grpc.ServerOption{
+		grpc.MaxConcurrentStreams(uint32(*maxConcurrentStreams)),
+	}
 	if *certFile != "" {
 		cert, err := tls.LoadX509KeyPair(*certFile, *keyFile)
 		if err != nil {
