@@ -25,15 +25,16 @@ import (
 )
 
 var (
-	addr        = flag.String("addr", ":4900", "Status port to listen to.")
-	povray      = flag.String("povray", "/usr/bin/povray", "Path to POV-Ray.")
-	refreshTime = flag.Duration("lease", 30*time.Minute, "Lease time.")
-	root        = flag.String("wd", "root", "Working directory")
-	schedtool   = flag.String("schedtool", "/usr/bin/schedtool", "Path to schedtool.")
-	concurrency = flag.Int("concurrency", 1, "Run this many povrays in parallel. <=0 means set to number of CPUs.")
-	idle        = flag.Bool("idle", true, "Use idle priority.")
-	comment     = flag.String("comment", "", "Comment to record for stats, for this instance.")
-	schedAddr   = flag.String("scheduler", "", "Scheduler address.")
+	addr           = flag.String("addr", ":4900", "Status port to listen to.")
+	povray         = flag.String("povray", "/usr/bin/povray", "Path to POV-Ray.")
+	refreshTime    = flag.Duration("lease", 30*time.Minute, "Lease time.")
+	expiredRenewal = flag.Duration("lease_expired_renewal", time.Minute, "If lease expires, treat lease as living this long.")
+	root           = flag.String("wd", "root", "Working directory")
+	schedtool      = flag.String("schedtool", "/usr/bin/schedtool", "Path to schedtool.")
+	concurrency    = flag.Int("concurrency", 1, "Run this many povrays in parallel. <=0 means set to number of CPUs.")
+	idle           = flag.Bool("idle", true, "Use idle priority.")
+	comment        = flag.String("comment", "", "Comment to record for stats, for this instance.")
+	schedAddr      = flag.String("scheduler", "", "Scheduler address.")
 
 	// DEPRECATED: AWS options.
 	queueName = flag.String("queue", "", "Name of SQS queue, if using SQS and S3.")
@@ -380,7 +381,11 @@ func refresh(q scheduler, id string, refreshCh, doneCh chan struct{}) {
 			} else {
 				nextTimeout = n
 			}
-			t = time.NewTimer(nextTimeout.Sub(time.Now()) / 2)
+			now := time.Now()
+			if nextTimeout.Before(now) {
+				nextTimeout = now.Add(*expiredRenewal)
+			}
+			t = time.NewTimer(nextTimeout.Sub(now) / 2)
 		}
 	}
 }
