@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"time"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -68,7 +69,10 @@ func newRPCScheduler(addr string) (scheduler, error) {
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
-	return &rpcScheduler{
-		client: pb.NewSchedulerClient(conn),
-	}, nil
+	client := pb.NewSchedulerClient(conn)
+	// Wait until connected.
+	for s := conn.State(); s != grpc.Ready; s = conn.State() {
+		conn.WaitForStateChange(time.Hour, s)
+	}
+	return &rpcScheduler{client: client}, nil
 }
