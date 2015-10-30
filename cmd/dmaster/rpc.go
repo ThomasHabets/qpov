@@ -18,9 +18,10 @@ import (
 )
 
 var (
-	caFile   = flag.String("ca_file", "", "Server CA file.")
-	certFile = flag.String("cert_file", "", "Client cert file.")
-	keyFile  = flag.String("key_file", "", "Client key file.")
+	caFile         = flag.String("ca_file", "", "Server CA file.")
+	certFile       = flag.String("cert_file", "", "Client cert file.")
+	keyFile        = flag.String("key_file", "", "Client key file.")
+	connectTimeout = flag.Duration("connect_timeout", 5*time.Minute, "Dial timout.")
 )
 
 const (
@@ -65,14 +66,15 @@ func newRPCScheduler(addr string) (scheduler, error) {
 		Certificates: []tls.Certificate{cert},
 		RootCAs:      cp,
 	})
-	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(cr), grpc.WithUserAgent(userAgent))
+	conn, err := grpc.Dial(addr,
+		grpc.WithTimeout(*connectTimeout),
+		grpc.WithBlock(),
+		grpc.WithTransportCredentials(cr),
+		grpc.WithUserAgent(userAgent))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
-	client := pb.NewSchedulerClient(conn)
-	// Wait until connected.
-	for s := conn.State(); s != grpc.Ready; s = conn.State() {
-		conn.WaitForStateChange(time.Hour, s)
-	}
-	return &rpcScheduler{client: client}, nil
+	return &rpcScheduler{
+		client: pb.NewSchedulerClient(conn),
+	}, nil
 }
