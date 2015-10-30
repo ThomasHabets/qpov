@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -16,7 +17,9 @@ import (
 )
 
 var (
-	caFile = flag.String("ca_file", "", "Server CA file.")
+	caFile   = flag.String("ca_file", "", "Server CA file.")
+	certFile = flag.String("cert_file", "", "Client cert file.")
+	keyFile  = flag.String("key_file", "", "Client key file.")
 )
 
 const (
@@ -48,8 +51,18 @@ func newRPCScheduler(addr string) (scheduler, error) {
 	if ok := cp.AppendCertsFromPEM(b); !ok {
 		return nil, fmt.Errorf("failed to add root CAs")
 	}
+	cert, err := tls.LoadX509KeyPair(*certFile, *keyFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load client keypair %q/%q: %v", *certFile, *keyFile, err)
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to split host/port out of %q", addr)
+	}
 	cr := credentials.NewTLS(&tls.Config{
-		RootCAs: cp,
+		ServerName:   host,
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      cp,
 	})
 	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(cr), grpc.WithUserAgent(userAgent))
 	if err != nil {

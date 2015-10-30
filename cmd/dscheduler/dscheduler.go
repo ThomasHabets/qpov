@@ -1,10 +1,13 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -20,7 +23,6 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/transport"
 
 	"github.com/ThomasHabets/qpov/dist"
@@ -34,11 +36,39 @@ var (
 	addr             = flag.String("port", ":9999", "Addr to listen to.")
 	certFile         = flag.String("cert_file", "", "The TLS cert file")
 	keyFile          = flag.String("key_file", "", "The TLS key file")
+	clientCAFile     = flag.String("client_ca_file", "", "The client CA file.")
 )
 
 const (
 	infoSuffix = ".json"
 )
+
+func getOwnerID(ctx context.Context) (int, error) {
+	a, ok := credentials.FromContext(ctx)
+	if !ok {
+		return 0, fmt.Errorf("no auth info")
+	}
+	at, ok := a.(credentials.TLSInfo)
+	if !ok {
+		return 0, fmt.Errorf("auth type is not TLSInfo")
+	}
+	if len(at.State.PeerCertificates) != 1 {
+		return 0, fmt.Errorf("no cert")
+	}
+	cert := at.State.PeerCertificates[0]
+
+	// If there is a cert then it was verified in the handshake as belonging to the client CA.
+	// We just need to turn the cert CommonName into a userID.
+	// TODO: Really the userID should be part of the cert instead of stored on the server side. Ugly hack for now.
+	row := db.QueryRow(`SELECT users.user_id FROM users NATURAL JOIN certs WHERE certs.cn=$1`, cert.Subject.CommonName)
+	var ownerID int
+	if err := row.Scan(&ownerID); err == sql.ErrNoRows {
+		return 0, fmt.Errorf("client cert not assigned to any user")
+	} else if err != nil {
+		return 0, fmt.Errorf("failed looking up cert")
+	}
+	return ownerID, nil
+}
 
 type server struct{}
 
@@ -73,9 +103,13 @@ LIMIT 1`)
 		return nil, fmt.Errorf("database error")
 	}
 
+	var ownerID *int
+	if o, err := getOwnerID(ctx); err == nil {
+		ownerID = &o
+	}
 	lease := uuid.New()
 	if _, err := tx.Exec(`INSERT INTO leases(lease_id, done, order_id, user_id, created, updated, expires)
-VALUES($1, false, $2, $3, NOW(), NOW(), $4)`, lease, orderID, 1, time.Now().Add(defaultLeaseTime)); err != nil {
+VALUES($1, false, $2, $3, NOW(), NOW(), $4)`, lease, orderID, ownerID, time.Now().Add(defaultLeaseTime)); err != nil {
 		log.Printf("Database error inserting lease: %v", err)
 		return nil, fmt.Errorf("database error")
 	}
@@ -183,6 +217,7 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 }
 
 func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, error) {
+	var ownerID int
 	{
 		t, ok := transport.StreamFromContext(ctx)
 		if !ok {
@@ -194,12 +229,36 @@ func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, erro
 		if !ok {
 			return nil, fmt.Errorf("can't add orders unauthenticated")
 		}
-		log.Printf("Authtype: %v", a.AuthType())
+		at, ok := a.(credentials.TLSInfo)
+		if !ok {
+			return nil, fmt.Errorf("internal error: auth type is not TLSInfo")
+		}
+		if len(at.State.PeerCertificates) != 1 {
+			log.Printf("Add() attempted without cert from %v", st.RemoteAddr())
+			return nil, fmt.Errorf("need a valid cert for operation 'Add'")
+		}
+		cert := at.State.PeerCertificates[0]
+
+		// If there is a cert then it was verified in the handshake as belonging to the client CA.
+		// We just need to turn the cert CommonName into a userID.
+		// TODO: Really the userID should be part of the cert instead of stored on the server side. Ugly hack for now.
+		row := db.QueryRow(`SELECT users.user_id, users.adding FROM users NATURAL JOIN certs WHERE certs.cn=$1`, cert.Subject.CommonName)
+		var adding bool
+		if err := row.Scan(&ownerID, &adding); err == sql.ErrNoRows {
+			log.Printf("client cert %q not assigned to any user", cert.Subject.CommonName)
+			return nil, fmt.Errorf("client cert not assigned to any user")
+		} else if err != nil {
+			log.Printf("Failed looking up cert %q: %v", cert.Subject.CommonName, err)
+			return nil, fmt.Errorf("internal error: failed looking up cert")
+		}
+		if !adding {
+			log.Printf("User not allowed to add orders")
+			return nil, fmt.Errorf("user not allowed to add orders")
+		}
 	}
-	return nil, fmt.Errorf("adding temporarily disabled")
 
 	id := uuid.New()
-	_, err := db.Exec(`INSERT INTO orders(order_id, owner, definition) VALUES($1,$2,$3)`, id, 1, in.OrderDefinition)
+	_, err := db.Exec(`INSERT INTO orders(order_id, owner, definition) VALUES($1,$2,$3)`, id, ownerID, in.OrderDefinition)
 	if err != nil {
 		return nil, err
 	}
@@ -226,11 +285,24 @@ func main() {
 	}
 	var opts []grpc.ServerOption
 	if *certFile != "" {
-		creds, err := credentials.NewServerTLSFromFile(*certFile, *keyFile)
+		cert, err := tls.LoadX509KeyPair(*certFile, *keyFile)
 		if err != nil {
-			grpclog.Fatalf("Failed to generate credentials %v", err)
+			log.Fatalf("Failed to load certs: %v", err)
 		}
-		opts = []grpc.ServerOption{grpc.Creds(creds)}
+		b, err := ioutil.ReadFile(*clientCAFile)
+		if err != nil {
+			log.Fatalf("reading %q: %v", *clientCAFile, err)
+		}
+		cp := x509.NewCertPool()
+		if ok := cp.AppendCertsFromPEM(b); !ok {
+			log.Fatalf("failed to add client CAs")
+		}
+		t := &tls.Config{
+			ClientAuth:   tls.VerifyClientCertIfGiven,
+			ClientCAs:    cp,
+			Certificates: []tls.Certificate{cert},
+		}
+		opts = append(opts, grpc.Creds(credentials.NewTLS(t)))
 	}
 	s := grpc.NewServer(opts...)
 	pb.RegisterSchedulerServer(s, &server{})
