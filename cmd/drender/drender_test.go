@@ -4,5 +4,6 @@ import (
 	"testing"
 )
 
-func TestBuilds(t *testing.T) {
+func TestMakeStats(t *testing.T) {
+	makeStats()
 }

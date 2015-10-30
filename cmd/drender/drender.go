@@ -283,14 +283,27 @@ func getCloud() (string, string) {
 	return "", ""
 }
 
-func cToStr(c [65]uint8) string {
+// cToStr converts char arrays of size 65 to strings, be they signed or unsigned.
+// C strings coming from syscall.Utsname can be anything. Sigh.
+func cToStr(cin interface{}) string {
+	var c [65]uint8
+	switch cin.(type) {
+	case [65]uint8:
+		c = cin.([65]uint8)
+	case [65]int8:
+		for n, t := range cin.([65]int8) {
+			c[n] = uint8(t)
+		}
+	default:
+		panic(fmt.Errorf("what is cin? %+v", cin))
+	}
 	s := make([]byte, len(c))
 	l := 0
 	for ; l < len(c); l++ {
 		if c[l] == 0 {
 			break
 		}
-		s[l] = uint8(c[l])
+		s[l] = c[l]
 	}
 	return string(s[0:l])
 }
