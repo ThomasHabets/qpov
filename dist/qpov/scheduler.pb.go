@@ -35,7 +35,8 @@ func (m *GetReply) String() string { return proto.CompactTextString(m) }
 func (*GetReply) ProtoMessage()    {}
 
 type RenewRequest struct {
-	LeaseId string `protobuf:"bytes,1,opt,name=lease_id" json:"lease_id,omitempty"`
+	LeaseId   string `protobuf:"bytes,1,opt,name=lease_id" json:"lease_id,omitempty"`
+	ExtendSec int32  `protobuf:"varint,2,opt,name=extend_sec" json:"extend_sec,omitempty"`
 }
 
 func (m *RenewRequest) Reset()         { *m = RenewRequest{} }
@@ -43,6 +44,7 @@ func (m *RenewRequest) String() string { return proto.CompactTextString(m) }
 func (*RenewRequest) ProtoMessage()    {}
 
 type RenewReply struct {
+	NewTimeoutSec int64 `protobuf:"varint,1,opt,name=new_timeout_sec" json:"new_timeout_sec,omitempty"`
 }
 
 func (m *RenewReply) Reset()         { *m = RenewReply{} }

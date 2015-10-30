@@ -20,9 +20,12 @@ message GetReply {
 
 message RenewRequest {
         string lease_id = 1;
+        int32 extend_sec = 2;
 }
 
-message RenewReply {}
+message RenewReply {
+        int64 new_timeout_sec = 1; // May be longer or shorter than now+extend_sec.
+}
 
 message DoneRequest {
         string lease_id = 1;
