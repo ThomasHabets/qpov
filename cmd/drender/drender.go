@@ -60,6 +60,8 @@ const (
 	googleCloud        = "Google"
 	gceInstanceTypeURL = "http://metadata.google.internal./computeMetadata/v1/instance/machine-type"
 
+	doneRetryTimer = 10 * time.Second
+
 	infoSuffix = ".json"
 )
 
@@ -442,10 +444,15 @@ func handler(n int, q scheduler) {
 				log.Printf("(%d) Failed to read json: %v", err)
 				continue
 			}
-			if err := q.done(id, img, stdout, stderr, string(j)); err != nil {
-				log.Printf("(%d) Failed to delete message %q", n, id)
-			} else {
-				log.Printf("(%d) Done", n)
+			for {
+				// Retry forever. We don't want to lose work.
+				err := q.done(id, img, stdout, stderr, string(j))
+				if err == nil {
+					log.Printf("(%d) Done", n)
+					break
+				}
+				log.Printf("(%d) Failed to delete message %q. Retrying.", n, id)
+				time.Sleep(doneRetryTimer)
 			}
 		}
 	}
