@@ -35,11 +35,19 @@ func (s *rpcScheduler) get() (string, string, error) {
 	return r.LeaseId, r.OrderDefinition, nil
 }
 
-func (s *rpcScheduler) renew(id string, dur time.Duration) error {
-	_, err := s.client.Renew(context.Background(), &pb.RenewRequest{
-		LeaseId: id,
+func (s *rpcScheduler) renew(id string, dur time.Duration) (time.Time, error) {
+	r, err := s.client.Renew(context.Background(), &pb.RenewRequest{
+		LeaseId:   id,
+		ExtendSec: int32(dur.Seconds()),
 	})
-	return err
+	if err != nil {
+		return time.Now(), err
+	}
+	n := time.Unix(r.NewTimeoutSec, 0)
+	if r.NewTimeoutSec == 0 {
+		n = time.Now().Add(dur) // Just assume duration renewal was accepted.
+	}
+	return n, nil
 }
 
 func (s *rpcScheduler) done(id string, img, stdout, stderr []byte, j string) error {

@@ -41,10 +41,10 @@ func (*sqsScheduler) get() (string, string, error) {
 	return "", "", fmt.Errorf("not implemented")
 }
 
-func (s *sqsScheduler) renew(id string, dur time.Duration) error {
+func (s *sqsScheduler) renew(id string, dur time.Duration) (time.Time, error) {
 	//_, err := s.q.ChangeMessageVisibility(id, int(dur.Seconds())
 	//return err
-	return fmt.Errorf("not implemented")
+	return time.Now(), fmt.Errorf("not implemented")
 }
 
 func (s *sqsScheduler) done(id string, img, stdout, stderr []byte, j string) error {

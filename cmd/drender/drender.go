@@ -45,7 +45,7 @@ var (
 
 type scheduler interface {
 	get() (string, string, error)
-	renew(id string, dur time.Duration) error
+	renew(id string, dur time.Duration) (time.Time, error)
 	done(id string, img, stdout, stderr []byte, j string) error
 }
 
@@ -366,16 +366,21 @@ func handle(n int, order *dist.Order) error {
 
 func refresh(q scheduler, id string, refreshCh, doneCh chan struct{}) {
 	defer close(doneCh)
-	t := time.NewTicker(*refreshTime / 2)
+	nextTimeout := time.Now().Add(*refreshTime)
+	t := time.NewTimer(nextTimeout.Sub(time.Now()) / 2)
 	defer t.Stop()
 	for {
 		select {
 		case <-refreshCh:
 			return
 		case <-t.C:
-			if err := q.renew(id, *refreshTime); err != nil {
-				log.Printf("Failed to refresh message: %v", err)
+			n, err := q.renew(id, *refreshTime)
+			if err != nil {
+				log.Printf("Failed to refresh lease: %v", err)
+			} else {
+				nextTimeout = n
 			}
+			t = time.NewTimer(nextTimeout.Sub(time.Now()) / 2)
 		}
 	}
 }

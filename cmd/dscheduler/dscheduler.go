@@ -126,11 +126,16 @@ VALUES($1, false, $2, $3, NOW(), NOW(), $4)`, lease, orderID, ownerID, time.Now(
 }
 
 func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply, error) {
-	_, err := db.Exec(`UPDATE leases SET updated=NOW(), expires=$1 WHERE lease_id=$2`, time.Now().Add(defaultLeaseTime), in.LeaseId)
+	secs := in.ExtendSec
+	if secs == 0 {
+		secs = int32(defaultLeaseTime.Seconds())
+	}
+	n := time.Now().Add(time.Duration(int64(time.Second) * int64(secs)))
+	_, err := db.Exec(`UPDATE leases SET updated=NOW(), expires=$1 WHERE lease_id=$2`, n, in.LeaseId)
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("RPC(Renew): Lease: %q", in.LeaseId)
+	log.Printf("RPC(Renew): Lease: %q until %v", in.LeaseId, n)
 	return &pb.RenewReply{}, nil
 }
 
