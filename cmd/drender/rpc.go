@@ -1,13 +1,22 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"flag"
 	"fmt"
+	"io/ioutil"
 	"time"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	pb "github.com/ThomasHabets/qpov/dist/qpov"
+)
+
+var (
+	caFile = flag.String("ca_file", "", "Server CA file.")
 )
 
 const (
@@ -45,7 +54,18 @@ func (s *rpcScheduler) done(id string, img, stdout, stderr []byte, j string) err
 }
 
 func newRPCScheduler(addr string) (scheduler, error) {
-	conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithUserAgent(userAgent))
+	b, err := ioutil.ReadFile(*caFile)
+	if err != nil {
+		return nil, fmt.Errorf("reading %q: %v", *caFile, err)
+	}
+	cp := x509.NewCertPool()
+	if ok := cp.AppendCertsFromPEM(b); !ok {
+		return nil, fmt.Errorf("failed to add root CAs")
+	}
+	cr := credentials.NewTLS(&tls.Config{
+		RootCAs: cp,
+	})
+	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(cr), grpc.WithUserAgent(userAgent))
 	if err != nil {
 		return nil, fmt.Errorf("dialing scheduler %q: %v", addr, err)
 	}
