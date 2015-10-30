@@ -167,7 +167,7 @@ func TestRead(t *testing.T) {
 		"high uint32": {
 			input:     []byte{0xff, 0xfe, 0xfd, 0xfc, 1, 2, 3},
 			f:         func(r io.Reader) (interface{}, error) { return readUint32(r) },
-			output:    interface{}(0xfcfdfeff),
+			output:    interface{}(uint32(0xfcfdfeff)),
 			remaining: 3,
 		},
 		"short uint32": {
