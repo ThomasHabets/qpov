@@ -38,23 +38,27 @@ var (
 	keyFile              = flag.String("key_file", "", "The TLS key file")
 	clientCAFile         = flag.String("client_ca_file", "", "The client CA file.")
 	maxConcurrentStreams = flag.Int("max_concurrent_streams", 10000, "Max concurrent RPC streams.")
+
+	errNoCert = errors.New("no cert provided")
 )
 
 const (
 	infoSuffix = ".json"
 )
 
+// getOwnerID from the RPC channel TLS client cert.
+// Returns errNoCert if no cert is attached.
 func getOwnerID(ctx context.Context) (int, error) {
 	a, ok := credentials.FromContext(ctx)
 	if !ok {
-		return 0, fmt.Errorf("no auth info")
+		return 0, errNoCert
 	}
 	at, ok := a.(credentials.TLSInfo)
 	if !ok {
 		return 0, fmt.Errorf("auth type is not TLSInfo")
 	}
 	if len(at.State.PeerCertificates) != 1 {
-		return 0, fmt.Errorf("no cert")
+		return 0, errNoCert
 	}
 	cert := at.State.PeerCertificates[0]
 
@@ -66,7 +70,7 @@ func getOwnerID(ctx context.Context) (int, error) {
 	if err := row.Scan(&ownerID); err == sql.ErrNoRows {
 		return 0, fmt.Errorf("client cert not assigned to any user")
 	} else if err != nil {
-		return 0, fmt.Errorf("failed looking up cert")
+		return 0, fmt.Errorf("failed looking up cert: %v", err)
 	}
 	return ownerID, nil
 }
@@ -107,7 +111,10 @@ LIMIT 1`)
 	var ownerID *int
 	if o, err := getOwnerID(ctx); err == nil {
 		ownerID = &o
+	} else if err != errNoCert {
+		log.Printf("Getting owner ID: %v", err)
 	}
+
 	lease := uuid.New()
 	if _, err := tx.Exec(`INSERT INTO leases(lease_id, done, order_id, user_id, created, updated, expires)
 VALUES($1, false, $2, $3, NOW(), NOW(), $4)`, lease, orderID, ownerID, time.Now().Add(defaultLeaseTime)); err != nil {
