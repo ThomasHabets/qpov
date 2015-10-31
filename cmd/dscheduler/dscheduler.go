@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -27,17 +28,19 @@ import (
 
 	"github.com/ThomasHabets/qpov/dist"
 	pb "github.com/ThomasHabets/qpov/dist/qpov"
+	"github.com/ThomasHabets/qpov/dist/rpclog"
 )
 
 var (
-	dbConnect            = flag.String("db", "", "")
 	defaultLeaseTime     = time.Hour
 	db                   *sql.DB
+	dbConnect            = flag.String("db", "", "")
 	addr                 = flag.String("port", ":9999", "Addr to listen to.")
 	certFile             = flag.String("cert_file", "", "The TLS cert file")
 	keyFile              = flag.String("key_file", "", "The TLS key file")
 	clientCAFile         = flag.String("client_ca_file", "", "The client CA file.")
 	maxConcurrentStreams = flag.Int("max_concurrent_streams", 10000, "Max concurrent RPC streams.")
+	rpclogDir            = flag.String("rpclog_dir", ".", "RPC log directory.")
 
 	errNoCert = errors.New("no cert provided")
 )
@@ -75,9 +78,13 @@ func getOwnerID(ctx context.Context) (int, error) {
 	return ownerID, nil
 }
 
-type server struct{}
+type server struct {
+	rpcLog *rpclog.Logger
+}
 
 func (s *server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetReply, error) {
+	st := time.Now()
+	requestID := uuid.New()
 	tx, err := db.Begin()
 	if err != nil {
 		log.Printf("Database error: %v", err)
@@ -126,13 +133,19 @@ VALUES($1, false, $2, $3, NOW(), NOW(), $4)`, lease, orderID, ownerID, time.Now(
 		return nil, fmt.Errorf("database error")
 	}
 	log.Printf("RPC(Get): Order: %q, Lease: %q", orderID, lease)
-	return &pb.GetReply{
+	ret := &pb.GetReply{
 		LeaseId:         lease,
 		OrderDefinition: def,
-	}, nil
+	}
+	s.rpcLog.Log(ctx, requestID, "dscheduler.Get", st,
+		"github.com/ThomasHabets/qpov/dist/qpov/GetRequest", in,
+		nil, "github.com/ThomasHabets/qpov/dist/qpov/GetReply", ret)
+	return ret, nil
 }
 
 func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply, error) {
+	st := time.Now()
+	requestID := uuid.New()
 	secs := in.ExtendSec
 	if secs == 0 {
 		secs = int32(defaultLeaseTime.Seconds())
@@ -143,7 +156,13 @@ func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply
 		return nil, err
 	}
 	log.Printf("RPC(Renew): Lease: %q until %v", in.LeaseId, n)
-	return &pb.RenewReply{}, nil
+	ret := &pb.RenewReply{
+		NewTimeoutSec: int64(n.Unix()),
+	}
+	s.rpcLog.Log(ctx, requestID, "dscheduler.Renew", st,
+		"github.com/ThomasHabets/qpov/dist/qpov/RenewRequest", in,
+		nil, "github.com/ThomasHabets/qpov/dist/qpov/RenewReply", ret)
+	return ret, nil
 }
 
 func getOrderDestByLeaseID(id string) (string, string, error) {
@@ -167,6 +186,8 @@ func getAuth() aws.Auth {
 }
 
 func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, error) {
+	st := time.Now()
+	requestID := uuid.New()
 	// First give us time to receive the data.
 	_, err := s.Renew(ctx, &pb.RenewRequest{
 		LeaseId: in.LeaseId,
@@ -226,10 +247,16 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 		return nil, err
 	}
 	log.Printf("RPC(Done): Lease: %q", in.LeaseId)
-	return &pb.DoneReply{}, nil
+	ret := &pb.DoneReply{}
+	s.rpcLog.Log(ctx, requestID, "dscheduler.Done", st,
+		"github.com/ThomasHabets/qpov/dist/qpov/DoneRequest", in,
+		nil, "github.com/ThomasHabets/qpov/dist/qpov/DoneReply", ret)
+	return ret, nil
 }
 
 func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, error) {
+	st := time.Now()
+	requestID := uuid.New()
 	var ownerID int
 	{
 		t, ok := transport.StreamFromContext(ctx)
@@ -276,9 +303,12 @@ func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, erro
 		return nil, err
 	}
 	log.Printf("RPC(Add): Order: %q", id)
-	return &pb.AddReply{
-		OrderId: id,
-	}, nil
+
+	ret := &pb.AddReply{OrderId: id}
+	s.rpcLog.Log(ctx, requestID, "dscheduler.Add", st,
+		"github.com/ThomasHabets/qpov/dist/qpov/AddRequest", in,
+		nil, "github.com/ThomasHabets/qpov/dist/qpov/AddReply", ret)
+	return ret, nil
 }
 
 func main() {
@@ -320,7 +350,17 @@ func main() {
 		opts = append(opts, grpc.Creds(credentials.NewTLS(t)))
 	}
 	s := grpc.NewServer(opts...)
-	pb.RegisterSchedulerServer(s, &server{})
+	now := time.Now()
+	fin, err := os.Create(path.Join(*rpclogDir, fmt.Sprintf("rpclog.%d.in.gob", now.Unix())))
+	if err != nil {
+		log.Fatalf("Opening rpclog: %v", err)
+	}
+	fout, err := os.Create(path.Join(*rpclogDir, fmt.Sprintf("rpclog.%d.out.gob", now.Unix())))
+	if err != nil {
+		log.Fatalf("Opening rpclog: %v", err)
+	}
+	l := rpclog.New(fin, fout)
+	pb.RegisterSchedulerServer(s, &server{rpcLog: l})
 	log.Printf("Running...")
 	log.Fatal(s.Serve(lis))
 }
