@@ -24,6 +24,9 @@ It has these top-level messages:
 	DoneReply
 	AddRequest
 	AddReply
+	Lease
+	LeasesRequest
+	LeasesReply
 */
 package qpov
 

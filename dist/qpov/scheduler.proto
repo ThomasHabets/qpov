@@ -7,8 +7,11 @@ service Scheduler {
         rpc Renew (RenewRequest) returns (RenewReply) {}
         rpc Done (DoneRequest) returns (DoneReply) {}
 
-        // Order handling API.
+        // Order handling API. Restricted.
         rpc Add (AddRequest) returns (AddReply) {}
+
+        // Stats API. Restricted.
+        rpc Leases (LeasesRequest) returns (LeasesReply) {}
 }
 
 message GetRequest {}
@@ -45,4 +48,22 @@ message AddRequest {
 
 message AddReply {
         string order_id = 1;
+}
+
+message Lease {
+        string order_id = 1;
+        string lease_id = 2;
+        bool done = 3;
+        int64 user_id = 4;
+        int64 created_ms = 5;
+        int64 updated_ms = 6;
+        int64 expires_ms = 7;
+}
+
+message LeasesRequest {
+        bool done = 1;
+}
+
+message LeasesReply {
+        repeated Lease leases = 1;
 }

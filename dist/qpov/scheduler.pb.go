@@ -86,6 +86,43 @@ func (m *AddReply) Reset()         { *m = AddReply{} }
 func (m *AddReply) String() string { return proto.CompactTextString(m) }
 func (*AddReply) ProtoMessage()    {}
 
+type Lease struct {
+	OrderId   string `protobuf:"bytes,1,opt,name=order_id" json:"order_id,omitempty"`
+	LeaseId   string `protobuf:"bytes,2,opt,name=lease_id" json:"lease_id,omitempty"`
+	Done      bool   `protobuf:"varint,3,opt,name=done" json:"done,omitempty"`
+	UserId    int64  `protobuf:"varint,4,opt,name=user_id" json:"user_id,omitempty"`
+	CreatedMs int64  `protobuf:"varint,5,opt,name=created_ms" json:"created_ms,omitempty"`
+	UpdatedMs int64  `protobuf:"varint,6,opt,name=updated_ms" json:"updated_ms,omitempty"`
+	ExpiresMs int64  `protobuf:"varint,7,opt,name=expires_ms" json:"expires_ms,omitempty"`
+}
+
+func (m *Lease) Reset()         { *m = Lease{} }
+func (m *Lease) String() string { return proto.CompactTextString(m) }
+func (*Lease) ProtoMessage()    {}
+
+type LeasesRequest struct {
+	Done bool `protobuf:"varint,1,opt,name=done" json:"done,omitempty"`
+}
+
+func (m *LeasesRequest) Reset()         { *m = LeasesRequest{} }
+func (m *LeasesRequest) String() string { return proto.CompactTextString(m) }
+func (*LeasesRequest) ProtoMessage()    {}
+
+type LeasesReply struct {
+	Leases []*Lease `protobuf:"bytes,1,rep,name=leases" json:"leases,omitempty"`
+}
+
+func (m *LeasesReply) Reset()         { *m = LeasesReply{} }
+func (m *LeasesReply) String() string { return proto.CompactTextString(m) }
+func (*LeasesReply) ProtoMessage()    {}
+
+func (m *LeasesReply) GetLeases() []*Lease {
+	if m != nil {
+		return m.Leases
+	}
+	return nil
+}
+
 // Reference imports to suppress errors if they are not otherwise used.
 var _ context.Context
 var _ grpc.ClientConn
@@ -97,8 +134,10 @@ type SchedulerClient interface {
 	Get(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetReply, error)
 	Renew(ctx context.Context, in *RenewRequest, opts ...grpc.CallOption) (*RenewReply, error)
 	Done(ctx context.Context, in *DoneRequest, opts ...grpc.CallOption) (*DoneReply, error)
-	// Order handling API.
+	// Order handling API. Restricted.
 	Add(ctx context.Context, in *AddRequest, opts ...grpc.CallOption) (*AddReply, error)
+	// Stats API. Restricted.
+	Leases(ctx context.Context, in *LeasesRequest, opts ...grpc.CallOption) (*LeasesReply, error)
 }
 
 type schedulerClient struct {
@@ -145,6 +184,15 @@ func (c *schedulerClient) Add(ctx context.Context, in *AddRequest, opts ...grpc.
 	return out, nil
 }
 
+func (c *schedulerClient) Leases(ctx context.Context, in *LeasesRequest, opts ...grpc.CallOption) (*LeasesReply, error) {
+	out := new(LeasesReply)
+	err := grpc.Invoke(ctx, "/qpov.Scheduler/Leases", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // Server API for Scheduler service
 
 type SchedulerServer interface {
@@ -152,8 +200,10 @@ type SchedulerServer interface {
 	Get(context.Context, *GetRequest) (*GetReply, error)
 	Renew(context.Context, *RenewRequest) (*RenewReply, error)
 	Done(context.Context, *DoneRequest) (*DoneReply, error)
-	// Order handling API.
+	// Order handling API. Restricted.
 	Add(context.Context, *AddRequest) (*AddReply, error)
+	// Stats API. Restricted.
+	Leases(context.Context, *LeasesRequest) (*LeasesReply, error)
 }
 
 func RegisterSchedulerServer(s *grpc.Server, srv SchedulerServer) {
@@ -208,6 +258,18 @@ func _Scheduler_Add_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return out, nil
 }
 
+func _Scheduler_Leases_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+	in := new(LeasesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	out, err := srv.(SchedulerServer).Leases(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 var _Scheduler_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "qpov.Scheduler",
 	HandlerType: (*SchedulerServer)(nil),
@@ -227,6 +289,10 @@ var _Scheduler_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Add",
 			Handler:    _Scheduler_Add_Handler,
+		},
+		{
+			MethodName: "Leases",
+			Handler:    _Scheduler_Leases_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{},

@@ -253,6 +253,90 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	return ret, nil
 }
 
+func (s *server) Leases(ctx context.Context, in *pb.LeasesRequest) (*pb.LeasesReply, error) {
+	st := time.Now()
+	requestID := uuid.New()
+	if err := blockRestrictedAPI(ctx); err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(`
+SELECT
+  order_id,
+  lease_id,
+  user_id,
+  created,
+  updated,
+  expires
+FROM leases
+WHERE expires > NOW()
+ORDER BY order_id,lease_id`)
+	if err != nil {
+		log.Printf("Leases error: %v", err)
+		return nil, fmt.Errorf("internal DB error")
+	}
+	defer rows.Close()
+	ret := &pb.LeasesReply{}
+
+	for rows.Next() {
+		var orderID, leaseID string
+		var userID *int
+		var created, updated, expires time.Time
+		if err := rows.Scan(&orderID, &leaseID, &userID, &created, &updated, &expires); err != nil {
+			log.Printf("Scanning lease: %v", err)
+			return nil, fmt.Errorf("internal DB error")
+		}
+		e := &pb.Lease{
+			OrderId:   orderID,
+			LeaseId:   leaseID,
+			CreatedMs: created.UnixNano() / 1000000,
+			UpdatedMs: updated.UnixNano() / 1000000,
+			ExpiresMs: expires.UnixNano() / 1000000,
+		}
+		if userID != nil {
+			e.UserId = int64(*userID)
+		}
+		ret.Leases = append(ret.Leases, e)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("Checking leases: %v", err)
+		return nil, fmt.Errorf("internal DB error")
+	}
+
+	s.rpcLog.Log(ctx, requestID, "dscheduler.Leases", st,
+		"github.com/ThomasHabets/qpov/dist/qpov/LeasesRequest", in,
+		nil, "github.com/ThomasHabets/qpov/dist/qpov/LeasesReply", ret)
+	return ret, nil
+}
+
+func blockRestrictedAPIInternal(ctx context.Context) error {
+	t, ok := transport.StreamFromContext(ctx)
+	if !ok {
+		return fmt.Errorf("no stream context")
+	}
+	st := t.ServerTransport()
+	log.Printf("Called from %v", st.RemoteAddr())
+	a, ok := credentials.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("no credentials")
+	}
+	at, ok := a.(credentials.TLSInfo)
+	if !ok {
+		return fmt.Errorf("auth type is not TLSInfo")
+	}
+	if len(at.State.PeerCertificates) != 1 {
+		return fmt.Errorf("no certificate attached")
+	}
+	return nil
+}
+
+func blockRestrictedAPI(ctx context.Context) error {
+	if err := blockRestrictedAPIInternal(ctx); err != nil {
+		log.Printf("Restricted API: %v", err)
+		return fmt.Errorf("restricted API called")
+	}
+	return nil
+}
+
 func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, error) {
 	st := time.Now()
 	requestID := uuid.New()
