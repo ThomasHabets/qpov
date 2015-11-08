@@ -44,7 +44,7 @@ func (s *rpcScheduler) add(order string) error {
 	return err
 }
 
-func newRPCScheduler(addr string) (scheduler, error) {
+func newRPCScheduler(addr string) (*rpcScheduler, error) {
 	b, err := ioutil.ReadFile(*caFile)
 	if err != nil {
 		return nil, fmt.Errorf("reading %q: %v", *caFile, err)

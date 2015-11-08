@@ -8,8 +8,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
+
+	"golang.org/x/net/context"
 
 	"github.com/ThomasHabets/qpov/dist"
+	pb "github.com/ThomasHabets/qpov/dist/qpov"
 )
 
 var (
@@ -20,6 +24,7 @@ var (
 	dst       = flag.String("destination", "", "S3 directory to store results in.")
 	dryRun    = flag.Bool("dry_run", false, "Don't actually enqueue.")
 	schedAddr = flag.String("scheduler", "", "Scheduler address.")
+	cmdList   = flag.Bool("list", false, "List leases.")
 
 	frames Range
 )
@@ -67,12 +72,47 @@ func (r *Range) String() string {
 	return fmt.Sprintf("%d-%d+%d", r.From, r.To, r.Skip)
 }
 
+func ms2Time(t int64) time.Time {
+	return time.Unix(t/1000, 1000000*(t%1000))
+}
+
+func roundSecondD(t time.Duration) time.Duration {
+	return time.Duration((int64(t) / 1000000000) * 1000000000)
+}
+
+func list() {
+	q, err := newRPCScheduler(*schedAddr)
+	if err != nil {
+		log.Fatalf("Connecting to scheduler %q: %v", *schedAddr, err)
+	}
+	defer q.close()
+	ls, err := q.client.Leases(context.Background(), &pb.LeasesRequest{})
+	if err != nil {
+		log.Fatalf("Listing leases: %v", err)
+	}
+	f := "%36s %36s %5s %12s %10s %10s\n"
+	fmt.Printf(f, "Order ID", "Lease ID", "User", "Lifetime", "Updated", "Expires")
+	for _, l := range ls.Leases {
+		fmt.Printf(f, l.OrderId, l.LeaseId, fmt.Sprint(l.UserId),
+			roundSecondD(time.Since(ms2Time(l.CreatedMs))),
+			roundSecondD(time.Since(ms2Time(l.UpdatedMs))),
+			roundSecondD(ms2Time(l.ExpiresMs).Sub(time.Now())),
+		)
+	}
+}
+
 func main() {
 	flag.Parse()
 
 	if *schedAddr == "" && *queueName == "" {
 		log.Fatalf("Must supply -queue or -scheduler")
 	}
+
+	if *cmdList {
+		list()
+		return
+	}
+
 	if *pkg == "" {
 		log.Fatalf("Must supply -package")
 	}
