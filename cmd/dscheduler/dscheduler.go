@@ -302,6 +302,7 @@ ORDER BY order_id,lease_id`)
 		return nil, fmt.Errorf("internal DB error")
 	}
 
+	log.Printf("RPC(Leases)")
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Leases", st,
 		"github.com/ThomasHabets/qpov/dist/qpov/LeasesRequest", in,
 		nil, "github.com/ThomasHabets/qpov/dist/qpov/LeasesReply", ret)
@@ -313,8 +314,10 @@ func blockRestrictedAPIInternal(ctx context.Context) error {
 	if !ok {
 		return fmt.Errorf("no stream context")
 	}
-	st := t.ServerTransport()
-	log.Printf("Called from %v", st.RemoteAddr())
+	if false {
+		st := t.ServerTransport()
+		log.Printf("Called from %v", st.RemoteAddr())
+	}
 	a, ok := credentials.FromContext(ctx)
 	if !ok {
 		return fmt.Errorf("no credentials")
