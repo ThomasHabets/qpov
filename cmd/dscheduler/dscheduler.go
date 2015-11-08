@@ -242,7 +242,7 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 		return nil, err
 	}
 	// Mark as completed.
-	if _, err := db.Exec(`UPDATE leases SET done=TRUE WHERE lease_id=$1`, in.LeaseId); err != nil {
+	if _, err := db.Exec(`UPDATE leases SET done=TRUE,updated=NOW() WHERE lease_id=$1`, in.LeaseId); err != nil {
 		return nil, err
 	}
 	log.Printf("RPC(Done): Lease: %q", in.LeaseId)
