@@ -97,8 +97,7 @@ SELECT orders.order_id, orders.definition
 FROM orders
 LEFT OUTER JOIN leases ON orders.order_id=leases.order_id
 WHERE leases.lease_id IS NULL
-OR (leases.expires < NOW()
-    AND leases.done = FALSE)
+OR (FALSE AND leases.expires < NOW() AND leases.done = FALSE)
 LIMIT 1`)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("nothing to do")
