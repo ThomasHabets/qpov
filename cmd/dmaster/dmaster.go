@@ -86,7 +86,9 @@ func list() {
 		log.Fatalf("Connecting to scheduler %q: %v", *schedAddr, err)
 	}
 	defer q.close()
-	ls, err := q.client.Leases(context.Background(), &pb.LeasesRequest{})
+	ls, err := q.client.Leases(context.Background(), &pb.LeasesRequest{
+		Done: false,
+	})
 	if err != nil {
 		log.Fatalf("Listing leases: %v", err)
 	}
