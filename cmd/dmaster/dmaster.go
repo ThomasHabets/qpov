@@ -83,6 +83,7 @@ func cmdList(args []string) {
 		fs.PrintDefaults()
 	}
 	done := fs.Bool("done", false, "List done leases, as opposed to active.")
+	fs.Parse(args)
 
 	q, err := newRPCScheduler(*schedAddr)
 	if err != nil {
@@ -124,6 +125,7 @@ func cmdAdd(args []string) {
 	file := fs.String("file", "", "POV file to render.")
 	dst := fs.String("destination", "", "S3 directory to store results in.")
 	dryRun := fs.Bool("dry_run", false, "Don't actually enqueue.")
+	fs.Parse(args)
 
 	if *pkg == "" {
 		log.Fatalf("Must supply -package")
