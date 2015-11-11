@@ -253,11 +253,12 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	return ret, nil
 }
 
-func (s *server) Leases(ctx context.Context, in *pb.LeasesRequest) (*pb.LeasesReply, error) {
+func (s *server) Leases(in *pb.LeasesRequest, stream pb.Scheduler_LeasesServer) error {
 	st := time.Now()
 	requestID := uuid.New()
+	ctx := stream.Context()
 	if err := blockRestrictedAPI(ctx); err != nil {
-		return nil, err
+		return err
 	}
 	rows, err := db.Query(`
 SELECT
@@ -273,7 +274,7 @@ AND   ($1=TRUE OR expires > NOW())
 ORDER BY order_id,lease_id`, in.Done)
 	if err != nil {
 		log.Printf("Leases error: %v", err)
-		return nil, fmt.Errorf("internal DB error")
+		return fmt.Errorf("internal DB error")
 	}
 	defer rows.Close()
 	ret := &pb.LeasesReply{}
@@ -284,30 +285,34 @@ ORDER BY order_id,lease_id`, in.Done)
 		var created, updated, expires time.Time
 		if err := rows.Scan(&orderID, &leaseID, &userID, &created, &updated, &expires); err != nil {
 			log.Printf("Scanning lease: %v", err)
-			return nil, fmt.Errorf("internal DB error")
+			return fmt.Errorf("internal DB error")
 		}
-		e := &pb.Lease{
-			OrderId:   orderID,
-			LeaseId:   leaseID,
-			CreatedMs: created.UnixNano() / 1000000,
-			UpdatedMs: updated.UnixNano() / 1000000,
-			ExpiresMs: expires.UnixNano() / 1000000,
+		e := &pb.LeasesReply{
+			Lease: &pb.Lease{
+				OrderId:   orderID,
+				LeaseId:   leaseID,
+				CreatedMs: created.UnixNano() / 1000000,
+				UpdatedMs: updated.UnixNano() / 1000000,
+				ExpiresMs: expires.UnixNano() / 1000000,
+			},
 		}
 		if userID != nil {
-			e.UserId = int64(*userID)
+			e.Lease.UserId = int64(*userID)
 		}
-		ret.Leases = append(ret.Leases, e)
+		if err := stream.Send(e); err != nil {
+			return err
+		}
 	}
 	if err := rows.Err(); err != nil {
 		log.Printf("Checking leases: %v", err)
-		return nil, fmt.Errorf("internal DB error")
+		return fmt.Errorf("internal DB error")
 	}
 
 	log.Printf("RPC(Leases)")
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Leases", st,
 		"github.com/ThomasHabets/qpov/dist/qpov/LeasesRequest", in,
 		nil, "github.com/ThomasHabets/qpov/dist/qpov/LeasesReply", ret)
-	return ret, nil
+	return nil
 }
 
 func blockRestrictedAPIInternal(ctx context.Context) error {

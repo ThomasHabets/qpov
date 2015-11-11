@@ -11,7 +11,7 @@ service Scheduler {
         rpc Add (AddRequest) returns (AddReply) {}
 
         // Stats API. Restricted.
-        rpc Leases (LeasesRequest) returns (LeasesReply) {}
+        rpc Leases (LeasesRequest) returns (stream LeasesReply) {}
 }
 
 message GetRequest {}
@@ -65,5 +65,5 @@ message LeasesRequest {
 }
 
 message LeasesReply {
-        repeated Lease leases = 1;
+        Lease lease = 1;
 }

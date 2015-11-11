@@ -109,16 +109,16 @@ func (m *LeasesRequest) String() string { return proto.CompactTextString(m) }
 func (*LeasesRequest) ProtoMessage()    {}
 
 type LeasesReply struct {
-	Leases []*Lease `protobuf:"bytes,1,rep,name=leases" json:"leases,omitempty"`
+	Lease *Lease `protobuf:"bytes,1,opt,name=lease" json:"lease,omitempty"`
 }
 
 func (m *LeasesReply) Reset()         { *m = LeasesReply{} }
 func (m *LeasesReply) String() string { return proto.CompactTextString(m) }
 func (*LeasesReply) ProtoMessage()    {}
 
-func (m *LeasesReply) GetLeases() []*Lease {
+func (m *LeasesReply) GetLease() *Lease {
 	if m != nil {
-		return m.Leases
+		return m.Lease
 	}
 	return nil
 }
@@ -137,7 +137,7 @@ type SchedulerClient interface {
 	// Order handling API. Restricted.
 	Add(ctx context.Context, in *AddRequest, opts ...grpc.CallOption) (*AddReply, error)
 	// Stats API. Restricted.
-	Leases(ctx context.Context, in *LeasesRequest, opts ...grpc.CallOption) (*LeasesReply, error)
+	Leases(ctx context.Context, in *LeasesRequest, opts ...grpc.CallOption) (Scheduler_LeasesClient, error)
 }
 
 type schedulerClient struct {
@@ -184,13 +184,36 @@ func (c *schedulerClient) Add(ctx context.Context, in *AddRequest, opts ...grpc.
 	return out, nil
 }
 
-func (c *schedulerClient) Leases(ctx context.Context, in *LeasesRequest, opts ...grpc.CallOption) (*LeasesReply, error) {
-	out := new(LeasesReply)
-	err := grpc.Invoke(ctx, "/qpov.Scheduler/Leases", in, out, c.cc, opts...)
+func (c *schedulerClient) Leases(ctx context.Context, in *LeasesRequest, opts ...grpc.CallOption) (Scheduler_LeasesClient, error) {
+	stream, err := grpc.NewClientStream(ctx, &_Scheduler_serviceDesc.Streams[0], c.cc, "/qpov.Scheduler/Leases", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &schedulerLeasesClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Scheduler_LeasesClient interface {
+	Recv() (*LeasesReply, error)
+	grpc.ClientStream
+}
+
+type schedulerLeasesClient struct {
+	grpc.ClientStream
+}
+
+func (x *schedulerLeasesClient) Recv() (*LeasesReply, error) {
+	m := new(LeasesReply)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // Server API for Scheduler service
@@ -203,7 +226,7 @@ type SchedulerServer interface {
 	// Order handling API. Restricted.
 	Add(context.Context, *AddRequest) (*AddReply, error)
 	// Stats API. Restricted.
-	Leases(context.Context, *LeasesRequest) (*LeasesReply, error)
+	Leases(*LeasesRequest, Scheduler_LeasesServer) error
 }
 
 func RegisterSchedulerServer(s *grpc.Server, srv SchedulerServer) {
@@ -258,16 +281,25 @@ func _Scheduler_Add_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return out, nil
 }
 
-func _Scheduler_Leases_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
-	in := new(LeasesRequest)
-	if err := dec(in); err != nil {
-		return nil, err
+func _Scheduler_Leases_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(LeasesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
 	}
-	out, err := srv.(SchedulerServer).Leases(ctx, in)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
+	return srv.(SchedulerServer).Leases(m, &schedulerLeasesServer{stream})
+}
+
+type Scheduler_LeasesServer interface {
+	Send(*LeasesReply) error
+	grpc.ServerStream
+}
+
+type schedulerLeasesServer struct {
+	grpc.ServerStream
+}
+
+func (x *schedulerLeasesServer) Send(m *LeasesReply) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 var _Scheduler_serviceDesc = grpc.ServiceDesc{
@@ -290,10 +322,12 @@ var _Scheduler_serviceDesc = grpc.ServiceDesc{
 			MethodName: "Add",
 			Handler:    _Scheduler_Add_Handler,
 		},
+	},
+	Streams: []grpc.StreamDesc{
 		{
-			MethodName: "Leases",
-			Handler:    _Scheduler_Leases_Handler,
+			StreamName:    "Leases",
+			Handler:       _Scheduler_Leases_Handler,
+			ServerStreams: true,
 		},
 	},
-	Streams: []grpc.StreamDesc{},
 }

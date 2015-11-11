@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"regexp"
 	"strconv"
@@ -86,7 +87,7 @@ func list() {
 		log.Fatalf("Connecting to scheduler %q: %v", *schedAddr, err)
 	}
 	defer q.close()
-	ls, err := q.client.Leases(context.Background(), &pb.LeasesRequest{
+	stream, err := q.client.Leases(context.Background(), &pb.LeasesRequest{
 		Done: false,
 	})
 	if err != nil {
@@ -94,7 +95,14 @@ func list() {
 	}
 	f := "%36s %36s %5s %12s %10s %10s\n"
 	fmt.Printf(f, "Order ID", "Lease ID", "User", "Lifetime", "Updated", "Expires")
-	for _, l := range ls.Leases {
+	for {
+		r, err := stream.Recv()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			log.Fatalf("Listing leases: %v", err)
+		}
+		l := r.Lease
 		fmt.Printf(f, l.OrderId, l.LeaseId, fmt.Sprint(l.UserId),
 			roundSecondD(time.Since(ms2Time(l.CreatedMs))),
 			roundSecondD(time.Since(ms2Time(l.UpdatedMs))),
