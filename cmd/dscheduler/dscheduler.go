@@ -277,7 +277,7 @@ ORDER BY order_id,lease_id`, in.Done)
 		return fmt.Errorf("internal DB error")
 	}
 	defer rows.Close()
-	ret := &pb.LeasesReply{}
+	logRet := &pb.LeasesReply{}
 
 	for rows.Next() {
 		var orderID, leaseID string
@@ -311,7 +311,7 @@ ORDER BY order_id,lease_id`, in.Done)
 	log.Printf("RPC(Leases)")
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Leases", st,
 		"github.com/ThomasHabets/qpov/dist/qpov/LeasesRequest", in,
-		nil, "github.com/ThomasHabets/qpov/dist/qpov/LeasesReply", ret)
+		nil, "github.com/ThomasHabets/qpov/dist/qpov/LeasesReply", logRet)
 	return nil
 }
 

@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
+	"github.com/ThomasHabets/qpov/dist"
 	pb "github.com/ThomasHabets/qpov/dist/qpov"
 )
 
@@ -65,14 +66,18 @@ func (s *rpcScheduler) done(id string, img, stdout, stderr []byte, j string) err
 }
 
 func newRPCScheduler(addr string) (scheduler, error) {
-	b, err := ioutil.ReadFile(*caFile)
-	if err != nil {
-		return nil, fmt.Errorf("reading %q: %v", *caFile, err)
+	caStr := dist.CacertClass1
+	if *caFile != "" {
+		b, err := ioutil.ReadFile(*caFile)
+		if err != nil {
+			return nil, fmt.Errorf("reading %q: %v", *caFile, err)
+		}
+		caStr = string(b)
 	}
 
 	// Root CA.
 	cp := x509.NewCertPool()
-	if ok := cp.AppendCertsFromPEM(b); !ok {
+	if ok := cp.AppendCertsFromPEM([]byte(caStr)); !ok {
 		return nil, fmt.Errorf("failed to add root CAs")
 	}
 
