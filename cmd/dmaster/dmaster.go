@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -19,13 +20,7 @@ import (
 
 var (
 	queueName = flag.String("queue", "", "Name of SQS queue.")
-	pkg       = flag.String("package", "", "S3 path to rar file containing all resources.")
-	dir       = flag.String("dir", "", "Directory in package to use as CWD.")
-	file      = flag.String("file", "", "POV file to render.")
-	dst       = flag.String("destination", "", "S3 directory to store results in.")
-	dryRun    = flag.Bool("dry_run", false, "Don't actually enqueue.")
 	schedAddr = flag.String("scheduler", "", "Scheduler address.")
-	cmdList   = flag.Bool("list", false, "List leases.")
 
 	frames Range
 )
@@ -81,14 +76,21 @@ func roundSecondD(t time.Duration) time.Duration {
 	return time.Duration((int64(t) / 1000000000) * 1000000000)
 }
 
-func list() {
+func cmdList(args []string) {
+	fs := flag.NewFlagSet("list", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] list [options]\n", os.Args[0])
+		fs.PrintDefaults()
+	}
+	done := fs.Bool("done", false, "List done leases, as opposed to active.")
+
 	q, err := newRPCScheduler(*schedAddr)
 	if err != nil {
 		log.Fatalf("Connecting to scheduler %q: %v", *schedAddr, err)
 	}
 	defer q.close()
 	stream, err := q.client.Leases(context.Background(), &pb.LeasesRequest{
-		Done: false,
+		Done: *done,
 	})
 	if err != nil {
 		log.Fatalf("Listing leases: %v", err)
@@ -111,17 +113,17 @@ func list() {
 	}
 }
 
-func main() {
-	flag.Parse()
-
-	if *schedAddr == "" && *queueName == "" {
-		log.Fatalf("Must supply -queue or -scheduler")
+func cmdAdd(args []string) {
+	fs := flag.NewFlagSet("list", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] list [options]\n", os.Args[0])
+		fs.PrintDefaults()
 	}
-
-	if *cmdList {
-		list()
-		return
-	}
+	pkg := fs.String("package", "", "S3 path to rar file containing all resources.")
+	dir := fs.String("dir", "", "Directory in package to use as CWD.")
+	file := fs.String("file", "", "POV file to render.")
+	dst := fs.String("destination", "", "S3 directory to store results in.")
+	dryRun := fs.Bool("dry_run", false, "Don't actually enqueue.")
 
 	if *pkg == "" {
 		log.Fatalf("Must supply -package")
@@ -205,4 +207,26 @@ OK (y/N)?
 			}
 		}
 	}
+}
+
+func main() {
+	flag.Parse()
+
+	if len(flag.Args()) == 0 {
+		log.Fatalf("Must supply subcommand")
+	}
+
+	if *schedAddr == "" && *queueName == "" {
+		log.Fatalf("Must supply -queue or -scheduler")
+	}
+
+	switch flag.Arg(0) {
+	case "list":
+		cmdList(flag.Args()[1:])
+	case "add":
+		cmdAdd(flag.Args()[1:])
+	default:
+		log.Fatalf("Unknown command %q", flag.Arg(0))
+	}
+
 }
