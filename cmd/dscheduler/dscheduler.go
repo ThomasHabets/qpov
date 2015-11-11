@@ -271,7 +271,7 @@ SELECT
 FROM leases
 WHERE done=$1
 AND   ($1=TRUE OR expires > NOW())
-ORDER BY order_id,lease_id`, in.Done)
+ORDER BY updated`, in.Done)
 	if err != nil {
 		log.Printf("Leases error: %v", err)
 		return fmt.Errorf("internal DB error")

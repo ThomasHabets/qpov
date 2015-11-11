@@ -96,8 +96,12 @@ func cmdList(args []string) {
 	if err != nil {
 		log.Fatalf("Listing leases: %v", err)
 	}
-	f := "%36s %36s %5s %12s %10s %10s\n"
-	fmt.Printf(f, "Order ID", "Lease ID", "User", "Lifetime", "Updated", "Expires")
+	f := "%36s %36s %5s %16s %16s %15s\n"
+	if *done {
+		fmt.Printf(f, "Order ID", "Lease ID", "User", "Created", "Done", "Time")
+	} else {
+		fmt.Printf(f, "Order ID", "Lease ID", "User", "Lifetime", "Updated", "Expires")
+	}
 	for {
 		r, err := stream.Recv()
 		if err == io.EOF {
@@ -106,11 +110,20 @@ func cmdList(args []string) {
 			log.Fatalf("Listing leases: %v", err)
 		}
 		l := r.Lease
-		fmt.Printf(f, l.OrderId, l.LeaseId, fmt.Sprint(l.UserId),
-			roundSecondD(time.Since(ms2Time(l.CreatedMs))),
-			roundSecondD(time.Since(ms2Time(l.UpdatedMs))),
-			roundSecondD(ms2Time(l.ExpiresMs).Sub(time.Now())),
-		)
+		if *done {
+			tf := "2006-01-02 15:04"
+			fmt.Printf(f, l.OrderId, l.LeaseId, fmt.Sprint(l.UserId),
+				ms2Time(l.CreatedMs).Format(tf),
+				ms2Time(l.UpdatedMs).Format(tf),
+				roundSecondD(ms2Time(l.UpdatedMs).Sub(ms2Time(l.CreatedMs))),
+			)
+		} else {
+			fmt.Printf(f, l.OrderId, l.LeaseId, fmt.Sprint(l.UserId),
+				roundSecondD(time.Since(ms2Time(l.CreatedMs))),
+				roundSecondD(time.Since(ms2Time(l.UpdatedMs))),
+				roundSecondD(ms2Time(l.ExpiresMs).Sub(time.Now())),
+			)
+		}
 	}
 }
 
