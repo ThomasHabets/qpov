@@ -34,7 +34,9 @@ import (
 )
 
 var (
-	defaultLeaseTime     = time.Hour
+	defaultLeaseRenewTime = time.Hour
+	maxLeaseRenewTime     = 48 * time.Hour
+
 	db                   *sql.DB
 	dbConnect            = flag.String("db", "", "")
 	addr                 = flag.String("port", ":9999", "Addr to listen to.")
@@ -157,7 +159,7 @@ LIMIT 1`)
 
 	lease := uuid.New()
 	if _, err := tx.Exec(`INSERT INTO leases(lease_id, done, order_id, user_id, created, updated, expires)
-VALUES($1, false, $2, $3, NOW(), NOW(), $4)`, lease, orderID, ownerID, time.Now().Add(defaultLeaseTime)); err != nil {
+VALUES($1, false, $2, $3, NOW(), NOW(), $4)`, lease, orderID, ownerID, time.Now().Add(defaultLeaseRenewTime)); err != nil {
 		return nil, dbError("Inserting lease", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -179,7 +181,10 @@ func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply
 	requestID := uuid.New()
 	secs := in.ExtendSec
 	if secs <= 0 {
-		secs = int32(defaultLeaseTime.Seconds())
+		secs = int32(defaultLeaseRenewTime.Seconds())
+	}
+	if secs > int32(maxLeaseRenewTime.Seconds()) {
+		secs = int32(maxLeaseRenewTime.Seconds())
 	}
 	n := time.Now().Add(time.Duration(int64(time.Second) * int64(secs)))
 	if _, err := db.Exec(`UPDATE leases SET updated=NOW(), expires=$1 WHERE lease_id=$2`, n, in.LeaseId); err != nil {
