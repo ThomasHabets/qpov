@@ -21,13 +21,7 @@ import (
 var (
 	queueName = flag.String("queue", "", "Name of SQS queue.")
 	schedAddr = flag.String("scheduler", "", "Scheduler address.")
-
-	frames Range
 )
-
-func init() {
-	flag.Var(&frames, "frames", "Order many frames to be rendered. In format '1-10' or '1-10+2' for only doing odd numbered frames.")
-}
 
 type scheduler interface {
 	add(string) error
@@ -138,6 +132,8 @@ func cmdAdd(args []string) {
 	file := fs.String("file", "", "POV file to render.")
 	dst := fs.String("destination", "", "S3 directory to store results in.")
 	dryRun := fs.Bool("dry_run", false, "Don't actually enqueue.")
+	var frames Range
+	fs.Var(&frames, "frames", "Order many frames to be rendered. In format '1-10' or '1-10+2' for only doing odd numbered frames.")
 	fs.Parse(args)
 
 	if *pkg == "" {
@@ -165,7 +161,7 @@ func cmdAdd(args []string) {
 			Dir:         *dir,
 			File:        *file,
 			Destination: *dst,
-			Args:        flag.Args(),
+			Args:        fs.Args(),
 			//Args:        []string{"+Q11", "+A0.3", "+R4", "+W3840", "+H2160"},
 			//Args: []string{"+W320", "+H240"},
 		})
@@ -193,7 +189,7 @@ func cmdAdd(args []string) {
   Args:        %q
 
 OK (y/N)?
-`, c, *pkg, *dir, *file, fmt.Sprintf(*file, 1), *dst, flag.Args())
+`, c, *pkg, *dir, *file, fmt.Sprintf(*file, 1), *dst, fs.Args())
 
 		var yn string
 		fmt.Scanln(&yn)
@@ -206,7 +202,7 @@ OK (y/N)?
 				Dir:         *dir,
 				File:        fmt.Sprintf(*file, i),
 				Destination: *dst,
-				Args:        flag.Args(),
+				Args:        fs.Args(),
 				//Args:        []string{"+Q11", "+A0.3", "+R4", "+W3840", "+H2160"},
 				//Args: []string{"+W320", "+H240"},
 			})
