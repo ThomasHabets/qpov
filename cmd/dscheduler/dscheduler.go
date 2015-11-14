@@ -203,10 +203,7 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	st := time.Now()
 	requestID := uuid.New()
 	// First give us time to receive the data.
-	_, err := s.Renew(ctx, &pb.RenewRequest{
-		LeaseId: in.LeaseId,
-	})
-	if err != nil {
+	if _, err := s.Renew(ctx, &pb.RenewRequest{LeaseId: in.LeaseId}); err != nil {
 		return nil, err
 	}
 
