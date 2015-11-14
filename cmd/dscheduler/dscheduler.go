@@ -49,6 +49,26 @@ const (
 	infoSuffix = ".json"
 )
 
+// Log error and return gRPC error safe for returing to users.
+func dbError(doing string, err error) error {
+	return internalError("database error", "%s: %v", doing, err)
+}
+
+func internalError(public string, f string, a ...interface{}) error {
+	log.Printf(f, a...)
+	return grpc.Errorf(codes.Internal, public)
+}
+
+// If error is not gRPC error, log and return "clean" error.
+// If it is a gRPC error, just use that, it's already clean.
+func cleanError(err error, code codes.Code, public string, a ...interface{}) error {
+	if grpc.Code(err) != codes.Unknown {
+		return err
+	}
+	log.Printf("%v: %v", fmt.Sprintf(public, a...), err)
+	return grpc.Errorf(code, public, a...)
+}
+
 // getOwnerID from the RPC channel TLS client cert.
 // Returns errNoCert if no cert is attached.
 func getOwnerID(ctx context.Context) (int, error) {
@@ -87,8 +107,7 @@ func (s *server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetReply, erro
 	requestID := uuid.New()
 	tx, err := db.Begin()
 	if err != nil {
-		log.Printf("Database error: %v", err)
-		return nil, fmt.Errorf("database error")
+		return nil, dbError("begin transaction", err)
 	}
 
 	defer tx.Rollback()
@@ -100,18 +119,17 @@ WHERE leases.lease_id IS NULL
 OR (FALSE AND leases.expires < NOW() AND leases.done = FALSE)
 LIMIT 1`)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("nothing to do")
+		// TODO: this can't happen, right? It fails on Scan?
+		return nil, grpc.Errorf(codes.NotFound, "nothing to do")
 	} else if err != nil {
-		log.Printf("Database error QueryRow: %v", err)
-		return nil, fmt.Errorf("database error")
+		return nil, dbError("Finding order to give out", err)
 	}
 
 	var orderID, def string
 	if err := row.Scan(&orderID, &def); err == sql.ErrNoRows {
-		return nil, fmt.Errorf("nothing to do")
+		return nil, grpc.Errorf(codes.NotFound, "nothing to do")
 	} else if err != nil {
-		log.Printf("Database error scanning: %v", err)
-		return nil, fmt.Errorf("database error")
+		return nil, dbError("Scanning order", err)
 	}
 
 	var ownerID *int
@@ -124,12 +142,10 @@ LIMIT 1`)
 	lease := uuid.New()
 	if _, err := tx.Exec(`INSERT INTO leases(lease_id, done, order_id, user_id, created, updated, expires)
 VALUES($1, false, $2, $3, NOW(), NOW(), $4)`, lease, orderID, ownerID, time.Now().Add(defaultLeaseTime)); err != nil {
-		log.Printf("Database error inserting lease: %v", err)
-		return nil, fmt.Errorf("database error")
+		return nil, dbError("Inserting lease", err)
 	}
 	if err := tx.Commit(); err != nil {
-		log.Printf("Database error committing: %v", err)
-		return nil, fmt.Errorf("database error")
+		return nil, dbError("Committing transaction", err)
 	}
 	log.Printf("RPC(Get): Order: %q, Lease: %q", orderID, lease)
 	ret := &pb.GetReply{
@@ -150,9 +166,8 @@ func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply
 		secs = int32(defaultLeaseTime.Seconds())
 	}
 	n := time.Now().Add(time.Duration(int64(time.Second) * int64(secs)))
-	_, err := db.Exec(`UPDATE leases SET updated=NOW(), expires=$1 WHERE lease_id=$2`, n, in.LeaseId)
-	if err != nil {
-		return nil, err
+	if _, err := db.Exec(`UPDATE leases SET updated=NOW(), expires=$1 WHERE lease_id=$2`, n, in.LeaseId); err != nil {
+		return nil, dbError("Updating lease", err)
 	}
 	log.Printf("RPC(Renew): Lease: %q until %v", in.LeaseId, n)
 	ret := &pb.RenewReply{
@@ -199,7 +214,7 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	destination, file, err := getOrderDestByLeaseID(in.LeaseId)
 	if err != nil {
 		log.Printf("Can't find order with lease %q: %v", in.LeaseId, err)
-		return nil, fmt.Errorf("unknown lease %q", in.LeaseId)
+		return nil, grpc.Errorf(codes.NotFound, "unknown lease %q", in.LeaseId)
 	}
 
 	sthree := s3.New(getAuth(), aws.USEast, nil)
@@ -239,11 +254,11 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 		close(errCh)
 	}()
 	if err := <-errCh; err != nil {
-		return nil, err
+		return nil, internalError("storing results", "Uploading to S3: %v", err)
 	}
 	// Mark as completed.
 	if _, err := db.Exec(`UPDATE leases SET done=TRUE,updated=NOW() WHERE lease_id=$1`, in.LeaseId); err != nil {
-		return nil, err
+		return nil, dbError("Marking done", err)
 	}
 	log.Printf("RPC(Done): Lease: %q", in.LeaseId)
 	ret := &pb.DoneReply{}
@@ -273,8 +288,7 @@ WHERE done=$1
 AND   ($1=TRUE OR expires > NOW())
 ORDER BY updated`, in.Done)
 	if err != nil {
-		log.Printf("Leases error: %v", err)
-		return fmt.Errorf("internal DB error")
+		return nil, dbError("Listing leases", err)
 	}
 	defer rows.Close()
 	logRet := &pb.LeasesReply{}
@@ -284,8 +298,7 @@ ORDER BY updated`, in.Done)
 		var userID *int
 		var created, updated, expires time.Time
 		if err := rows.Scan(&orderID, &leaseID, &userID, &created, &updated, &expires); err != nil {
-			log.Printf("Scanning lease: %v", err)
-			return fmt.Errorf("internal DB error")
+			return dbError("Scanning leases", err)
 		}
 		e := &pb.LeasesReply{
 			Lease: &pb.Lease{
@@ -300,12 +313,11 @@ ORDER BY updated`, in.Done)
 			e.Lease.UserId = int64(*userID)
 		}
 		if err := stream.Send(e); err != nil {
-			return err
+			return internalError("failed to stream results", "failed to stream results: %v", err)
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("Checking leases: %v", err)
-		return fmt.Errorf("internal DB error")
+		return dbError("Listing leases", err)
 	}
 
 	log.Printf("RPC(Leases)")
@@ -318,7 +330,7 @@ ORDER BY updated`, in.Done)
 func blockRestrictedAPIInternal(ctx context.Context) error {
 	t, ok := transport.StreamFromContext(ctx)
 	if !ok {
-		return fmt.Errorf("no stream context")
+		return grpc.Errorf(codes.Internal, "no stream context")
 	}
 	if false {
 		st := t.ServerTransport()
@@ -326,22 +338,23 @@ func blockRestrictedAPIInternal(ctx context.Context) error {
 	}
 	a, ok := credentials.FromContext(ctx)
 	if !ok {
-		return fmt.Errorf("no credentials")
+		return grpc.Errorf(codes.Unauthenticated, "no credentials")
 	}
 	at, ok := a.(credentials.TLSInfo)
 	if !ok {
-		return fmt.Errorf("auth type is not TLSInfo")
+		return grpc.Errorf(codes.Internal, "auth type is not TLSInfo")
 	}
 	if len(at.State.PeerCertificates) != 1 {
-		return fmt.Errorf("no certificate attached")
+		return grpc.Errorf(codes.Unauthenticated, "no certificate attached")
 	}
 	return nil
 }
 
+// Verify certificate info and return nil or error suitable for sending to user.
 func blockRestrictedAPI(ctx context.Context) error {
 	if err := blockRestrictedAPIInternal(ctx); err != nil {
 		log.Printf("Restricted API: %v", err)
-		return fmt.Errorf("restricted API called")
+		return grpc.Errorf(grpc.Code(err), "restricted API called without valid credentials")
 	}
 	return nil
 }
@@ -380,19 +393,17 @@ func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, erro
 			log.Printf("client cert %q not assigned to any user", cert.Subject.CommonName)
 			return nil, fmt.Errorf("client cert not assigned to any user")
 		} else if err != nil {
-			log.Printf("Failed looking up cert %q: %v", cert.Subject.CommonName, err)
-			return nil, fmt.Errorf("internal error: failed looking up cert")
+			return nil, dbError(fmt.Sprintf("Looking up user %v", ownerID), err)
 		}
 		if !adding {
 			log.Printf("User not allowed to add orders")
-			return nil, fmt.Errorf("user not allowed to add orders")
+			return nil, grpc.Errorf(codes.PermissionDenied, "user not allowed to add orders")
 		}
 	}
 
 	id := uuid.New()
-	_, err := db.Exec(`INSERT INTO orders(order_id, owner, definition) VALUES($1,$2,$3)`, id, ownerID, in.OrderDefinition)
-	if err != nil {
-		return nil, err
+	if _, err := db.Exec(`INSERT INTO orders(order_id, owner, definition) VALUES($1,$2,$3)`, id, ownerID, in.OrderDefinition); err != nil {
+		return nil, dbError("Inserting order", err)
 	}
 	log.Printf("RPC(Add): Order: %q", id)
 
