@@ -71,6 +71,17 @@ func cleanError(err error, code codes.Code, public string, a ...interface{}) err
 	return grpc.Errorf(code, public, a...)
 }
 
+func getOwnerIDByCN(cn string) (int, error) {
+	row := db.QueryRow(`SELECT users.user_id FROM users NATURAL JOIN certs WHERE certs.cn=$1`, cn)
+	var ownerID int
+	if err := row.Scan(&ownerID); err == sql.ErrNoRows {
+		return 0, fmt.Errorf("client cert not assigned to any user")
+	} else if err != nil {
+		return 0, fmt.Errorf("failed looking up cert: %v", err)
+	}
+	return ownerID, nil
+}
+
 // getOwnerID from the RPC channel TLS client cert.
 // Returns errNoCert if no cert is attached.
 func getOwnerID(ctx context.Context) (int, error) {
@@ -90,14 +101,17 @@ func getOwnerID(ctx context.Context) (int, error) {
 	// If there is a cert then it was verified in the handshake as belonging to the client CA.
 	// We just need to turn the cert CommonName into a userID.
 	// TODO: Really the userID should be part of the cert instead of stored on the server side. Ugly hack for now.
-	row := db.QueryRow(`SELECT users.user_id FROM users NATURAL JOIN certs WHERE certs.cn=$1`, cert.Subject.CommonName)
-	var ownerID int
-	if err := row.Scan(&ownerID); err == sql.ErrNoRows {
-		return 0, fmt.Errorf("client cert not assigned to any user")
-	} else if err != nil {
-		return 0, fmt.Errorf("failed looking up cert: %v", err)
+	ownerID, err := getOwnerIDByCN(cert.Subject.CommonName)
+	if err == nil {
+		return ownerID, nil
 	}
-	return ownerID, nil
+	aa := strings.Split(cert.Subject.CommonName, ":")
+	if len(aa) == 2 {
+		if ownerID, err := getOwnerIDByCN(aa[0]); err == nil {
+			return ownerID, nil
+		}
+	}
+	return 0, err
 }
 
 type server struct {
