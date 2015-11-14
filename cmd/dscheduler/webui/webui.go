@@ -132,12 +132,12 @@ func fmssub(a, b int64) string {
 }
 
 func fmsuntil(ms int64) string {
-	now := int64(time.Now().Unix())
+	now := time.Now().UnixNano() / 1000000000
 	return time.Unix(ms/1000, 0).Sub(time.Unix(now, 0)).String()
 }
 
 func fmssince(ms int64) string {
-	now := int64(time.Now().Unix())
+	now := time.Now().UnixNano() / 1000000000
 	return time.Unix(now, 0).Sub(time.Unix(ms/1000, 0)).String()
 }
 

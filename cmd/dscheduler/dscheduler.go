@@ -192,7 +192,7 @@ func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply
 	}
 	log.Printf("RPC(Renew): Lease: %q until %v", in.LeaseId, n)
 	ret := &pb.RenewReply{
-		NewTimeoutSec: int64(n.Unix()),
+		NewTimeoutSec: n.UnixNano() / 1000000000,
 	}
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Renew", st,
 		"github.com/ThomasHabets/qpov/dist/qpov/RenewRequest", in,
