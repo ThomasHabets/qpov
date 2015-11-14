@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/transport"
 
@@ -265,6 +267,145 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	return ret, nil
 }
 
+func (s *server) Orders(in *pb.OrdersRequest, stream pb.Scheduler_OrdersServer) error {
+	st := time.Now()
+	requestID := uuid.New()
+	ctx := stream.Context()
+	if err := blockRestrictedAPI(ctx); err != nil {
+		return err
+	}
+	having := []string{"TRUE=FALSE"}
+	if in.Active {
+		having = append(having, "COUNT(activeleases.lease_id)>0")
+	}
+	if in.Done {
+		having = append(having, "COUNT(doneleases.lease_id)>0")
+	}
+	if in.Unstarted {
+		having = append(having, "(COUNT(activeleases.lease_id)=0 AND COUNT(doneleases.lease_id)=0)")
+	}
+	rows, err := db.Query(fmt.Sprintf(`
+SELECT
+   orders.order_id,
+   COUNT(activeleases.lease_id) active,
+   COUNT(doneleases.lease_id) done
+FROM
+  orders
+
+LEFT OUTER JOIN (
+  SELECT
+    order_id,
+    lease_id
+  FROM leases
+  WHERE expires>NOW() AND done=FALSE
+) AS activeleases
+ON orders.order_id=activeleases.order_id
+
+LEFT OUTER JOIN (
+  SELECT
+    order_id,
+    lease_id
+  FROM leases
+  WHERE done=TRUE
+) AS doneleases
+ON orders.order_id=doneleases.order_id
+
+GROUP BY orders.order_id
+HAVING
+  %s
+ORDER BY
+  done DESC,
+  active DESC
+`, strings.Join(having, " OR ")))
+	if err != nil {
+		return dbError("Listing orders", err)
+	}
+	defer rows.Close()
+	logRet := &pb.OrdersReply{}
+	for rows.Next() {
+		e := &pb.OrdersReply{
+			Order: &pb.OrderStat{},
+		}
+		if err := rows.Scan(
+			&e.Order.OrderId,
+			&e.Order.Active,
+			&e.Order.Done,
+		); err != nil {
+			return dbError("Scanning orders", err)
+		}
+		if err := stream.Send(e); err != nil {
+			return internalError("failed to stream results", "failed to stream results: %v", err)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return dbError("Listing orders", err)
+	}
+
+	log.Printf("RPC(Orders)")
+	s.rpcLog.Log(ctx, requestID, "dscheduler.Orders", st,
+		"github.com/ThomasHabets/qpov/dist/qpov/OrdersRequest", in,
+		nil, "github.com/ThomasHabets/qpov/dist/qpov/OrdersReply", logRet)
+	return nil
+}
+
+func (s *server) Stats(ctx context.Context, in *pb.StatsRequest) (*pb.StatsReply, error) {
+	st := time.Now()
+	requestID := uuid.New()
+	if err := blockRestrictedAPI(ctx); err != nil {
+		return nil, err
+	}
+	ret := &pb.StatsReply{}
+	if in.SchedulingStats {
+		ret.SchedulingStats = &pb.SchedulingStats{}
+		row := db.QueryRow(`
+SELECT
+  COUNT(*) total,
+  (SELECT COUNT(l.order_id)
+    FROM (
+      SELECT DISTINCT order_id
+      FROM  leases
+      WHERE done=FALSE
+      AND   expires>NOW()
+    ) AS l
+  ) active,
+  (SELECT COUNT(l.order_id)
+    FROM (
+      SELECT DISTINCT order_id
+      FROM  leases
+      WHERE done=TRUE
+    ) AS l
+  ) done
+FROM orders
+`)
+		if err := row.Scan(
+			&ret.SchedulingStats.Orders,
+			&ret.SchedulingStats.ActiveOrders,
+			&ret.SchedulingStats.DoneOrders,
+		); err != nil {
+			return nil, dbError("order stats", err)
+		}
+
+		row = db.QueryRow(`
+SELECT
+  (SELECT COUNT(*) FROM leases) total,
+  (SELECT COUNT(*) FROM leases WHERE done=FALSE AND expires > NOW()) active,
+  (SELECT COUNT(*) FROM leases WHERE done=TRUE) done
+`)
+		if err := row.Scan(
+			&ret.SchedulingStats.Leases,
+			&ret.SchedulingStats.ActiveLeases,
+			&ret.SchedulingStats.DoneLeases,
+		); err != nil {
+			return nil, dbError("lease stats", err)
+		}
+	}
+	log.Printf("RPC(Orders)")
+	s.rpcLog.Log(ctx, requestID, "dscheduler.Stats", st,
+		"github.com/ThomasHabets/qpov/dist/qpov/StatsRequest", in,
+		nil, "github.com/ThomasHabets/qpov/dist/qpov/StatsReply", ret)
+	return ret, nil
+}
+
 func (s *server) Leases(in *pb.LeasesRequest, stream pb.Scheduler_LeasesServer) error {
 	st := time.Now()
 	requestID := uuid.New()
@@ -285,7 +426,7 @@ WHERE done=$1
 AND   ($1=TRUE OR expires > NOW())
 ORDER BY updated`, in.Done)
 	if err != nil {
-		return nil, dbError("Listing leases", err)
+		return dbError("Listing leases", err)
 	}
 	defer rows.Close()
 	logRet := &pb.LeasesReply{}

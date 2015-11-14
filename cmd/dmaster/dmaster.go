@@ -70,13 +70,13 @@ func roundSecondD(t time.Duration) time.Duration {
 	return time.Duration((int64(t) / 1000000000) * 1000000000)
 }
 
-func cmdList(args []string) {
-	fs := flag.NewFlagSet("list", flag.ExitOnError)
+func cmdLeases(args []string) {
+	fs := flag.NewFlagSet("leases", flag.ExitOnError)
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [options] list [options]\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] leases [options]\n", os.Args[0])
 		fs.PrintDefaults()
 	}
-	done := fs.Bool("done", false, "List done leases, as opposed to active.")
+	done := fs.Bool("done", false, "List completed leases, as opposed to active.")
 	fs.Parse(args)
 
 	q, err := newRPCScheduler(*schedAddr)
@@ -119,6 +119,72 @@ func cmdList(args []string) {
 			)
 		}
 	}
+}
+
+func cmdOrders(args []string) {
+	fs := flag.NewFlagSet("orders", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] orders [options]\n", os.Args[0])
+		fs.PrintDefaults()
+	}
+	done := fs.Bool("done", false, "List completed orders.")
+	active := fs.Bool("active", true, "List active orders.")
+	unstarted := fs.Bool("unstarted", true, "List unstarted orders.")
+	fs.Parse(args)
+
+	q, err := newRPCScheduler(*schedAddr)
+	if err != nil {
+		log.Fatalf("Connecting to scheduler %q: %v", *schedAddr, err)
+	}
+	defer q.close()
+	stream, err := q.client.Orders(context.Background(), &pb.OrdersRequest{
+		Done:      *done,
+		Active:    *active,
+		Unstarted: *unstarted,
+	})
+	if err != nil {
+		log.Fatalf("Listing orders: %v", err)
+	}
+	f := "%36s %10s %10s\n"
+	fmt.Printf(f, "Order ID", "Active", "Done")
+	for {
+		r, err := stream.Recv()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			log.Fatalf("Listing orders: %v", err)
+		}
+		l := r.Order
+		fmt.Printf(f, l.OrderId, fmt.Sprint(l.Active), fmt.Sprint(l.Done))
+	}
+}
+
+func cmdStats(args []string) {
+	fs := flag.NewFlagSet("stats", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] stats [options]\n", os.Args[0])
+		fs.PrintDefaults()
+	}
+	fs.Parse(args)
+
+	q, err := newRPCScheduler(*schedAddr)
+	if err != nil {
+		log.Fatalf("Connecting to scheduler %q: %v", *schedAddr, err)
+	}
+	defer q.close()
+	res, err := q.client.Stats(context.Background(), &pb.StatsRequest{
+		SchedulingStats: true,
+	})
+	if err != nil {
+		log.Fatalf("Getting stats: %v", err)
+	}
+	fmt.Printf(`-- Scheduling stats --
+Orders:    Total: %10d   Active: %10d    Done: %10d
+Leases:    Total: %10d   Active: %10d    Done: %10d
+`,
+		res.SchedulingStats.Orders, res.SchedulingStats.ActiveOrders, res.SchedulingStats.DoneOrders,
+		res.SchedulingStats.Leases, res.SchedulingStats.ActiveLeases, res.SchedulingStats.DoneLeases,
+	)
 }
 
 func cmdAdd(args []string) {
@@ -232,8 +298,12 @@ func main() {
 	}
 
 	switch flag.Arg(0) {
-	case "list":
-		cmdList(flag.Args()[1:])
+	case "leases":
+		cmdLeases(flag.Args()[1:])
+	case "orders":
+		cmdOrders(flag.Args()[1:])
+	case "stats":
+		cmdStats(flag.Args()[1:])
 	case "add":
 		cmdAdd(flag.Args()[1:])
 	default:

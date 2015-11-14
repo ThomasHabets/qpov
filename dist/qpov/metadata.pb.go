@@ -27,6 +27,12 @@ It has these top-level messages:
 	Lease
 	LeasesRequest
 	LeasesReply
+	OrdersRequest
+	OrderStat
+	OrdersReply
+	SchedulingStats
+	StatsRequest
+	StatsReply
 */
 package qpov
 

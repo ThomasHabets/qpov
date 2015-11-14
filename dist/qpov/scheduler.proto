@@ -12,6 +12,11 @@ service Scheduler {
 
         // Stats API. Restricted.
         rpc Leases (LeasesRequest) returns (stream LeasesReply) {}
+        rpc Orders (OrdersRequest) returns (stream OrdersReply) {}
+        rpc Stats (StatsRequest) returns (StatsReply) {}
+
+        // WebUI magic.
+        // rpc UserStats (UserStatsRequest) returns (UserStatsReply) {}
 }
 
 message GetRequest {}
@@ -66,4 +71,39 @@ message LeasesRequest {
 
 message LeasesReply {
         Lease lease = 1;
+}
+
+message OrdersRequest {
+        bool done = 1;
+        bool active = 2;
+        bool unstarted = 3;
+}
+
+message OrderStat {
+        string order_id = 1;
+        bool done = 2;
+        bool active = 3;
+}
+
+message OrdersReply {
+        OrderStat order = 1;
+}
+
+message SchedulingStats {
+        int64 orders = 1;         // Total orders in the system.
+        int64 active_orders = 2;  // Orders currently rendering.
+        int64 done_orders = 3;    // Finished orders.
+
+        int64 leases = 4;         // Total leases ever.
+        int64 active_leases = 5;  // Active leases. Equal to or greater than active_orders.
+        int64 done_leases = 6;    // Finished renderings.  Equal to or greater than done_orders.
+}
+
+message StatsRequest {
+        bool scheduling_stats = 1;
+}
+
+// Global stats.
+message StatsReply {
+        SchedulingStats scheduling_stats = 1;
 }

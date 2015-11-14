@@ -123,6 +123,78 @@ func (m *LeasesReply) GetLease() *Lease {
 	return nil
 }
 
+type OrdersRequest struct {
+	Done      bool `protobuf:"varint,1,opt,name=done" json:"done,omitempty"`
+	Active    bool `protobuf:"varint,2,opt,name=active" json:"active,omitempty"`
+	Unstarted bool `protobuf:"varint,3,opt,name=unstarted" json:"unstarted,omitempty"`
+}
+
+func (m *OrdersRequest) Reset()         { *m = OrdersRequest{} }
+func (m *OrdersRequest) String() string { return proto.CompactTextString(m) }
+func (*OrdersRequest) ProtoMessage()    {}
+
+type OrderStat struct {
+	OrderId string `protobuf:"bytes,1,opt,name=order_id" json:"order_id,omitempty"`
+	Done    bool   `protobuf:"varint,2,opt,name=done" json:"done,omitempty"`
+	Active  bool   `protobuf:"varint,3,opt,name=active" json:"active,omitempty"`
+}
+
+func (m *OrderStat) Reset()         { *m = OrderStat{} }
+func (m *OrderStat) String() string { return proto.CompactTextString(m) }
+func (*OrderStat) ProtoMessage()    {}
+
+type OrdersReply struct {
+	Order *OrderStat `protobuf:"bytes,1,opt,name=order" json:"order,omitempty"`
+}
+
+func (m *OrdersReply) Reset()         { *m = OrdersReply{} }
+func (m *OrdersReply) String() string { return proto.CompactTextString(m) }
+func (*OrdersReply) ProtoMessage()    {}
+
+func (m *OrdersReply) GetOrder() *OrderStat {
+	if m != nil {
+		return m.Order
+	}
+	return nil
+}
+
+type SchedulingStats struct {
+	Orders       int64 `protobuf:"varint,1,opt,name=orders" json:"orders,omitempty"`
+	ActiveOrders int64 `protobuf:"varint,2,opt,name=active_orders" json:"active_orders,omitempty"`
+	DoneOrders   int64 `protobuf:"varint,3,opt,name=done_orders" json:"done_orders,omitempty"`
+	Leases       int64 `protobuf:"varint,4,opt,name=leases" json:"leases,omitempty"`
+	ActiveLeases int64 `protobuf:"varint,5,opt,name=active_leases" json:"active_leases,omitempty"`
+	DoneLeases   int64 `protobuf:"varint,6,opt,name=done_leases" json:"done_leases,omitempty"`
+}
+
+func (m *SchedulingStats) Reset()         { *m = SchedulingStats{} }
+func (m *SchedulingStats) String() string { return proto.CompactTextString(m) }
+func (*SchedulingStats) ProtoMessage()    {}
+
+type StatsRequest struct {
+	SchedulingStats bool `protobuf:"varint,1,opt,name=scheduling_stats" json:"scheduling_stats,omitempty"`
+}
+
+func (m *StatsRequest) Reset()         { *m = StatsRequest{} }
+func (m *StatsRequest) String() string { return proto.CompactTextString(m) }
+func (*StatsRequest) ProtoMessage()    {}
+
+// Global stats.
+type StatsReply struct {
+	SchedulingStats *SchedulingStats `protobuf:"bytes,1,opt,name=scheduling_stats" json:"scheduling_stats,omitempty"`
+}
+
+func (m *StatsReply) Reset()         { *m = StatsReply{} }
+func (m *StatsReply) String() string { return proto.CompactTextString(m) }
+func (*StatsReply) ProtoMessage()    {}
+
+func (m *StatsReply) GetSchedulingStats() *SchedulingStats {
+	if m != nil {
+		return m.SchedulingStats
+	}
+	return nil
+}
+
 // Reference imports to suppress errors if they are not otherwise used.
 var _ context.Context
 var _ grpc.ClientConn
@@ -138,6 +210,8 @@ type SchedulerClient interface {
 	Add(ctx context.Context, in *AddRequest, opts ...grpc.CallOption) (*AddReply, error)
 	// Stats API. Restricted.
 	Leases(ctx context.Context, in *LeasesRequest, opts ...grpc.CallOption) (Scheduler_LeasesClient, error)
+	Orders(ctx context.Context, in *OrdersRequest, opts ...grpc.CallOption) (Scheduler_OrdersClient, error)
+	Stats(ctx context.Context, in *StatsRequest, opts ...grpc.CallOption) (*StatsReply, error)
 }
 
 type schedulerClient struct {
@@ -216,6 +290,47 @@ func (x *schedulerLeasesClient) Recv() (*LeasesReply, error) {
 	return m, nil
 }
 
+func (c *schedulerClient) Orders(ctx context.Context, in *OrdersRequest, opts ...grpc.CallOption) (Scheduler_OrdersClient, error) {
+	stream, err := grpc.NewClientStream(ctx, &_Scheduler_serviceDesc.Streams[1], c.cc, "/qpov.Scheduler/Orders", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &schedulerOrdersClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Scheduler_OrdersClient interface {
+	Recv() (*OrdersReply, error)
+	grpc.ClientStream
+}
+
+type schedulerOrdersClient struct {
+	grpc.ClientStream
+}
+
+func (x *schedulerOrdersClient) Recv() (*OrdersReply, error) {
+	m := new(OrdersReply)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *schedulerClient) Stats(ctx context.Context, in *StatsRequest, opts ...grpc.CallOption) (*StatsReply, error) {
+	out := new(StatsReply)
+	err := grpc.Invoke(ctx, "/qpov.Scheduler/Stats", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // Server API for Scheduler service
 
 type SchedulerServer interface {
@@ -227,6 +342,8 @@ type SchedulerServer interface {
 	Add(context.Context, *AddRequest) (*AddReply, error)
 	// Stats API. Restricted.
 	Leases(*LeasesRequest, Scheduler_LeasesServer) error
+	Orders(*OrdersRequest, Scheduler_OrdersServer) error
+	Stats(context.Context, *StatsRequest) (*StatsReply, error)
 }
 
 func RegisterSchedulerServer(s *grpc.Server, srv SchedulerServer) {
@@ -302,6 +419,39 @@ func (x *schedulerLeasesServer) Send(m *LeasesReply) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _Scheduler_Orders_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(OrdersRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(SchedulerServer).Orders(m, &schedulerOrdersServer{stream})
+}
+
+type Scheduler_OrdersServer interface {
+	Send(*OrdersReply) error
+	grpc.ServerStream
+}
+
+type schedulerOrdersServer struct {
+	grpc.ServerStream
+}
+
+func (x *schedulerOrdersServer) Send(m *OrdersReply) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _Scheduler_Stats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+	in := new(StatsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	out, err := srv.(SchedulerServer).Stats(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 var _Scheduler_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "qpov.Scheduler",
 	HandlerType: (*SchedulerServer)(nil),
@@ -322,11 +472,20 @@ var _Scheduler_serviceDesc = grpc.ServiceDesc{
 			MethodName: "Add",
 			Handler:    _Scheduler_Add_Handler,
 		},
+		{
+			MethodName: "Stats",
+			Handler:    _Scheduler_Stats_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "Leases",
 			Handler:       _Scheduler_Leases_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "Orders",
+			Handler:       _Scheduler_Orders_Handler,
 			ServerStreams: true,
 		},
 	},
