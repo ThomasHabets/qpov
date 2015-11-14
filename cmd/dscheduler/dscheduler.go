@@ -162,7 +162,7 @@ func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply
 	st := time.Now()
 	requestID := uuid.New()
 	secs := in.ExtendSec
-	if secs == 0 {
+	if secs <= 0 {
 		secs = int32(defaultLeaseTime.Seconds())
 	}
 	n := time.Now().Add(time.Duration(int64(time.Second) * int64(secs)))
