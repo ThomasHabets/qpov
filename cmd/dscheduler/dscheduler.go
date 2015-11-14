@@ -362,36 +362,18 @@ func blockRestrictedAPI(ctx context.Context) error {
 func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, error) {
 	st := time.Now()
 	requestID := uuid.New()
-	var ownerID int
-	{
-		t, ok := transport.StreamFromContext(ctx)
-		if !ok {
-			return nil, fmt.Errorf("internal error: no stream context")
-		}
-		st := t.ServerTransport()
-		log.Printf("Called from %v", st.RemoteAddr())
-		a, ok := credentials.FromContext(ctx)
-		if !ok {
-			return nil, fmt.Errorf("can't add orders unauthenticated")
-		}
-		at, ok := a.(credentials.TLSInfo)
-		if !ok {
-			return nil, fmt.Errorf("internal error: auth type is not TLSInfo")
-		}
-		if len(at.State.PeerCertificates) != 1 {
-			log.Printf("Add() attempted without cert from %v", st.RemoteAddr())
-			return nil, fmt.Errorf("need a valid cert for operation 'Add'")
-		}
-		cert := at.State.PeerCertificates[0]
+	ownerID, err := getOwnerID(ctx)
+	if err != nil {
+		return nil, grpc.Errorf(codes.Unauthenticated, "authentication required")
+	}
 
-		// If there is a cert then it was verified in the handshake as belonging to the client CA.
-		// We just need to turn the cert CommonName into a userID.
-		// TODO: Really the userID should be part of the cert instead of stored on the server side. Ugly hack for now.
-		row := db.QueryRow(`SELECT users.user_id, users.adding FROM users NATURAL JOIN certs WHERE certs.cn=$1`, cert.Subject.CommonName)
+	// Look up permission to add.
+	// TODO: put this in getOwnerID()
+	{
+		row := db.QueryRow(`SELECT adding FROM users WHERE users=$1`, ownerID)
 		var adding bool
-		if err := row.Scan(&ownerID, &adding); err == sql.ErrNoRows {
-			log.Printf("client cert %q not assigned to any user", cert.Subject.CommonName)
-			return nil, fmt.Errorf("client cert not assigned to any user")
+		if err := row.Scan(&adding); err == sql.ErrNoRows {
+			return nil, internalError("failed looking up user", "failed looking up user")
 		} else if err != nil {
 			return nil, dbError(fmt.Sprintf("Looking up user %v", ownerID), err)
 		}
