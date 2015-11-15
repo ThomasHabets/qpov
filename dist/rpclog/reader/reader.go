@@ -21,6 +21,12 @@ func anyText(msg *pb.Any) string {
 	m := map[string]proto.Message{
 		"github.com/ThomasHabets/qpov/dist/qpov/RenewRequest": &qpovpb.RenewRequest{},
 		"github.com/ThomasHabets/qpov/dist/qpov/RenewReply":   &qpovpb.RenewReply{},
+		"github.com/ThomasHabets/qpov/dist/qpov/GetRequest":   &qpovpb.GetRequest{},
+		"github.com/ThomasHabets/qpov/dist/qpov/GetReply":     &qpovpb.GetReply{},
+		"github.com/ThomasHabets/qpov/dist/qpov/StatsRequest": &qpovpb.StatsRequest{},
+		"github.com/ThomasHabets/qpov/dist/qpov/StatsReply":   &qpovpb.StatsReply{},
+		"github.com/ThomasHabets/qpov/dist/qpov/DoneRequest":  &qpovpb.DoneRequest{},
+		"github.com/ThomasHabets/qpov/dist/qpov/DoneReply":    &qpovpb.DoneReply{},
 	}
 	d, ok := m[msg.TypeUrl]
 	if !ok {
@@ -44,7 +50,7 @@ func main() {
 	}
 	{
 		const f = "%10v %10v %20s %8s %20s %15s\n"
-		fmt.Printf(f, "Time", "RT", "Addr", "CN", "Method", "Error")
+		fmt.Printf(f, "Time", "RT (ns)", "Addr", "CN", "Method", "Error")
 		for s := range r.Stream() {
 			fmt.Printf(f, s.StartNs/1000000000, s.EndNs-s.StartNs, s.Peer.Address, s.Peer.CommonName, s.Method, s.Error)
 			if *details {
