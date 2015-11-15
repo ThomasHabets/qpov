@@ -100,6 +100,9 @@ td {
 </tr>
 {{end}}
 </table>
+
+<hr>
+Page server time: {{.PageTime}}
 `
 )
 
@@ -160,6 +163,7 @@ func getLeases(ctx context.Context, done bool) ([]*pb.Lease, error) {
 }
 
 func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
+	startTime := time.Now()
 	var errs []error
 	var m sync.Mutex
 	var wg sync.WaitGroup
@@ -220,12 +224,14 @@ func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 		DoneLeases      []*pb.Lease
 		UnstartedOrders int64
 		Errors          []error
+		PageTime        time.Duration
 	}{
 		Stats:           st,
 		Leases:          leases,
 		DoneLeases:      doneLeases,
 		Errors:          errs,
 		UnstartedOrders: st.SchedulingStats.Orders - st.SchedulingStats.DoneOrders,
+		PageTime:        time.Since(startTime),
 	}, nil
 }
 
