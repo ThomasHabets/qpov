@@ -218,6 +218,7 @@ func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 	if len(errs) > 0 {
 		log.Printf("Errors: %v", errs)
 	}
+	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
 	return &struct {
 		Stats           *pb.StatsReply
 		Leases          []*pb.Lease
@@ -242,6 +243,7 @@ type handler struct {
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Strict-Transport-Security", "max-age=2592000")
 	ctx, cancel := context.WithTimeout(httpContext(r), *pageDeadline)
 	defer cancel()
 	data, err := h.f(ctx, w, r)
