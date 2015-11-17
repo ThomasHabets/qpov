@@ -220,6 +220,22 @@ func getAuth() aws.Auth {
 	}
 }
 
+func (s *server) Failed(ctx context.Context, in *pb.FailedRequest) (*pb.FailedReply, error) {
+	st := time.Now()
+	requestID := uuid.New()
+
+	if _, err := db.Exec(`UPDATE leases SET failed=TRUE,updated=NOW() WHERE lease_id=$1`, in.LeaseId); err != nil {
+		return nil, dbError("Marking failed", err)
+	}
+
+	log.Printf("RPC(Failed): Lease: %q", in.LeaseId)
+	ret := &pb.FailedReply{}
+	s.rpcLog.Log(ctx, requestID, "dscheduler.Failed", st,
+		"github.com/ThomasHabets/qpov/dist/qpov/FailedRequest", in,
+		nil, "github.com/ThomasHabets/qpov/dist/qpov/FailedReply", ret)
+	return ret, nil
+}
+
 func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, error) {
 	st := time.Now()
 	requestID := uuid.New()

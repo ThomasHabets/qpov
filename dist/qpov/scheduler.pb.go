@@ -70,6 +70,21 @@ func (m *DoneReply) Reset()         { *m = DoneReply{} }
 func (m *DoneReply) String() string { return proto.CompactTextString(m) }
 func (*DoneReply) ProtoMessage()    {}
 
+type FailedRequest struct {
+	LeaseId string `protobuf:"bytes,1,opt,name=lease_id" json:"lease_id,omitempty"`
+}
+
+func (m *FailedRequest) Reset()         { *m = FailedRequest{} }
+func (m *FailedRequest) String() string { return proto.CompactTextString(m) }
+func (*FailedRequest) ProtoMessage()    {}
+
+type FailedReply struct {
+}
+
+func (m *FailedReply) Reset()         { *m = FailedReply{} }
+func (m *FailedReply) String() string { return proto.CompactTextString(m) }
+func (*FailedReply) ProtoMessage()    {}
+
 type AddRequest struct {
 	OrderDefinition string `protobuf:"bytes,1,opt,name=order_definition" json:"order_definition,omitempty"`
 }
@@ -206,6 +221,7 @@ type SchedulerClient interface {
 	Get(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetReply, error)
 	Renew(ctx context.Context, in *RenewRequest, opts ...grpc.CallOption) (*RenewReply, error)
 	Done(ctx context.Context, in *DoneRequest, opts ...grpc.CallOption) (*DoneReply, error)
+	Failed(ctx context.Context, in *FailedRequest, opts ...grpc.CallOption) (*FailedReply, error)
 	// Order handling API. Restricted.
 	Add(ctx context.Context, in *AddRequest, opts ...grpc.CallOption) (*AddReply, error)
 	// Stats API. Restricted.
@@ -243,6 +259,15 @@ func (c *schedulerClient) Renew(ctx context.Context, in *RenewRequest, opts ...g
 func (c *schedulerClient) Done(ctx context.Context, in *DoneRequest, opts ...grpc.CallOption) (*DoneReply, error) {
 	out := new(DoneReply)
 	err := grpc.Invoke(ctx, "/qpov.Scheduler/Done", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schedulerClient) Failed(ctx context.Context, in *FailedRequest, opts ...grpc.CallOption) (*FailedReply, error) {
+	out := new(FailedReply)
+	err := grpc.Invoke(ctx, "/qpov.Scheduler/Failed", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -338,6 +363,7 @@ type SchedulerServer interface {
 	Get(context.Context, *GetRequest) (*GetReply, error)
 	Renew(context.Context, *RenewRequest) (*RenewReply, error)
 	Done(context.Context, *DoneRequest) (*DoneReply, error)
+	Failed(context.Context, *FailedRequest) (*FailedReply, error)
 	// Order handling API. Restricted.
 	Add(context.Context, *AddRequest) (*AddReply, error)
 	// Stats API. Restricted.
@@ -380,6 +406,18 @@ func _Scheduler_Done_Handler(srv interface{}, ctx context.Context, dec func(inte
 		return nil, err
 	}
 	out, err := srv.(SchedulerServer).Done(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func _Scheduler_Failed_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+	in := new(FailedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	out, err := srv.(SchedulerServer).Failed(ctx, in)
 	if err != nil {
 		return nil, err
 	}
@@ -467,6 +505,10 @@ var _Scheduler_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Done",
 			Handler:    _Scheduler_Done_Handler,
+		},
+		{
+			MethodName: "Failed",
+			Handler:    _Scheduler_Failed_Handler,
 		},
 		{
 			MethodName: "Add",

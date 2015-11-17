@@ -6,6 +6,7 @@ service Scheduler {
         rpc Get (GetRequest) returns (GetReply) {}
         rpc Renew (RenewRequest) returns (RenewReply) {}
         rpc Done (DoneRequest) returns (DoneReply) {}
+        rpc Failed (FailedRequest) returns (FailedReply) {}
 
         // Order handling API. Restricted.
         rpc Add (AddRequest) returns (AddReply) {}
@@ -45,6 +46,12 @@ message DoneRequest {
 }
 
 message DoneReply {}
+
+message FailedRequest {
+        string lease_id = 1;
+}
+
+message FailedReply {}
 
 message AddRequest {
         string order_definition = 1;
