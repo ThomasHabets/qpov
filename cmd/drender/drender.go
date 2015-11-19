@@ -395,7 +395,9 @@ func handler(n int, q scheduler) {
 	for {
 		id, encodedOrder, err := q.get()
 		if err != nil {
-			log.Fatalf("(%d) Receiving message: %v", n, err)
+			log.Printf("(%d) Getting order: %v", n, err)
+			time.Sleep(1 * time.Minute)
+			continue
 		}
 		if id == "" {
 			log.Printf("(%d) Nothing to do...", n)
