@@ -459,7 +459,7 @@ SELECT
 FROM leases
 WHERE done=$1
 AND   ($1=TRUE OR expires > NOW())
-ORDER BY updated`, in.Done)
+ORDER BY created`, in.Done)
 	if err != nil {
 		return dbError("Listing leases", err)
 	}
