@@ -236,12 +236,26 @@ func (s *server) Failed(ctx context.Context, in *pb.FailedRequest) (*pb.FailedRe
 	return ret, nil
 }
 
+func leaseDone(id string) (bool, error) {
+	row := db.QueryRow(`SELECT done FROM leases WHERE lease_id=$1`, id)
+	var done bool
+	if err := row.Scan(&done); err != nil {
+		return false, err
+	}
+	return done, nil
+}
+
 func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, error) {
 	st := time.Now()
 	requestID := uuid.New()
 	// First give us time to receive the data.
 	if _, err := s.Renew(ctx, &pb.RenewRequest{LeaseId: in.LeaseId}); err != nil {
 		return nil, err
+	}
+	if found, err := leaseDone(in.LeaseId); err != nil {
+		return nil, dbError(fmt.Sprintf("Failed looking up lease %q", in.LeaseId), err)
+	} else if found {
+		return nil, grpc.Errorf(codes.AlreadyExists, "lease already done: %q", in.LeaseId)
 	}
 
 	// Fetch the order. Needed for the destination.
