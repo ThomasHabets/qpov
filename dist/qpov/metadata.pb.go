@@ -35,6 +35,8 @@ It has these top-level messages:
 	SchedulingStats
 	StatsRequest
 	StatsReply
+	ResultRequest
+	ResultReply
 */
 package qpov
 

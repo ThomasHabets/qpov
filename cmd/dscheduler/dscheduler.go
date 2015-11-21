@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -314,6 +315,66 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 		"github.com/ThomasHabets/qpov/dist/qpov/DoneRequest", in,
 		nil, "github.com/ThomasHabets/qpov/dist/qpov/DoneReply", ret)
 	return ret, nil
+}
+
+func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) error {
+	st := time.Now()
+	requestID := uuid.New()
+	ctx := stream.Context()
+	if err := blockRestrictedAPI(ctx); err != nil {
+		return err
+	}
+
+	// Send initial metadata.
+	ret := pb.ResultReply{
+		ContentType: "image/png",
+	}
+	{
+		if err := stream.Send(&ret); err != nil {
+			return internalError("failed to stream results", "failed to stream results: %v", err)
+		}
+	}
+
+	// Send data, if requested.
+	if in.Data {
+		destination, file, err := getOrderDestByLeaseID(in.LeaseId)
+		if err != nil {
+			log.Printf("Can't find order with lease %q: %v", in.LeaseId, err)
+			return grpc.Errorf(codes.NotFound, "unknown lease %q", in.LeaseId)
+		}
+		sthree := s3.New(getAuth(), aws.USEast, nil)
+		bucket, destDir, _, _ := dist.S3Parse(destination)
+		b := sthree.Bucket(bucket)
+		//destDir = path.Join(destDir, in.LeaseId)
+		re := regexp.MustCompile(`\.pov$`)
+		image := re.ReplaceAllString(file, ".png")
+		fn := path.Join(destDir, image)
+		r, err := b.GetReader(fn)
+		if err != nil {
+			return grpc.Errorf(codes.NotFound, "file %q not on s3: %v", fn, err)
+		}
+		defer r.Close()
+		for {
+			buf := make([]byte, 1024, 1024)
+			n, err := r.Read(buf)
+			if err == io.EOF {
+				break
+			} else if err != nil {
+				return internalError("failed to stream result", "failed to stream result %q: %v", image, err)
+			}
+			if err := stream.Send(&pb.ResultReply{
+				Data: buf[0:n],
+			}); err != nil {
+				return internalError("failed to stream result", "failed to stream result: %v", err)
+			}
+		}
+	}
+
+	log.Printf("RPC(Result)")
+	s.rpcLog.Log(ctx, requestID, "dscheduler.Result", st,
+		"github.com/ThomasHabets/qpov/dist/qpov/ResultRequest", in,
+		nil, "github.com/ThomasHabets/qpov/dist/qpov/ResultReply", &ret)
+	return nil
 }
 
 func (s *server) Orders(in *pb.OrdersRequest, stream pb.Scheduler_OrdersServer) error {

@@ -18,6 +18,7 @@ service Scheduler {
 
         // WebUI magic.
         // rpc UserStats (UserStatsRequest) returns (UserStatsReply) {}
+        rpc Result (ResultRequest) returns (stream ResultReply) {}
 }
 
 message GetRequest {}
@@ -113,4 +114,14 @@ message StatsRequest {
 // Global stats.
 message StatsReply {
         SchedulingStats scheduling_stats = 1;
+}
+
+message ResultRequest {
+        string lease_id = 1;
+        bool data = 2;
+}
+
+message ResultReply {
+        string content_type = 1;
+        bytes data = 2;
 }

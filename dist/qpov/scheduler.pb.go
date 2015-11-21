@@ -210,6 +210,24 @@ func (m *StatsReply) GetSchedulingStats() *SchedulingStats {
 	return nil
 }
 
+type ResultRequest struct {
+	LeaseId string `protobuf:"bytes,1,opt,name=lease_id" json:"lease_id,omitempty"`
+	Data    bool   `protobuf:"varint,2,opt,name=data" json:"data,omitempty"`
+}
+
+func (m *ResultRequest) Reset()         { *m = ResultRequest{} }
+func (m *ResultRequest) String() string { return proto.CompactTextString(m) }
+func (*ResultRequest) ProtoMessage()    {}
+
+type ResultReply struct {
+	ContentType string `protobuf:"bytes,1,opt,name=content_type" json:"content_type,omitempty"`
+	Data        []byte `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+}
+
+func (m *ResultReply) Reset()         { *m = ResultReply{} }
+func (m *ResultReply) String() string { return proto.CompactTextString(m) }
+func (*ResultReply) ProtoMessage()    {}
+
 // Reference imports to suppress errors if they are not otherwise used.
 var _ context.Context
 var _ grpc.ClientConn
@@ -228,6 +246,9 @@ type SchedulerClient interface {
 	Leases(ctx context.Context, in *LeasesRequest, opts ...grpc.CallOption) (Scheduler_LeasesClient, error)
 	Orders(ctx context.Context, in *OrdersRequest, opts ...grpc.CallOption) (Scheduler_OrdersClient, error)
 	Stats(ctx context.Context, in *StatsRequest, opts ...grpc.CallOption) (*StatsReply, error)
+	// WebUI magic.
+	// rpc UserStats (UserStatsRequest) returns (UserStatsReply) {}
+	Result(ctx context.Context, in *ResultRequest, opts ...grpc.CallOption) (Scheduler_ResultClient, error)
 }
 
 type schedulerClient struct {
@@ -356,6 +377,38 @@ func (c *schedulerClient) Stats(ctx context.Context, in *StatsRequest, opts ...g
 	return out, nil
 }
 
+func (c *schedulerClient) Result(ctx context.Context, in *ResultRequest, opts ...grpc.CallOption) (Scheduler_ResultClient, error) {
+	stream, err := grpc.NewClientStream(ctx, &_Scheduler_serviceDesc.Streams[2], c.cc, "/qpov.Scheduler/Result", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &schedulerResultClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Scheduler_ResultClient interface {
+	Recv() (*ResultReply, error)
+	grpc.ClientStream
+}
+
+type schedulerResultClient struct {
+	grpc.ClientStream
+}
+
+func (x *schedulerResultClient) Recv() (*ResultReply, error) {
+	m := new(ResultReply)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // Server API for Scheduler service
 
 type SchedulerServer interface {
@@ -370,6 +423,9 @@ type SchedulerServer interface {
 	Leases(*LeasesRequest, Scheduler_LeasesServer) error
 	Orders(*OrdersRequest, Scheduler_OrdersServer) error
 	Stats(context.Context, *StatsRequest) (*StatsReply, error)
+	// WebUI magic.
+	// rpc UserStats (UserStatsRequest) returns (UserStatsReply) {}
+	Result(*ResultRequest, Scheduler_ResultServer) error
 }
 
 func RegisterSchedulerServer(s *grpc.Server, srv SchedulerServer) {
@@ -490,6 +546,27 @@ func _Scheduler_Stats_Handler(srv interface{}, ctx context.Context, dec func(int
 	return out, nil
 }
 
+func _Scheduler_Result_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ResultRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(SchedulerServer).Result(m, &schedulerResultServer{stream})
+}
+
+type Scheduler_ResultServer interface {
+	Send(*ResultReply) error
+	grpc.ServerStream
+}
+
+type schedulerResultServer struct {
+	grpc.ServerStream
+}
+
+func (x *schedulerResultServer) Send(m *ResultReply) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 var _Scheduler_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "qpov.Scheduler",
 	HandlerType: (*SchedulerServer)(nil),
@@ -528,6 +605,11 @@ var _Scheduler_serviceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "Orders",
 			Handler:       _Scheduler_Orders_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "Result",
+			Handler:       _Scheduler_Result_Handler,
 			ServerStreams: true,
 		},
 	},

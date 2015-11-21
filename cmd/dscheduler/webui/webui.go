@@ -90,6 +90,7 @@ td {
   <th>Created</th>
   <th>Done</th>
   <th>Time</th>
+  <th>Image</th>
 </tr>
 {{range .DoneLeases}}
 <tr>
@@ -97,6 +98,7 @@ td {
   <td>{{.CreatedMs|fmsdate "2006-01-02 15:04"}}</td>
   <td>{{.UpdatedMs|fmsdate "2006-01-02 15:04"}}</td>
   <td>{{.CreatedMs|fmssub .UpdatedMs}}</td>
+  <td><a href="/image/{{.LeaseId}}">Image</a></td>
 </tr>
 {{end}}
 </table>
@@ -160,6 +162,40 @@ func getLeases(ctx context.Context, done bool) ([]*pb.Lease, error) {
 		leases = append(leases, r.Lease)
 	}
 	return leases, nil
+}
+
+func handleImage(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(httpContext(r), time.Minute)
+	defer cancel()
+
+	lease, ok := mux.Vars(r)["leaseID"]
+	if !ok {
+		log.Printf("Internal error: leaseID not passed in to handleImage")
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+	}
+	stream, err := sched.Result(ctx, &pb.ResultRequest{
+		LeaseId: lease,
+		Data:    true,
+	})
+	if err != nil {
+		http.Error(w, "Backend broke :-(", http.StatusBadGateway)
+		return
+	}
+	for {
+		// TODO: stream this better by reading and writing concurrently with a fixed buffer.
+		r, err := stream.Recv()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			log.Printf("Failed streaming result over RPC: %v", err)
+		}
+		if r.ContentType != "" {
+			w.Header().Set("Content-Type", r.ContentType)
+		}
+		if _, err := w.Write(r.Data); err != nil {
+			log.Printf("Failed streaming result to client: %v", err)
+		}
+	}
 }
 
 func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
@@ -344,6 +380,7 @@ func main() {
 
 	r := mux.NewRouter()
 	r.Handle("/", wrap(handleRoot, rootTmpl)).Methods("GET")
+	r.HandleFunc("/image/{leaseID}", handleImage).Methods("GET")
 	log.Printf("Running dscheduler webui...")
 	if err := fcgi.Serve(sock, r); err != nil {
 		log.Fatal("Failed to start serving fcgi: ", err)
