@@ -91,6 +91,9 @@ td {
   <th>Done</th>
   <th>Time</th>
   <th>Image</th>
+  <th>File</th>
+  <th>Args</th>
+  <th>Pkg</th>
 </tr>
 {{range .DoneLeases}}
 <tr>
@@ -99,6 +102,9 @@ td {
   <td>{{.UpdatedMs|fmsdate "2006-01-02 15:04"}}</td>
   <td>{{.CreatedMs|fmssub .UpdatedMs}}</td>
   <td><a href="/image/{{.LeaseId}}">Image</a></td>
+  <td>{{.Order.File}}</td>
+  <td>{{.Order.Args}}</td>
+  <td>{{.Order.Pkg}}</td>
 </tr>
 {{end}}
 </table>
@@ -147,7 +153,10 @@ func fmssince(ms int64) string {
 }
 
 func getLeases(ctx context.Context, done bool) ([]*pb.Lease, error) {
-	stream, err := sched.Leases(ctx, &pb.LeasesRequest{Done: done})
+	stream, err := sched.Leases(ctx, &pb.LeasesRequest{
+		Done:  done,
+		Order: true,
+	})
 	if err != nil {
 		return nil, err
 	}

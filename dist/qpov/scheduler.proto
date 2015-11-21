@@ -1,6 +1,6 @@
 syntax = "proto3";
 package qpov;
-
+import "order.proto";
 service Scheduler {
         // Render client API.
         rpc Get (GetRequest) returns (GetReply) {}
@@ -71,10 +71,12 @@ message Lease {
         int64 created_ms = 5;
         int64 updated_ms = 6;
         int64 expires_ms = 7;
+        Order order = 8;
 }
 
 message LeasesRequest {
         bool done = 1;
+        bool order = 2;
 }
 
 message LeasesReply {

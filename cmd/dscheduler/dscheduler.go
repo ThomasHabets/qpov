@@ -74,6 +74,19 @@ func cleanError(err error, code codes.Code, public string, a ...interface{}) err
 	return grpc.Errorf(code, public, a...)
 }
 
+func getOrderByID(id string) (*pb.Order, error) {
+	row := db.QueryRow(`SELECT definition FROM orders WHERE order_id=$1`, id)
+	var def string
+	if err := row.Scan(&def); err != nil {
+		return nil, err
+	}
+	var order pb.Order
+	if err := json.Unmarshal([]byte(def), &order); err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
 func getOwnerIDByCN(cn string) (int, error) {
 	row := db.QueryRow(`SELECT users.user_id FROM users NATURAL JOIN certs WHERE certs.cn=$1`, cn)
 	var ownerID int
@@ -557,6 +570,15 @@ ORDER BY %s`, ordering), in.Done)
 		if err := rows.Scan(&orderID, &leaseID, &userID, &created, &updated, &expires); err != nil {
 			return dbError("Scanning leases", err)
 		}
+		var order *pb.Order
+		if in.Order {
+			// TODO: This is very inefficient. Issue just the one query collecting all the data.
+			var err error
+			order, err = getOrderByID(orderID)
+			if err != nil {
+				log.Printf("Getting order %q: %v", orderID, err)
+			}
+		}
 		e := &pb.LeasesReply{
 			Lease: &pb.Lease{
 				OrderId:   orderID,
@@ -564,6 +586,7 @@ ORDER BY %s`, ordering), in.Done)
 				CreatedMs: created.UnixNano() / 1000000,
 				UpdatedMs: updated.UnixNano() / 1000000,
 				ExpiresMs: expires.UnixNano() / 1000000,
+				Order:     order,
 			},
 		}
 		if userID != nil {

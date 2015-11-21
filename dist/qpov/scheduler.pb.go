@@ -109,14 +109,23 @@ type Lease struct {
 	CreatedMs int64  `protobuf:"varint,5,opt,name=created_ms" json:"created_ms,omitempty"`
 	UpdatedMs int64  `protobuf:"varint,6,opt,name=updated_ms" json:"updated_ms,omitempty"`
 	ExpiresMs int64  `protobuf:"varint,7,opt,name=expires_ms" json:"expires_ms,omitempty"`
+	Order     *Order `protobuf:"bytes,8,opt,name=order" json:"order,omitempty"`
 }
 
 func (m *Lease) Reset()         { *m = Lease{} }
 func (m *Lease) String() string { return proto.CompactTextString(m) }
 func (*Lease) ProtoMessage()    {}
 
+func (m *Lease) GetOrder() *Order {
+	if m != nil {
+		return m.Order
+	}
+	return nil
+}
+
 type LeasesRequest struct {
-	Done bool `protobuf:"varint,1,opt,name=done" json:"done,omitempty"`
+	Done  bool `protobuf:"varint,1,opt,name=done" json:"done,omitempty"`
+	Order bool `protobuf:"varint,2,opt,name=order" json:"order,omitempty"`
 }
 
 func (m *LeasesRequest) Reset()         { *m = LeasesRequest{} }
