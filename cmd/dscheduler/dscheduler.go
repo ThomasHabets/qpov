@@ -254,7 +254,7 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	sthree := s3.New(getAuth(), aws.USEast, nil)
 	bucket, destDir, _, _ := dist.S3Parse(destination)
 	b := sthree.Bucket(bucket)
-
+	destDir = path.Join(destDir, in.LeaseId)
 	var wg sync.WaitGroup
 
 	re := regexp.MustCompile(`\.pov$`)
