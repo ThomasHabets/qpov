@@ -448,7 +448,11 @@ func (s *server) Leases(in *pb.LeasesRequest, stream pb.Scheduler_LeasesServer) 
 	if err := blockRestrictedAPI(ctx); err != nil {
 		return err
 	}
-	rows, err := db.Query(`
+	ordering := "created"
+	if in.Done {
+		ordering = "updated"
+	}
+	rows, err := db.Query(fmt.Sprintf(`
 SELECT
   order_id,
   lease_id,
@@ -459,7 +463,7 @@ SELECT
 FROM leases
 WHERE done=$1
 AND   ($1=TRUE OR expires > NOW())
-ORDER BY created`, in.Done)
+ORDER BY %s`, ordering), in.Done)
 	if err != nil {
 		return dbError("Listing leases", err)
 	}
