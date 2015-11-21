@@ -298,9 +298,11 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Internal error: Failed to render page")
 		return
 	}
-	if _, err := w.Write(buf.Bytes()); err != nil {
-		log.Printf("Failed to write page to network: %v", err)
-		return
+	if r.Method != "HEAD" {
+		if _, err := w.Write(buf.Bytes()); err != nil {
+			log.Printf("Failed to write page to network: %v", err)
+			return
+		}
 	}
 }
 
@@ -379,8 +381,8 @@ func main() {
 	}
 
 	r := mux.NewRouter()
-	r.Handle("/", wrap(handleRoot, rootTmpl)).Methods("GET")
-	r.HandleFunc("/image/{leaseID}", handleImage).Methods("GET")
+	r.Handle("/", wrap(handleRoot, rootTmpl)).Methods("GET", "HEAD")
+	r.HandleFunc("/image/{leaseID}", handleImage).Methods("GET", "HEAD")
 	log.Printf("Running dscheduler webui...")
 	if err := fcgi.Serve(sock, r); err != nil {
 		log.Fatal("Failed to start serving fcgi: ", err)
