@@ -345,13 +345,18 @@ func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) 
 		sthree := s3.New(getAuth(), aws.USEast, nil)
 		bucket, destDir, _, _ := dist.S3Parse(destination)
 		b := sthree.Bucket(bucket)
-		//destDir = path.Join(destDir, in.LeaseId)
+		destDir2 := path.Join(destDir, in.LeaseId)
 		re := regexp.MustCompile(`\.pov$`)
 		image := re.ReplaceAllString(file, ".png")
 		fn := path.Join(destDir, image)
+		fn2 := path.Join(destDir2, image)
 		r, err := b.GetReader(fn)
 		if err != nil {
-			return grpc.Errorf(codes.NotFound, "file %q not on s3: %v", fn, err)
+			// Look in per-lease dir too.
+			r, err = b.GetReader(fn2)
+			if err != nil {
+				return grpc.Errorf(codes.NotFound, "file %q not on s3: %v", fn, err)
+			}
 		}
 		defer r.Close()
 		for {
