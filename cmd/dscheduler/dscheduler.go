@@ -651,13 +651,14 @@ func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, erro
 	requestID := uuid.New()
 	ownerID, err := getOwnerID(ctx)
 	if err != nil {
+		log.Printf("RPC(Add): %v", err)
 		return nil, grpc.Errorf(codes.Unauthenticated, "authentication required")
 	}
 
 	// Look up permission to add.
 	// TODO: put this in getOwnerID()
 	{
-		row := db.QueryRow(`SELECT adding FROM users WHERE users=$1`, ownerID)
+		row := db.QueryRow(`SELECT adding FROM users WHERE user_id=$1`, ownerID)
 		var adding bool
 		if err := row.Scan(&adding); err == sql.ErrNoRows {
 			return nil, internalError("failed looking up user", "failed looking up user")
