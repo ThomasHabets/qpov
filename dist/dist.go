@@ -52,6 +52,8 @@ omTxJBzcoTWcFbLUvFUufQb1nA5V9FrWk9p2rSVzTMVD
 `
 )
 
+// TODO: Deprecated. Use protobuf version instead.
+// This is still used in the database and between dscheduler and drender, in json encoding.
 type Order struct {
 	Package     string   // Path to tarfile on S3.
 	Dir         string   // Dir to chdir to before rendering.

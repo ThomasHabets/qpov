@@ -14,10 +14,10 @@ var _ = fmt.Errorf
 var _ = math.Inf
 
 type Order struct {
-	Pkg  string   `protobuf:"bytes,1,opt,name=pkg" json:"pkg,omitempty"`
-	Dir  string   `protobuf:"bytes,2,opt,name=dir" json:"dir,omitempty"`
-	File string   `protobuf:"bytes,3,opt,name=file" json:"file,omitempty"`
-	Args []string `protobuf:"bytes,4,rep,name=args" json:"args,omitempty"`
+	Package string   `protobuf:"bytes,1,opt,name=package" json:"package,omitempty"`
+	Dir     string   `protobuf:"bytes,2,opt,name=dir" json:"dir,omitempty"`
+	File    string   `protobuf:"bytes,3,opt,name=file" json:"file,omitempty"`
+	Args    []string `protobuf:"bytes,4,rep,name=args" json:"args,omitempty"`
 }
 
 func (m *Order) Reset()         { *m = Order{} }

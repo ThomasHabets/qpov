@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/fcgi"
 	"os"
+	"path"
 	"sync"
 	"time"
 
@@ -34,6 +35,7 @@ const (
 <style>
 td {
   text-align: right;
+  write-space: nowrap;
 }
 .fixed {
   font-family: monospace;
@@ -93,18 +95,18 @@ td {
   <th>Image</th>
   <th>File</th>
   <th>Args</th>
-  <th>Pkg</th>
+  <th>Package</th>
 </tr>
 {{range .DoneLeases}}
 <tr>
-  <td class="fixed">{{.OrderId}}</td>
-  <td>{{.CreatedMs|fmsdate "2006-01-02 15:04"}}</td>
-  <td>{{.UpdatedMs|fmsdate "2006-01-02 15:04"}}</td>
-  <td>{{.CreatedMs|fmssub .UpdatedMs}}</td>
-  <td><a href="/image/{{.LeaseId}}">Image</a></td>
-  <td>{{.Order.File}}</td>
-  <td>{{.Order.Args}}</td>
-  <td>{{.Order.Pkg}}</td>
+  <td nowrap class="fixed">{{.OrderId}}</td>
+  <td nowrap>{{.CreatedMs|fmsdate "2006-01-02 15:04"}}</td>
+  <td nowrap>{{.UpdatedMs|fmsdate "2006-01-02 15:04"}}</td>
+  <td nowrap>{{.CreatedMs|fmssub .UpdatedMs}}</td>
+  <td nowrap><a href="/image/{{.LeaseId}}">Image</a></td>
+  <td nowrap>{{.Order.File}}</td>
+  <td nowrap>{{.Order.Args}}</td>
+  <td nowrap>{{.Order.Package|fileonly}}</td>
 </tr>
 {{end}}
 </table>
@@ -136,6 +138,10 @@ func httpContext(r *http.Request) context.Context {
 
 func fmsdate(s string, ms int64) string {
 	return time.Unix(ms/1000, 0).Format(s)
+}
+
+func fileonly(s string) string {
+	return path.Base(s)
 }
 
 func fmssub(a, b int64) string {
@@ -322,6 +328,7 @@ func wrap(f handleFunc, t string) *handler {
 		"fmsuntil": fmsuntil,
 		"fmssince": fmssince,
 		"fmssub":   fmssub,
+		"fileonly": fileonly,
 	})
 	template.Must(tmpl.Parse(t))
 	return &handler{f: f, tmpl: tmpl}

@@ -80,11 +80,17 @@ func getOrderByID(id string) (*pb.Order, error) {
 	if err := row.Scan(&def); err != nil {
 		return nil, err
 	}
-	var order pb.Order
+	var order dist.Order
 	if err := json.Unmarshal([]byte(def), &order); err != nil {
 		return nil, err
 	}
-	return &order, nil
+
+	return &pb.Order{
+		Package: order.Package,
+		Dir:     order.Dir,
+		File:    order.File,
+		Args:    order.Args,
+	}, nil
 }
 
 func getOwnerIDByCN(cn string) (int, error) {
