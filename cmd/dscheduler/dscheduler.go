@@ -672,7 +672,7 @@ func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, erro
 	}
 
 	id := uuid.New()
-	if _, err := db.Exec(`INSERT INTO orders(order_id, owner, definition) VALUES($1,$2,$3)`, id, ownerID, in.OrderDefinition); err != nil {
+	if _, err := db.Exec(`INSERT INTO orders(order_id, created, owner, definition) VALUES($1, NOW(), $2,$3)`, id, ownerID, in.OrderDefinition); err != nil {
 		return nil, dbError("Inserting order", err)
 	}
 	log.Printf("RPC(Add): Order: %q", id)
