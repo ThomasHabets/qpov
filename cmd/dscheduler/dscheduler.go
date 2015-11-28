@@ -155,6 +155,7 @@ FROM orders
 LEFT OUTER JOIN leases ON orders.order_id=leases.order_id
 WHERE leases.lease_id IS NULL
 OR (FALSE AND leases.expires < NOW() AND leases.done = FALSE)
+ORDER BY RANDOM()
 LIMIT 1`)
 	if err == sql.ErrNoRows {
 		// TODO: this can't happen, right? It fails on Scan?
