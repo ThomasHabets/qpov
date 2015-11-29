@@ -208,7 +208,7 @@ func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply
 		secs = int32(maxLeaseRenewTime.Seconds())
 	}
 	n := time.Now().Add(time.Duration(int64(time.Second) * int64(secs)))
-	if _, err := db.Exec(`UPDATE leases SET updated=NOW(), expires=$1 WHERE lease_id=$2`, n, in.LeaseId); err != nil {
+	if _, err := db.Exec(`UPDATE leases SET updated=NOW(), expires=$1 WHERE lease_id=$2 AND done=FALSE AND failed=FALSE`, n, in.LeaseId); err != nil {
 		return nil, dbError("Updating lease", err)
 	}
 	log.Printf("RPC(Renew): Lease: %q until %v", in.LeaseId, n)
@@ -245,7 +245,7 @@ func (s *server) Failed(ctx context.Context, in *pb.FailedRequest) (*pb.FailedRe
 	st := time.Now()
 	requestID := uuid.New()
 
-	if _, err := db.Exec(`UPDATE leases SET failed=TRUE,updated=NOW() WHERE lease_id=$1`, in.LeaseId); err != nil {
+	if _, err := db.Exec(`UPDATE leases SET failed=TRUE,updated=NOW() WHERE done=FALSE AND failed=FALSE lease_id=$1`, in.LeaseId); err != nil {
 		return nil, dbError("Marking failed", err)
 	}
 
