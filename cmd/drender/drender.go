@@ -28,6 +28,7 @@ var (
 	addr           = flag.String("addr", ":4900", "Status port to listen to.")
 	povray         = flag.String("povray", "/usr/bin/povray", "Path to POV-Ray.")
 	refreshTime    = flag.Duration("lease", 30*time.Minute, "Lease time.")
+	failWait       = flag.Duration("fail_wait", time.Minute, "Time to pause if rendering fails before trying next order.")
 	expiredRenewal = flag.Duration("lease_expired_renewal", time.Minute, "If lease expires, treat lease as living this long.")
 	root           = flag.String("wd", "root", "Working directory")
 	schedtool      = flag.String("schedtool", "/usr/bin/schedtool", "Path to schedtool.")
@@ -466,6 +467,9 @@ func handler(n int, q scheduler) {
 				log.Printf("(%d) Failed to delete message %q. Retrying.", n, id)
 				time.Sleep(doneRetryTimer)
 			}
+		} else {
+			log.Printf("(%d) Order failed. Waiting %v", n, *failWait)
+			time.Sleep(*failWait)
 		}
 	}
 }
