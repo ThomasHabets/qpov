@@ -529,6 +529,9 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	flag.Parse()
+	if len(flag.Args()) != 0 {
+		log.Fatalf("Got extra args on cmdline: %q", flag.Args())
+	}
 	log.Printf("Starting up...")
 
 	var s scheduler
