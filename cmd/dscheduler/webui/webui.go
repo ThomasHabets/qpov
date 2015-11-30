@@ -33,12 +33,24 @@ const (
 
 	rootTmpl = `
 <style>
+.fixed {
+  font-family: monospace;
+}
+table {
+  border-collapse: collapse;
+}
+table, th {
+  border: 1px solid black;
+}
 td {
   text-align: right;
   write-space: nowrap;
+  border-right: 1px solid black;
+  padding-left: 1em;
+  padding-right: 1em;
 }
-.fixed {
-  font-family: monospace;
+tr:nth-child(odd) {
+  background: #EEE
 }
 </style>
 <h1>QPov</h1>
@@ -73,14 +85,18 @@ td {
   <th>Lifetime</th>
   <th>Updated</th>
   <th>Expires</th>
+  <th>Package</th>
+  <th>File</th>
 </tr>
 {{range .Leases}}
 <tr>
-  <td class="fixed">{{.OrderId}}</td>
-  <td>{{.CreatedMs|fmsdate "2006-01-02 15:04"}}</td>
-  <td>{{.CreatedMs|fmssince}}</td>
-  <td>{{.UpdatedMs|fmssince}}</td>
-  <td>{{.ExpiresMs|fmsuntil}}</td>
+  <td nowrap class="fixed">{{.OrderId}}</td>
+  <td nowrap>{{.CreatedMs|fmsdate "2006-01-02 15:04"}}</td>
+  <td nowrap>{{.CreatedMs|fmssince}}</td>
+  <td nowrap>{{.UpdatedMs|fmssince}}</td>
+  <td nowrap>{{.ExpiresMs|fmsuntil}}</td>
+  <td nowrap>{{.Order.Package|fileonly}}</td>
+  <td nowrap>{{.Order.File}}</td>
 </tr>
 {{end}}
 </table>
@@ -93,9 +109,9 @@ td {
   <th>Done</th>
   <th>Time</th>
   <th>Image</th>
-  <th>File</th>
-  <th>Args</th>
   <th>Package</th>
+  <th>File</th>
+<!--  <th>Args</th> -->
 </tr>
 {{range .DoneLeases}}
 <tr>
@@ -104,9 +120,9 @@ td {
   <td nowrap>{{.UpdatedMs|fmsdate "2006-01-02 15:04"}}</td>
   <td nowrap>{{.CreatedMs|fmssub .UpdatedMs}}</td>
   <td nowrap><a href="/image/{{.LeaseId}}">Image</a></td>
-  <td nowrap>{{.Order.File}}</td>
-  <td nowrap>{{.Order.Args}}</td>
   <td nowrap>{{.Order.Package|fileonly}}</td>
+  <td nowrap>{{.Order.File}}</td>
+<!--  <td nowrap>{{.Order.Args}}</td> -->
 </tr>
 {{end}}
 </table>
