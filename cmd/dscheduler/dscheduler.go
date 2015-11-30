@@ -94,7 +94,7 @@ func getOrderByID(id string) (*pb.Order, error) {
 }
 
 func getOwnerIDByCN(cn string) (int, error) {
-	row := db.QueryRow(`SELECT users.user_id FROM users NATURAL JOIN certs WHERE certs.cn=$1`, cn)
+	row := db.QueryRow(`SELECT users.user_id FROM users JOIN certs ON users.user_id=certs.user_id WHERE certs.cn=$1`, cn)
 	var ownerID int
 	if err := row.Scan(&ownerID); err == sql.ErrNoRows {
 		return 0, fmt.Errorf("client cert not assigned to any user")
@@ -222,7 +222,7 @@ func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply
 }
 
 func getOrderDestByLeaseID(id string) (string, string, error) {
-	row := db.QueryRow(`SELECT orders.definition FROM orders NATURAL JOIN leases WHERE lease_id=$1`, id)
+	row := db.QueryRow(`SELECT orders.definition FROM orders JOIN leases ON orders.order_id=leases.order_id WHERE lease_id=$1`, id)
 	var def string
 	if err := row.Scan(&def); err != nil {
 		return "", "", err
@@ -270,6 +270,7 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	st := time.Now()
 	requestID := uuid.New()
 	// First give us time to receive the data.
+	// TODO: move Renew to private method. As it is logging incorrectly says there was a Renew RPC.
 	if _, err := s.Renew(ctx, &pb.RenewRequest{LeaseId: in.LeaseId}); err != nil {
 		return nil, err
 	}
@@ -282,7 +283,7 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	// Fetch the order. Needed for the destination.
 	destination, file, err := getOrderDestByLeaseID(in.LeaseId)
 	if err != nil {
-		log.Printf("Can't find order with lease %q: %v", in.LeaseId, err)
+		log.Printf("RPC(Done): Can't find order with lease %q: %v", in.LeaseId, err)
 		return nil, grpc.Errorf(codes.NotFound, "unknown lease %q", in.LeaseId)
 	}
 
