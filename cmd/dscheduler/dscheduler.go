@@ -459,6 +459,9 @@ ORDER BY
 	defer rows.Close()
 	logRet := &pb.OrdersReply{}
 	for rows.Next() {
+		if ctx.Err() != nil {
+			return err
+		}
 		e := &pb.OrdersReply{
 			Order: &pb.OrderStat{},
 		}
@@ -572,6 +575,9 @@ ORDER BY %s`, ordering), in.Done)
 	logRet := &pb.LeasesReply{}
 
 	for rows.Next() {
+		if ctx.Err() != nil {
+			return err
+		}
 		var orderID, leaseID string
 		var userID *int
 		var created, updated, expires time.Time
