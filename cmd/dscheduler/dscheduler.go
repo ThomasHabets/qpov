@@ -197,10 +197,8 @@ VALUES($1, false, $2, $3, NOW(), NOW(), $4)`, lease, orderID, ownerID, time.Now(
 	return ret, nil
 }
 
-func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply, error) {
-	st := time.Now()
-	requestID := uuid.New()
-	secs := in.ExtendSec
+// renew is the backend
+func (s *server) renew(ctx context.Context, lease string, secs int32) (time.Time, error) {
 	if secs <= 0 {
 		secs = int32(defaultLeaseRenewTime.Seconds())
 	}
@@ -208,8 +206,18 @@ func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply
 		secs = int32(maxLeaseRenewTime.Seconds())
 	}
 	n := time.Now().Add(time.Duration(int64(time.Second) * int64(secs)))
-	if _, err := db.Exec(`UPDATE leases SET updated=NOW(), expires=$1 WHERE lease_id=$2 AND done=FALSE AND failed=FALSE`, n, in.LeaseId); err != nil {
-		return nil, dbError("Updating lease", err)
+	if _, err := db.Exec(`UPDATE leases SET updated=NOW(), expires=$1 WHERE lease_id=$2 AND done=FALSE AND failed=FALSE`, n, lease); err != nil {
+		return time.Now(), dbError("Updating lease", err)
+	}
+	return n, nil
+}
+
+func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply, error) {
+	st := time.Now()
+	requestID := uuid.New()
+	n, err := s.renew(ctx, in.LeaseId, in.ExtendSec)
+	if err != nil {
+		return nil, cleanError(err, codes.Internal, "You got the error message for the error message, you win.")
 	}
 	log.Printf("RPC(Renew): Lease: %q until %v", in.LeaseId, n)
 	ret := &pb.RenewReply{
@@ -257,27 +265,31 @@ func (s *server) Failed(ctx context.Context, in *pb.FailedRequest) (*pb.FailedRe
 	return ret, nil
 }
 
-func leaseDone(id string) (bool, error) {
-	row := db.QueryRow(`SELECT done FROM leases WHERE lease_id=$1`, id)
-	var done bool
-	if err := row.Scan(&done); err != nil {
-		return false, err
+func leaseDone(id string) (bool, bool, error) {
+	row := db.QueryRow(`SELECT done, failed FROM leases WHERE lease_id=$1`, id)
+	var done, failed bool
+	if err := row.Scan(&done, &failed); err != nil {
+		return false, false, err
 	}
-	return done, nil
+	return done, failed, nil
 }
 
 func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, error) {
 	st := time.Now()
 	requestID := uuid.New()
 	// First give us time to receive the data.
-	// TODO: move Renew to private method. As it is logging incorrectly says there was a Renew RPC.
-	if _, err := s.Renew(ctx, &pb.RenewRequest{LeaseId: in.LeaseId}); err != nil {
-		return nil, err
+	if _, err := s.renew(ctx, in.LeaseId, -1); err != nil {
+		log.Printf("RPC(Done): Failed to renew before Done'ing: %v", err)
 	}
-	if found, err := leaseDone(in.LeaseId); err != nil {
+	isDone, isFailed, err := leaseDone(in.LeaseId)
+	if err != nil {
 		return nil, dbError(fmt.Sprintf("Failed looking up lease %q", in.LeaseId), err)
-	} else if found {
+	}
+	if isDone {
 		return nil, grpc.Errorf(codes.AlreadyExists, "lease already done: %q", in.LeaseId)
+	}
+	if isFailed {
+		return nil, grpc.Errorf(codes.AlreadyExists, "lease already failed: %q", in.LeaseId)
 	}
 
 	// Fetch the order. Needed for the destination.
