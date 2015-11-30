@@ -143,12 +143,14 @@ type server struct {
 func (s *server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetReply, error) {
 	st := time.Now()
 	requestID := uuid.New()
+
 	tx, err := db.Begin()
 	if err != nil {
 		return nil, dbError("begin transaction", err)
 	}
-
 	defer tx.Rollback()
+
+	// TODO: Hand out expired and failed leases too.
 	row := tx.QueryRow(`
 SELECT orders.order_id, orders.definition
 FROM orders
@@ -157,12 +159,6 @@ WHERE leases.lease_id IS NULL
 OR (FALSE AND leases.expires < NOW() AND leases.done = FALSE)
 ORDER BY RANDOM()
 LIMIT 1`)
-	if err == sql.ErrNoRows {
-		// TODO: this can't happen, right? It fails on Scan?
-		return nil, grpc.Errorf(codes.NotFound, "nothing to do")
-	} else if err != nil {
-		return nil, dbError("Finding order to give out", err)
-	}
 
 	var orderID, def string
 	if err := row.Scan(&orderID, &def); err == sql.ErrNoRows {
@@ -197,7 +193,7 @@ VALUES($1, false, $2, $3, NOW(), NOW(), $4)`, lease, orderID, ownerID, time.Now(
 	return ret, nil
 }
 
-// renew is the backend
+// renew is the backend for Renew().
 func (s *server) renew(ctx context.Context, lease string, secs int32) (time.Time, error) {
 	if secs <= 0 {
 		secs = int32(defaultLeaseRenewTime.Seconds())
@@ -253,7 +249,14 @@ func (s *server) Failed(ctx context.Context, in *pb.FailedRequest) (*pb.FailedRe
 	st := time.Now()
 	requestID := uuid.New()
 
-	if _, err := db.Exec(`UPDATE leases SET failed=TRUE,updated=NOW() WHERE done=FALSE AND failed=FALSE lease_id=$1`, in.LeaseId); err != nil {
+	if _, err := db.Exec(`
+UPDATE leases
+SET
+  failed=TRUE,
+  updated=NOW()
+WHERE done=FALSE
+AND   failed=FALSE
+AND   lease_id=$1`, in.LeaseId); err != nil {
 		return nil, dbError("Marking failed", err)
 	}
 
@@ -388,7 +391,8 @@ func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) 
 			// Look in per-lease dir too.
 			r, err = b.GetReader(fn2)
 			if err != nil {
-				return grpc.Errorf(codes.NotFound, "file %q not on s3: %v", fn, err)
+				log.Printf("File %q not found on S3: %v", fn, err)
+				return grpc.Errorf(codes.NotFound, "file not found")
 			}
 		}
 		defer r.Close()
@@ -397,12 +401,11 @@ func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) 
 			n, err := r.Read(buf)
 			if err == io.EOF {
 				break
-			} else if err != nil {
+			}
+			if err != nil {
 				return internalError("failed to stream result", "failed to stream result %q: %v", image, err)
 			}
-			if err := stream.Send(&pb.ResultReply{
-				Data: buf[0:n],
-			}); err != nil {
+			if err := stream.Send(&pb.ResultReply{Data: buf[0:n]}); err != nil {
 				return internalError("failed to stream result", "failed to stream result: %v", err)
 			}
 		}
@@ -636,7 +639,7 @@ ORDER BY %s`, ordering), in.Done)
 func blockRestrictedAPIInternal(ctx context.Context) error {
 	t, ok := transport.StreamFromContext(ctx)
 	if !ok {
-		return grpc.Errorf(codes.Internal, "no stream context")
+		return internalError("no stream context", "no stream context")
 	}
 	if false {
 		st := t.ServerTransport()
@@ -648,7 +651,7 @@ func blockRestrictedAPIInternal(ctx context.Context) error {
 	}
 	at, ok := a.(credentials.TLSInfo)
 	if !ok {
-		return grpc.Errorf(codes.Internal, "auth type is not TLSInfo")
+		return internalError("auth type is not TLSInfo", "auth type is not TLSInfo")
 	}
 	if len(at.State.PeerCertificates) != 1 {
 		return grpc.Errorf(codes.Unauthenticated, "no certificate attached")
@@ -705,6 +708,10 @@ func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, erro
 
 func main() {
 	flag.Parse()
+	if flag.NArg() > 0 {
+		log.Fatalf("Got extra args on cmdline: %q", flag.Args())
+	}
+
 	var err error
 	db, err = sql.Open("postgres", *dbConnect)
 	if err != nil {
