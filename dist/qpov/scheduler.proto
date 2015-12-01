@@ -1,6 +1,7 @@
 syntax = "proto3";
 package qpov;
 import "order.proto";
+import "metadata.proto";
 service Scheduler {
         // Render client API.
         rpc Get (GetRequest) returns (GetReply) {}
@@ -12,6 +13,7 @@ service Scheduler {
         rpc Add (AddRequest) returns (AddReply) {}
 
         // Stats API. Restricted.
+        rpc Lease (LeaseRequest) returns (LeaseReply) {}
         rpc Leases (LeasesRequest) returns (stream LeasesReply) {}
         rpc Orders (OrdersRequest) returns (stream OrdersReply) {}
         rpc Stats (StatsRequest) returns (StatsReply) {}
@@ -72,6 +74,15 @@ message Lease {
         int64 updated_ms = 6;
         int64 expires_ms = 7;
         Order order = 8;
+        RenderingMetadata metadata = 9;
+        bool failed = 10;
+}
+
+message LeaseRequest {
+        string lease_id = 1;
+}
+message LeaseReply {
+        Lease lease = 1;
 }
 
 message LeasesRequest {

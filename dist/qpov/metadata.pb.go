@@ -27,6 +27,8 @@ It has these top-level messages:
 	AddRequest
 	AddReply
 	Lease
+	LeaseRequest
+	LeaseReply
 	LeasesRequest
 	LeasesReply
 	OrdersRequest

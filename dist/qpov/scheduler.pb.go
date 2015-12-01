@@ -102,14 +102,16 @@ func (m *AddReply) String() string { return proto.CompactTextString(m) }
 func (*AddReply) ProtoMessage()    {}
 
 type Lease struct {
-	OrderId   string `protobuf:"bytes,1,opt,name=order_id" json:"order_id,omitempty"`
-	LeaseId   string `protobuf:"bytes,2,opt,name=lease_id" json:"lease_id,omitempty"`
-	Done      bool   `protobuf:"varint,3,opt,name=done" json:"done,omitempty"`
-	UserId    int64  `protobuf:"varint,4,opt,name=user_id" json:"user_id,omitempty"`
-	CreatedMs int64  `protobuf:"varint,5,opt,name=created_ms" json:"created_ms,omitempty"`
-	UpdatedMs int64  `protobuf:"varint,6,opt,name=updated_ms" json:"updated_ms,omitempty"`
-	ExpiresMs int64  `protobuf:"varint,7,opt,name=expires_ms" json:"expires_ms,omitempty"`
-	Order     *Order `protobuf:"bytes,8,opt,name=order" json:"order,omitempty"`
+	OrderId   string             `protobuf:"bytes,1,opt,name=order_id" json:"order_id,omitempty"`
+	LeaseId   string             `protobuf:"bytes,2,opt,name=lease_id" json:"lease_id,omitempty"`
+	Done      bool               `protobuf:"varint,3,opt,name=done" json:"done,omitempty"`
+	UserId    int64              `protobuf:"varint,4,opt,name=user_id" json:"user_id,omitempty"`
+	CreatedMs int64              `protobuf:"varint,5,opt,name=created_ms" json:"created_ms,omitempty"`
+	UpdatedMs int64              `protobuf:"varint,6,opt,name=updated_ms" json:"updated_ms,omitempty"`
+	ExpiresMs int64              `protobuf:"varint,7,opt,name=expires_ms" json:"expires_ms,omitempty"`
+	Order     *Order             `protobuf:"bytes,8,opt,name=order" json:"order,omitempty"`
+	Metadata  *RenderingMetadata `protobuf:"bytes,9,opt,name=metadata" json:"metadata,omitempty"`
+	Failed    bool               `protobuf:"varint,10,opt,name=failed" json:"failed,omitempty"`
 }
 
 func (m *Lease) Reset()         { *m = Lease{} }
@@ -119,6 +121,36 @@ func (*Lease) ProtoMessage()    {}
 func (m *Lease) GetOrder() *Order {
 	if m != nil {
 		return m.Order
+	}
+	return nil
+}
+
+func (m *Lease) GetMetadata() *RenderingMetadata {
+	if m != nil {
+		return m.Metadata
+	}
+	return nil
+}
+
+type LeaseRequest struct {
+	LeaseId string `protobuf:"bytes,1,opt,name=lease_id" json:"lease_id,omitempty"`
+}
+
+func (m *LeaseRequest) Reset()         { *m = LeaseRequest{} }
+func (m *LeaseRequest) String() string { return proto.CompactTextString(m) }
+func (*LeaseRequest) ProtoMessage()    {}
+
+type LeaseReply struct {
+	Lease *Lease `protobuf:"bytes,1,opt,name=lease" json:"lease,omitempty"`
+}
+
+func (m *LeaseReply) Reset()         { *m = LeaseReply{} }
+func (m *LeaseReply) String() string { return proto.CompactTextString(m) }
+func (*LeaseReply) ProtoMessage()    {}
+
+func (m *LeaseReply) GetLease() *Lease {
+	if m != nil {
+		return m.Lease
 	}
 	return nil
 }
@@ -252,6 +284,7 @@ type SchedulerClient interface {
 	// Order handling API. Restricted.
 	Add(ctx context.Context, in *AddRequest, opts ...grpc.CallOption) (*AddReply, error)
 	// Stats API. Restricted.
+	Lease(ctx context.Context, in *LeaseRequest, opts ...grpc.CallOption) (*LeaseReply, error)
 	Leases(ctx context.Context, in *LeasesRequest, opts ...grpc.CallOption) (Scheduler_LeasesClient, error)
 	Orders(ctx context.Context, in *OrdersRequest, opts ...grpc.CallOption) (Scheduler_OrdersClient, error)
 	Stats(ctx context.Context, in *StatsRequest, opts ...grpc.CallOption) (*StatsReply, error)
@@ -307,6 +340,15 @@ func (c *schedulerClient) Failed(ctx context.Context, in *FailedRequest, opts ..
 func (c *schedulerClient) Add(ctx context.Context, in *AddRequest, opts ...grpc.CallOption) (*AddReply, error) {
 	out := new(AddReply)
 	err := grpc.Invoke(ctx, "/qpov.Scheduler/Add", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schedulerClient) Lease(ctx context.Context, in *LeaseRequest, opts ...grpc.CallOption) (*LeaseReply, error) {
+	out := new(LeaseReply)
+	err := grpc.Invoke(ctx, "/qpov.Scheduler/Lease", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -429,6 +471,7 @@ type SchedulerServer interface {
 	// Order handling API. Restricted.
 	Add(context.Context, *AddRequest) (*AddReply, error)
 	// Stats API. Restricted.
+	Lease(context.Context, *LeaseRequest) (*LeaseReply, error)
 	Leases(*LeasesRequest, Scheduler_LeasesServer) error
 	Orders(*OrdersRequest, Scheduler_OrdersServer) error
 	Stats(context.Context, *StatsRequest) (*StatsReply, error)
@@ -495,6 +538,18 @@ func _Scheduler_Add_Handler(srv interface{}, ctx context.Context, dec func(inter
 		return nil, err
 	}
 	out, err := srv.(SchedulerServer).Add(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func _Scheduler_Lease_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+	in := new(LeaseRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	out, err := srv.(SchedulerServer).Lease(ctx, in)
 	if err != nil {
 		return nil, err
 	}
@@ -599,6 +654,10 @@ var _Scheduler_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Add",
 			Handler:    _Scheduler_Add_Handler,
+		},
+		{
+			MethodName: "Lease",
+			Handler:    _Scheduler_Lease_Handler,
 		},
 		{
 			MethodName: "Stats",

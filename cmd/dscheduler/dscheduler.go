@@ -574,6 +574,47 @@ SELECT
 	return ret, nil
 }
 
+func (s *server) Lease(ctx context.Context, in *pb.LeaseRequest) (*pb.LeaseReply, error) {
+	st := time.Now()
+	requestID := uuid.New()
+	if err := blockRestrictedAPI(ctx); err != nil {
+		return nil, err
+	}
+
+	row := db.QueryRow(`
+SELECT lease_id, order_id, done, failed, created, updated, expires, metadata
+FROM leases
+WHERE lease_id=$1`, in.LeaseId)
+	ret := &pb.LeaseReply{
+		Lease: &pb.Lease{},
+	}
+	var ctime, mtime, dtime time.Time
+	var metadata *string
+	if err := row.Scan(
+		&ret.Lease.LeaseId,
+		&ret.Lease.OrderId,
+		&ret.Lease.Done,
+		&ret.Lease.Failed,
+		&ctime, &mtime, &dtime,
+		&metadata); err != nil {
+		return nil, dbError("Getting lease", err)
+	}
+	if metadata != nil {
+		t := &pb.RenderingMetadata{}
+		if err := json.Unmarshal([]byte(*metadata), t); err != nil {
+			log.Printf("Failed to parse stats in db for lease %q: %v", in.LeaseId, err)
+		} else {
+			ret.Lease.Metadata = t
+		}
+	}
+
+	log.Printf("RPC(Lease)")
+	s.rpcLog.Log(ctx, requestID, "dscheduler.Lease", st,
+		"github.com/ThomasHabets/qpov/dist/qpov/LeaseRequest", in,
+		nil, "github.com/ThomasHabets/qpov/dist/qpov/LeaseReply", ret)
+	return ret, nil
+}
+
 func (s *server) Leases(in *pb.LeasesRequest, stream pb.Scheduler_LeasesServer) error {
 	st := time.Now()
 	requestID := uuid.New()
@@ -592,7 +633,8 @@ SELECT
   user_id,
   created,
   updated,
-  expires
+  expires,
+  metadata
 FROM leases
 WHERE done=$1
 AND   ($1=TRUE OR expires > NOW())
@@ -610,7 +652,8 @@ ORDER BY %s`, ordering), in.Done)
 		var orderID, leaseID string
 		var userID *int
 		var created, updated, expires time.Time
-		if err := rows.Scan(&orderID, &leaseID, &userID, &created, &updated, &expires); err != nil {
+		var metadata *string
+		if err := rows.Scan(&orderID, &leaseID, &userID, &created, &updated, &expires, &metadata); err != nil {
 			return dbError("Scanning leases", err)
 		}
 		var order *pb.Order
@@ -634,6 +677,14 @@ ORDER BY %s`, ordering), in.Done)
 		}
 		if userID != nil {
 			e.Lease.UserId = int64(*userID)
+		}
+		if metadata != nil {
+			t := &pb.RenderingMetadata{}
+			if err := json.Unmarshal([]byte(*metadata), t); err != nil {
+				log.Printf("Failed to unmarshal JSON stats for lease %q: %v", leaseID, err)
+			} else {
+				e.Lease.Metadata = t
+			}
 		}
 		if err := stream.Send(e); err != nil {
 			return internalError("failed to stream results", "failed to stream results: %v", err)

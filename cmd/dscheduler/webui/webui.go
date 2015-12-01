@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ThomasHabets/go-uuid/uuid"
+	"github.com/golang/protobuf/proto"
 	"github.com/gorilla/mux"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -85,7 +86,7 @@ tr:nth-child(odd) {
   <th>Lifetime</th>
   <th>Updated</th>
   <th>Expires</th>
-  <th>Package</th>
+<!--  <th>Package</th> -->
   <th>File</th>
 </tr>
 {{range .Leases}}
@@ -95,7 +96,7 @@ tr:nth-child(odd) {
   <td nowrap>{{.CreatedMs|fmssince}}</td>
   <td nowrap>{{.UpdatedMs|fmssince}}</td>
   <td nowrap>{{.ExpiresMs|fmsuntil}}</td>
-  <td nowrap>{{.Order.Package|fileonly}}</td>
+<!--  <td nowrap>{{.Order.Package|fileonly}}</td> -->
   <td nowrap>{{.Order.File}}</td>
 </tr>
 {{end}}
@@ -109,9 +110,10 @@ tr:nth-child(odd) {
   <th>Done</th>
   <th>Time</th>
   <th>Image</th>
-  <th>Package</th>
+<!--  <th>Package</th> -->
   <th>File</th>
 <!--  <th>Args</th> -->
+  <th>Details</th>
 </tr>
 {{range .DoneLeases}}
 <tr>
@@ -120,8 +122,9 @@ tr:nth-child(odd) {
   <td nowrap>{{.UpdatedMs|fmsdate "2006-01-02 15:04"}}</td>
   <td nowrap>{{.CreatedMs|fmssub .UpdatedMs}}</td>
   <td nowrap><a href="/image/{{.LeaseId}}">Image</a></td>
-  <td nowrap>{{.Order.Package|fileonly}}</td>
+<!--  <td nowrap>{{.Order.Package|fileonly}}</td> -->
   <td nowrap>{{.Order.File}}</td>
+  <td nowrap><a href="/lease/{{.LeaseId}}">Details</a></td>
 <!--  <td nowrap>{{.Order.Args}}</td> -->
 </tr>
 {{end}}
@@ -129,6 +132,18 @@ tr:nth-child(odd) {
 
 <hr>
 Page server time: {{.PageTime}}
+`
+	leaseTmpl = `
+<html>
+  <head>
+  </head>
+  <body>
+    <h1>Lease {{.Lease.LeaseId}}</h1>
+    <pre>{{.Ascii}}</pre>
+    <hr>
+    Page server time: {{.PageTime}}
+  </body>
+</html>
 `
 )
 
@@ -203,6 +218,7 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		log.Printf("Internal error: leaseID not passed in to handleImage")
 		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
 	}
 	stream, err := sched.Result(ctx, &pb.ResultRequest{
 		LeaseId: lease,
@@ -227,6 +243,33 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Failed streaming result to client: %v", err)
 		}
 	}
+}
+
+func handleLease(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
+	startTime := time.Now()
+	ctx, cancel := context.WithTimeout(httpContext(r), 10*time.Second)
+	defer cancel()
+
+	// Get lease.
+	lease, ok := mux.Vars(r)["leaseID"]
+	if !ok {
+		log.Printf("leaseID not passed in to handleLease")
+		return nil, fmt.Errorf("no lease provided")
+	}
+	reply, err := sched.Lease(ctx, &pb.LeaseRequest{LeaseId: lease})
+	if err != nil {
+		log.Printf("Backend call: %v", err)
+		return nil, fmt.Errorf("backend broke :-(")
+	}
+	return &struct {
+		Lease    *pb.Lease
+		Ascii    string
+		PageTime time.Duration
+	}{
+		Lease:    reply.Lease,
+		Ascii:    proto.MarshalTextString(reply.Lease),
+		PageTime: time.Since(startTime),
+	}, nil
 }
 
 func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
@@ -319,6 +362,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// TODO: propagate correct error code.
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, "Some random error occured.")
+		log.Printf("Error rendering page: %v", err)
 		return
 	}
 	var buf bytes.Buffer
@@ -415,6 +459,7 @@ func main() {
 	r := mux.NewRouter()
 	r.Handle("/", wrap(handleRoot, rootTmpl)).Methods("GET", "HEAD")
 	r.HandleFunc("/image/{leaseID}", handleImage).Methods("GET", "HEAD")
+	r.Handle("/lease/{leaseID}", wrap(handleLease, leaseTmpl)).Methods("GET", "HEAD")
 	log.Printf("Running dscheduler webui...")
 	if err := fcgi.Serve(sock, r); err != nil {
 		log.Fatal("Failed to start serving fcgi: ", err)
