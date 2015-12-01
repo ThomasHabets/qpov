@@ -1,5 +1,8 @@
 // Read metadata from file into SQL.
 // This should be a one-time op since dscheduler now writes this at Done-time.
+//
+// For direct-in-folder entries:
+// select leases.lease_id, regexp_replace(definition, '.*File":"([^"]+).*', '\1') from leases join orders on orders.order_id=leases.order_id where done=true and definition like '%demo1-lightfix/%' order by updated;
 package main
 
 import (
