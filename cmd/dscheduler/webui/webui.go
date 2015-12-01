@@ -23,6 +23,7 @@ import (
 	"github.com/gorilla/mux"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 
 	"github.com/ThomasHabets/qpov/dist"
@@ -263,8 +264,12 @@ func handleLease(ctx context.Context, w http.ResponseWriter, r *http.Request) (i
 	}
 	reply, err := sched.Lease(ctx, &pb.LeaseRequest{LeaseId: lease})
 	if err != nil {
-		log.Printf("Backend call: %v", err)
-		return nil, fmt.Errorf("backend broke :-(")
+		if grpc.Code(err) == codes.Unauthenticated {
+			return nil, httpError(http.StatusForbidden, "Unauthenticated", "Unauthenticated")
+		} else {
+			log.Printf("Backend call: %v", err)
+			return nil, fmt.Errorf("backend broke :-(")
+		}
 	}
 	return &struct {
 		Lease    *pb.Lease
@@ -357,6 +362,22 @@ type handler struct {
 	f    handleFunc
 }
 
+type httpErr struct {
+	code            int
+	private, public string
+}
+
+func httpError(code int, pub, priv string) *httpErr {
+	return &httpErr{
+		code:    code,
+		private: priv,
+		public:  pub,
+	}
+}
+func (e *httpErr) Error() string {
+	return fmt.Sprintf("HTTP Error %d: %v", e.code, e.private)
+}
+
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Strict-Transport-Security", "max-age=2592000")
 	ctx, cancel := context.WithTimeout(httpContext(r), *pageDeadline)
@@ -364,9 +385,15 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	data, err := h.f(ctx, w, r)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/plain")
-		// TODO: propagate correct error code.
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "Some random error occured.")
+		code := http.StatusInternalServerError
+		msg := "Internal error"
+		e2, ok := err.(*httpErr)
+		if ok {
+			code = e2.code
+			msg = e2.public
+		}
+		w.WriteHeader(code)
+		fmt.Fprintf(w, "Error: %v", msg)
 		log.Printf("Error rendering page: %v", err)
 		return
 	}

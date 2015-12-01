@@ -708,15 +708,15 @@ ORDER BY %s`, ordering), in.Done)
 
 // Block access for end-users that don't have the right cookie set.
 func blockRestrictedUser(ctx context.Context) error {
+	errPerUserCredentials := grpc.Errorf(codes.Unauthenticated, "need per-user credentials for this resource")
 	md, ok := grpcmetadata.FromContext(ctx)
 	if !ok {
-		return internalError("no metadata", "no metadata")
+		return errPerUserCredentials
 	}
 	if v, _ := md["http:cookie"]; len(v) > 0 && v[0] == *secretTODO {
 		return nil
 	}
-	log.Print(md)
-	return fmt.Errorf("unauthenticated for this URL")
+	return errPerUserCredentials
 }
 
 func blockRestrictedAPIInternal(ctx context.Context) error {
