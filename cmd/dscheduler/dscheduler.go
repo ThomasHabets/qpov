@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	grpcmetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/transport"
 
 	"github.com/ThomasHabets/qpov/dist"
@@ -46,6 +47,7 @@ var (
 	clientCAFile         = flag.String("client_ca_file", "", "The client CA file.")
 	maxConcurrentStreams = flag.Int("max_concurrent_streams", 10000, "Max concurrent RPC streams.")
 	rpclogDir            = flag.String("rpclog_dir", ".", "RPC log directory.")
+	secretTODO           = flag.String("secret_TODO", "", "Secret word to be able to see secrets. to be replaced with oauth stuff.")
 
 	errNoCert = errors.New("no cert provided")
 )
@@ -580,6 +582,9 @@ func (s *server) Lease(ctx context.Context, in *pb.LeaseRequest) (*pb.LeaseReply
 	if err := blockRestrictedAPI(ctx); err != nil {
 		return nil, err
 	}
+	if err := blockRestrictedUser(ctx); err != nil {
+		return nil, err
+	}
 
 	row := db.QueryRow(`
 SELECT lease_id, order_id, done, failed, created, updated, expires, metadata
@@ -608,7 +613,7 @@ WHERE lease_id=$1`, in.LeaseId)
 		}
 	}
 
-	log.Printf("RPC(Lease)")
+	log.Printf("RPC(Lease) %s", in.LeaseId)
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Lease", st,
 		"github.com/ThomasHabets/qpov/dist/qpov/LeaseRequest", in,
 		nil, "github.com/ThomasHabets/qpov/dist/qpov/LeaseReply", ret)
@@ -699,6 +704,19 @@ ORDER BY %s`, ordering), in.Done)
 		"github.com/ThomasHabets/qpov/dist/qpov/LeasesRequest", in,
 		nil, "github.com/ThomasHabets/qpov/dist/qpov/LeasesReply", logRet)
 	return nil
+}
+
+// Block access for end-users that don't have the right cookie set.
+func blockRestrictedUser(ctx context.Context) error {
+	md, ok := grpcmetadata.FromContext(ctx)
+	if !ok {
+		return internalError("no metadata", "no metadata")
+	}
+	if v, _ := md["http:cookie"]; len(v) > 0 && v[0] == *secretTODO {
+		return nil
+	}
+	log.Print(md)
+	return fmt.Errorf("unauthenticated for this URL")
 }
 
 func blockRestrictedAPIInternal(ctx context.Context) error {

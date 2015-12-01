@@ -157,6 +157,8 @@ var (
 
 	sched    pb.SchedulerClient
 	tmplRoot template.Template
+
+	forwardRPCKeys = []string{"id", "source", "http:remote_addr", "http:cookie"}
 )
 
 func httpContext(r *http.Request) context.Context {
@@ -164,6 +166,9 @@ func httpContext(r *http.Request) context.Context {
 	ctx = context.WithValue(ctx, "source", "http")
 	ctx = context.WithValue(ctx, "id", uuid.New())
 	ctx = context.WithValue(ctx, "http:remote_addr", r.RemoteAddr)
+	if c, err := r.Cookie("qpov"); err == nil {
+		ctx = context.WithValue(ctx, "http:cookie", c.Value)
+	}
 	return ctx
 }
 
@@ -432,6 +437,7 @@ func connectScheduler(addr string) error {
 	cr := credentials.NewTLS(&tlsConfig)
 	conn, err := grpc.Dial(addr,
 		grpc.WithTransportCredentials(cr),
+		grpc.WithPerRPCCredentials(&perRPC{}),
 		grpc.WithUserAgent(userAgent),
 	)
 	if err != nil {
@@ -439,6 +445,23 @@ func connectScheduler(addr string) error {
 	}
 	sched = pb.NewSchedulerClient(conn)
 	return nil
+}
+
+type perRPC struct{}
+
+func (*perRPC) RequireTransportSecurity() bool {
+	return true
+}
+
+func (*perRPC) GetRequestMetadata(ctx context.Context, uri ...string) (map[string]string, error) {
+	ret := make(map[string]string)
+	for _, k := range forwardRPCKeys {
+		t, ok := ctx.Value(k).(string)
+		if ok {
+			ret[k] = t
+		}
+	}
+	return ret, nil
 }
 
 func main() {
