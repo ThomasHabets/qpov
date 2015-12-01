@@ -100,12 +100,13 @@ type RenderingMetadata struct {
 	// Who and what.
 	User        string `protobuf:"bytes,1,opt,name=user" json:"user,omitempty"`
 	OrderString string `protobuf:"bytes,2,opt,name=order_string" json:"order_string,omitempty"`
+	Order       *Order `protobuf:"bytes,3,opt,name=order" json:"order,omitempty"`
 	// POV-Ray run stats.
-	StartMs    int64   `protobuf:"varint,10,opt,name=start_ms" json:"start_ms,omitempty"`
-	EndMs      int64   `protobuf:"varint,11,opt,name=end_ms" json:"end_ms,omitempty"`
-	SystemTime int64   `protobuf:"varint,12,opt,name=system_time" json:"system_time,omitempty"`
-	UserTime   int64   `protobuf:"varint,13,opt,name=user_time" json:"user_time,omitempty"`
-	Rusage     *Rusage `protobuf:"bytes,14,opt,name=rusage" json:"rusage,omitempty"`
+	StartMs  int64   `protobuf:"varint,10,opt,name=start_ms" json:"start_ms,omitempty"`
+	EndMs    int64   `protobuf:"varint,11,opt,name=end_ms" json:"end_ms,omitempty"`
+	SystemMs int64   `protobuf:"varint,12,opt,name=system_ms" json:"system_ms,omitempty"`
+	UserMs   int64   `protobuf:"varint,13,opt,name=user_ms" json:"user_ms,omitempty"`
+	Rusage   *Rusage `protobuf:"bytes,14,opt,name=rusage" json:"rusage,omitempty"`
 	// System info.
 	Hostname string `protobuf:"bytes,20,opt,name=hostname" json:"hostname,omitempty"`
 	Uname    *Uname `protobuf:"bytes,21,opt,name=uname" json:"uname,omitempty"`
@@ -119,6 +120,13 @@ type RenderingMetadata struct {
 func (m *RenderingMetadata) Reset()         { *m = RenderingMetadata{} }
 func (m *RenderingMetadata) String() string { return proto.CompactTextString(m) }
 func (*RenderingMetadata) ProtoMessage()    {}
+
+func (m *RenderingMetadata) GetOrder() *Order {
+	if m != nil {
+		return m.Order
+	}
+	return nil
+}
 
 func (m *RenderingMetadata) GetRusage() *Rusage {
 	if m != nil {

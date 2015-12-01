@@ -311,6 +311,20 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	re := regexp.MustCompile(`\.pov$`)
 	image := re.ReplaceAllString(file, ".png")
 
+	// Create metadata to store in DB from oldJSON.
+	var newStats string
+	{
+		stats, err := dist.ParseLegacyJSON([]byte(in.JsonMetadata))
+		if err != nil {
+			log.Printf("Warning: bad JSON: %v", err)
+		}
+		b, err := json.Marshal(stats)
+		if err != nil {
+			log.Printf("Warning: failed to re-encode to newJSON: %v", err)
+		}
+		newStats = string(b)
+	}
+
 	files := []struct {
 		ct   string
 		fn   string
@@ -342,7 +356,7 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 		return nil, internalError("storing results", "Uploading to S3: %v", err)
 	}
 	// Mark as completed.
-	if _, err := db.Exec(`UPDATE leases SET done=TRUE,updated=NOW() WHERE lease_id=$1`, in.LeaseId); err != nil {
+	if _, err := db.Exec(`UPDATE leases SET done=TRUE,updated=NOW(),metadata=$2 WHERE lease_id=$1`, in.LeaseId, newStats); err != nil {
 		return nil, dbError("Marking done", err)
 	}
 	log.Printf("RPC(Done): Lease: %q", in.LeaseId)

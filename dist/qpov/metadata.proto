@@ -1,5 +1,6 @@
 syntax = "proto3";
 package qpov;
+import "order.proto";
 
 // From getrusage(2).
 message Rusage {
@@ -40,12 +41,13 @@ message RenderingMetadata {
         // Who and what.
         string user = 1;
         string order_string = 2;
+        Order order = 3;
 
         // POV-Ray run stats.
         int64 start_ms = 10;
         int64 end_ms = 11;
-        int64 system_time = 12;
-        int64 user_time = 13;
+        int64 system_ms = 12;
+        int64 user_ms = 13;
         Rusage rusage = 14;
 
         // System info.
