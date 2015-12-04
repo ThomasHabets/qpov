@@ -36,18 +36,18 @@ import (
 )
 
 var (
-	defaultLeaseRenewTime = time.Hour
-	maxLeaseRenewTime     = 48 * time.Hour
-
-	db                   *sql.DB
-	dbConnect            = flag.String("db", "", "")
-	addr                 = flag.String("port", ":9999", "Addr to listen to.")
-	certFile             = flag.String("cert_file", "", "The TLS cert file")
-	keyFile              = flag.String("key_file", "", "The TLS key file")
-	clientCAFile         = flag.String("client_ca_file", "", "The client CA file.")
-	maxConcurrentStreams = flag.Int("max_concurrent_streams", 10000, "Max concurrent RPC streams.")
-	rpclogDir            = flag.String("rpclog_dir", ".", "RPC log directory.")
-	secretTODO           = flag.String("secret_TODO", "", "Secret word to be able to see secrets. to be replaced with oauth stuff.")
+	db                    *sql.DB
+	dbConnect             = flag.String("db", "", "")
+	addr                  = flag.String("port", ":9999", "Addr to listen to.")
+	certFile              = flag.String("cert_file", "", "The TLS cert file")
+	keyFile               = flag.String("key_file", "", "The TLS key file")
+	clientCAFile          = flag.String("client_ca_file", "", "The client CA file.")
+	maxConcurrentStreams  = flag.Int("max_concurrent_streams", 10000, "Max concurrent RPC streams.")
+	rpclogDir             = flag.String("rpclog_dir", ".", "RPC log directory.")
+	secretTODO            = flag.String("secret_TODO", "", "Secret word to be able to see secrets. to be replaced with oauth stuff.")
+	minLeaseRenewTime     = flag.Duration("min_lease_renew_time", time.Hour, "Minimum lease renew time.")
+	maxLeaseRenewTime     = flag.Duration("max_lease_renew_time", 48*time.Hour, "Minimum lease renew time.")
+	defaultLeaseRenewTime = flag.Duration("default_lease_time", time.Hour, "Default lease renew time.")
 
 	errNoCert = errors.New("no cert provided")
 )
@@ -178,7 +178,7 @@ LIMIT 1`)
 
 	lease := uuid.New()
 	if _, err := tx.Exec(`INSERT INTO leases(lease_id, done, order_id, user_id, created, updated, expires)
-VALUES($1, false, $2, $3, NOW(), NOW(), $4)`, lease, orderID, ownerID, time.Now().Add(defaultLeaseRenewTime)); err != nil {
+VALUES($1, false, $2, $3, NOW(), NOW(), $4)`, lease, orderID, ownerID, time.Now().Add(*defaultLeaseRenewTime)); err != nil {
 		return nil, dbError("Inserting lease", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -202,6 +202,9 @@ func (s *server) renew(ctx context.Context, lease string, secs int32) (time.Time
 	}
 	if secs > int32(maxLeaseRenewTime.Seconds()) {
 		secs = int32(maxLeaseRenewTime.Seconds())
+	}
+	if secs < int32(minLeaseRenewTime.Seconds()) {
+		secs = int32(minLeaseRenewTime.Seconds())
 	}
 	n := time.Now().Add(time.Duration(int64(time.Second) * int64(secs)))
 	if _, err := db.Exec(`UPDATE leases SET updated=NOW(), expires=$1 WHERE lease_id=$2 AND done=FALSE AND failed=FALSE`, n, lease); err != nil {
