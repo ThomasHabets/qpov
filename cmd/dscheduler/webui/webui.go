@@ -253,7 +253,7 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 
 	for {
 		select {
-		case err := <-writerDone:
+		case <-writerDone:
 			return
 		default:
 		}
