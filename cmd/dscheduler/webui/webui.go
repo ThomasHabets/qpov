@@ -251,25 +251,28 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	for {
-		select {
-		case <-writerDone:
-			return
-		default:
+	func() {
+		defer close(ch)
+		for {
+			select {
+			case <-writerDone:
+				return
+			default:
+			}
+			r, err := stream.Recv()
+			if err == io.EOF {
+				break
+			} else if err != nil {
+				log.Printf("Failed streaming result over RPC: %v", err)
+				return
+			}
+			// Only sent on first packet.
+			if r.ContentType != "" {
+				w.Header().Set("Content-Type", r.ContentType)
+			}
+			ch <- r.Data
 		}
-		r, err := stream.Recv()
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			log.Printf("Failed streaming result over RPC: %v", err)
-			return
-		}
-		// Only sent on first packet.
-		if r.ContentType != "" {
-			w.Header().Set("Content-Type", r.ContentType)
-		}
-		ch <- r.Data
-	}
+	}()
 	<-writerDone
 }
 
