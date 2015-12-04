@@ -188,9 +188,9 @@ Leases:    Total: %10d   Active: %10d    Done: %10d
 }
 
 func cmdAdd(args []string) {
-	fs := flag.NewFlagSet("list", flag.ExitOnError)
+	fs := flag.NewFlagSet("add", flag.ExitOnError)
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [options] list [options]\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] add [options] <povray args...>\n", os.Args[0])
 		fs.PrintDefaults()
 	}
 	pkg := fs.String("package", "", "S3 path to rar file containing all resources.")
