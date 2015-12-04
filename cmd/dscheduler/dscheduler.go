@@ -412,18 +412,54 @@ func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) 
 			}
 		}
 		defer r.Close()
-		for {
-			buf := make([]byte, 1024, 1024)
-			n, err := r.Read(buf)
-			if err == io.EOF {
-				break
+
+		writerErr := make(chan error, 1)
+		ch := make(chan []byte, 1000)
+		// Writer.
+		go func() {
+			defer func() {
+				// Flush the channel, in case there was an error.
+				for _ = range ch {
+				}
+				close(writerErr)
+			}()
+			writerErr <- func() error {
+				for buf := range ch {
+					if err := stream.Send(&pb.ResultReply{Data: buf}); err != nil {
+						return internalError("failed to stream result", "failed to stream result: %v", err)
+					}
+				}
+				return nil
+			}()
+		}()
+
+		// Reader.
+		if err := func() error {
+			defer close(ch)
+			for {
+				select {
+				case err := <-writerErr:
+					return err
+				case <-ctx.Done(): // TODO: is this needed? Won't stream.Send() fail anyway if context cancels?
+					return internalError("timed out", "timed out streaming results %q: %v", image, err)
+				default:
+				}
+				buf := make([]byte, 1024, 1024)
+				n, err := r.Read(buf)
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					return internalError("failed to stream result", "failed to stream result %q: %v", image, err)
+				}
+				ch <- buf[0:n]
 			}
-			if err != nil {
-				return internalError("failed to stream result", "failed to stream result %q: %v", image, err)
-			}
-			if err := stream.Send(&pb.ResultReply{Data: buf[0:n]}); err != nil {
-				return internalError("failed to stream result", "failed to stream result: %v", err)
-			}
+			return nil
+		}(); err != nil {
+			return err
+		}
+		if err := <-writerErr; err != nil {
+			return err
 		}
 	}
 

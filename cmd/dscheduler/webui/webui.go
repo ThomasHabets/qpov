@@ -234,21 +234,43 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Backend broke :-(", http.StatusBadGateway)
 		return
 	}
+
+	ch := make(chan []byte, 1000)
+	writerDone := make(chan struct{}, 1)
+	go func() {
+		defer func() {
+			close(writerDone)
+			for _ = range ch {
+			}
+		}()
+		for data := range ch {
+			if _, err := w.Write(data); err != nil {
+				log.Printf("Failed streaming result to client: %v", err)
+				return
+			}
+		}
+	}()
+
 	for {
-		// TODO: stream this better by reading and writing concurrently with a fixed buffer.
+		select {
+		case err := <-writerDone:
+			return
+		default:
+		}
 		r, err := stream.Recv()
 		if err == io.EOF {
 			break
 		} else if err != nil {
 			log.Printf("Failed streaming result over RPC: %v", err)
+			return
 		}
+		// Only sent on first packet.
 		if r.ContentType != "" {
 			w.Header().Set("Content-Type", r.ContentType)
 		}
-		if _, err := w.Write(r.Data); err != nil {
-			log.Printf("Failed streaming result to client: %v", err)
-		}
+		ch <- r.Data
 	}
+	<-writerDone
 }
 
 func handleLease(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
