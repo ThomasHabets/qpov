@@ -363,8 +363,7 @@ func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 	if len(errs) > 0 {
 		log.Printf("Errors: %v", errs)
 	}
-	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
-	return &struct {
+	ret := &struct {
 		Stats           *pb.StatsReply
 		Leases          []*pb.Lease
 		DoneLeases      []*pb.Lease
@@ -372,13 +371,17 @@ func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 		Errors          []error
 		PageTime        time.Duration
 	}{
-		Stats:           st,
-		Leases:          leases,
-		DoneLeases:      doneLeases,
-		Errors:          errs,
-		UnstartedOrders: st.SchedulingStats.Orders - st.SchedulingStats.DoneOrders,
-		PageTime:        time.Since(startTime),
-	}, nil
+		Stats:      st,
+		Leases:     leases,
+		DoneLeases: doneLeases,
+		Errors:     errs,
+		PageTime:   time.Since(startTime),
+	}
+	if st != nil {
+		ret.UnstartedOrders = st.SchedulingStats.Orders - st.SchedulingStats.DoneOrders
+	}
+	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
+	return ret, nil
 }
 
 type handleFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error)
