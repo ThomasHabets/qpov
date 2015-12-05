@@ -40,6 +40,7 @@ var (
 	dbConnect             = flag.String("db", "", "")
 	addr                  = flag.String("port", ":9999", "Addr to listen to.")
 	certFile              = flag.String("cert_file", "", "The TLS cert file")
+	anonymous             = flag.Bool("anonymous", true, "Allow anonymous access.")
 	keyFile               = flag.String("key_file", "", "The TLS key file")
 	clientCAFile          = flag.String("client_ca_file", "", "The client CA file.")
 	maxConcurrentStreams  = flag.Int("max_concurrent_streams", 10000, "Max concurrent RPC streams.")
@@ -878,6 +879,9 @@ func main() {
 			ClientAuth:   tls.VerifyClientCertIfGiven,
 			ClientCAs:    cp,
 			Certificates: []tls.Certificate{cert},
+		}
+		if !*anonymous {
+			t.ClientAuth = tls.RequireAndVerifyClientCert
 		}
 		opts = append(opts, grpc.Creds(credentials.NewTLS(t)))
 	}
