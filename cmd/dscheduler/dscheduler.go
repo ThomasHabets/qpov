@@ -76,12 +76,7 @@ func cleanError(err error, code codes.Code, public string, a ...interface{}) err
 	return grpc.Errorf(code, public, a...)
 }
 
-func getOrderByID(id string) (*pb.Order, error) {
-	row := db.QueryRow(`SELECT definition FROM orders WHERE order_id=$1`, id)
-	var def string
-	if err := row.Scan(&def); err != nil {
-		return nil, err
-	}
+func def2Order(def string) (*pb.Order, error) {
 	var order dist.Order
 	if err := json.Unmarshal([]byte(def), &order); err != nil {
 		return nil, err
@@ -93,6 +88,15 @@ func getOrderByID(id string) (*pb.Order, error) {
 		File:    order.File,
 		Args:    order.Args,
 	}, nil
+}
+
+func getOrderByID(id string) (*pb.Order, error) {
+	row := db.QueryRow(`SELECT definition FROM orders WHERE order_id=$1`, id)
+	var def string
+	if err := row.Scan(&def); err != nil {
+		return nil, err
+	}
+	return def2Order(def)
 }
 
 func getOwnerIDByCN(cn string) (int, error) {
@@ -608,7 +612,7 @@ SELECT
 			return nil, dbError("lease stats", err)
 		}
 	}
-	log.Printf("RPC(Orders)")
+	log.Printf("RPC(Stats)")
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Stats", st,
 		"github.com/ThomasHabets/qpov/dist/qpov/StatsRequest", in,
 		nil, "github.com/ThomasHabets/qpov/dist/qpov/StatsReply", ret)
@@ -666,23 +670,30 @@ func (s *server) Leases(in *pb.LeasesRequest, stream pb.Scheduler_LeasesServer) 
 	if err := blockRestrictedAPI(ctx); err != nil {
 		return err
 	}
-	ordering := "created"
-	if in.Done {
-		ordering = "updated"
+	metadataCol := "NULL"
+	if in.Metadata {
+		metadataCol = "metadata"
 	}
-	rows, err := db.Query(fmt.Sprintf(`
+	ordering := "leases.created"
+	if in.Done {
+		ordering = "leases.updated"
+	}
+	q := fmt.Sprintf(`
 SELECT
-  order_id,
+  orders.order_id,
+  orders.definition,
   lease_id,
   user_id,
-  created,
+  leases.created,
   updated,
   expires,
-  metadata
+  %s
 FROM leases
+JOIN orders ON orders.order_id=leases.order_id
 WHERE done=$1
 AND   ($1=TRUE OR expires > NOW())
-ORDER BY %s`, ordering), in.Done)
+ORDER BY %s`, metadataCol, ordering)
+	rows, err := db.Query(q, in.Done)
 	if err != nil {
 		return dbError("Listing leases", err)
 	}
@@ -697,14 +708,14 @@ ORDER BY %s`, ordering), in.Done)
 		var userID *int
 		var created, updated, expires time.Time
 		var metadata *string
-		if err := rows.Scan(&orderID, &leaseID, &userID, &created, &updated, &expires, &metadata); err != nil {
+		var def string
+		if err := rows.Scan(&orderID, &def, &leaseID, &userID, &created, &updated, &expires, &metadata); err != nil {
 			return dbError("Scanning leases", err)
 		}
 		var order *pb.Order
 		if in.Order {
-			// TODO: This is very inefficient. Issue just the one query collecting all the data.
 			var err error
-			order, err = getOrderByID(orderID)
+			order, err = def2Order(def)
 			if err != nil {
 				log.Printf("Getting order %q: %v", orderID, err)
 			}

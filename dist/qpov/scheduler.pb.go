@@ -156,8 +156,9 @@ func (m *LeaseReply) GetLease() *Lease {
 }
 
 type LeasesRequest struct {
-	Done  bool `protobuf:"varint,1,opt,name=done" json:"done,omitempty"`
-	Order bool `protobuf:"varint,2,opt,name=order" json:"order,omitempty"`
+	Done     bool `protobuf:"varint,1,opt,name=done" json:"done,omitempty"`
+	Order    bool `protobuf:"varint,2,opt,name=order" json:"order,omitempty"`
+	Metadata bool `protobuf:"varint,3,opt,name=metadata" json:"metadata,omitempty"`
 }
 
 func (m *LeasesRequest) Reset()         { *m = LeasesRequest{} }

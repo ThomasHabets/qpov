@@ -88,6 +88,7 @@ message LeaseReply {
 message LeasesRequest {
         bool done = 1;
         bool order = 2;
+        bool metadata = 3;
 }
 
 message LeasesReply {
