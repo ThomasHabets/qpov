@@ -19,14 +19,18 @@ var (
 
 func anyText(msg *pb.Any) string {
 	m := map[string]proto.Message{
-		"github.com/ThomasHabets/qpov/dist/qpov/RenewRequest": &qpovpb.RenewRequest{},
-		"github.com/ThomasHabets/qpov/dist/qpov/RenewReply":   &qpovpb.RenewReply{},
-		"github.com/ThomasHabets/qpov/dist/qpov/GetRequest":   &qpovpb.GetRequest{},
-		"github.com/ThomasHabets/qpov/dist/qpov/GetReply":     &qpovpb.GetReply{},
-		"github.com/ThomasHabets/qpov/dist/qpov/StatsRequest": &qpovpb.StatsRequest{},
-		"github.com/ThomasHabets/qpov/dist/qpov/StatsReply":   &qpovpb.StatsReply{},
-		"github.com/ThomasHabets/qpov/dist/qpov/DoneRequest":  &qpovpb.DoneRequest{},
-		"github.com/ThomasHabets/qpov/dist/qpov/DoneReply":    &qpovpb.DoneReply{},
+		"github.com/ThomasHabets/qpov/dist/qpov/OrdersRequest": &qpovpb.OrdersRequest{},
+		"github.com/ThomasHabets/qpov/dist/qpov/OrdersReply":   &qpovpb.OrdersReply{},
+		"github.com/ThomasHabets/qpov/dist/qpov/LeasesRequest": &qpovpb.LeasesRequest{},
+		"github.com/ThomasHabets/qpov/dist/qpov/LeasesReply":   &qpovpb.LeasesReply{},
+		"github.com/ThomasHabets/qpov/dist/qpov/RenewRequest":  &qpovpb.RenewRequest{},
+		"github.com/ThomasHabets/qpov/dist/qpov/RenewReply":    &qpovpb.RenewReply{},
+		"github.com/ThomasHabets/qpov/dist/qpov/GetRequest":    &qpovpb.GetRequest{},
+		"github.com/ThomasHabets/qpov/dist/qpov/GetReply":      &qpovpb.GetReply{},
+		"github.com/ThomasHabets/qpov/dist/qpov/StatsRequest":  &qpovpb.StatsRequest{},
+		"github.com/ThomasHabets/qpov/dist/qpov/StatsReply":    &qpovpb.StatsReply{},
+		"github.com/ThomasHabets/qpov/dist/qpov/DoneRequest":   &qpovpb.DoneRequest{},
+		"github.com/ThomasHabets/qpov/dist/qpov/DoneReply":     &qpovpb.DoneReply{},
 	}
 	d, ok := m[msg.TypeUrl]
 	if !ok {
