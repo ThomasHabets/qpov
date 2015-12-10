@@ -39,7 +39,7 @@ type istats struct {
 }
 
 func tv2us(i syscall.Timeval) int64 {
-	return i.Sec*1000000 + i.Usec
+	return int64(i.Sec)*1000000 + int64(i.Usec)
 }
 
 func ParseLegacyJSON(buf []byte) (*pb.RenderingMetadata, error) {
@@ -59,20 +59,20 @@ func ParseLegacyJSON(buf []byte) (*pb.RenderingMetadata, error) {
 		Rusage: &pb.Rusage{
 			Utime:    tv2us(ist.Rusage.Utime),
 			Stime:    tv2us(ist.Rusage.Stime),
-			Maxrss:   ist.Rusage.Maxrss,
-			Ixrss:    ist.Rusage.Ixrss,
-			Idrss:    ist.Rusage.Idrss,
-			Isrss:    ist.Rusage.Isrss,
-			Minflt:   ist.Rusage.Minflt,
-			Majflt:   ist.Rusage.Majflt,
-			Nswap:    ist.Rusage.Nswap,
-			Inblock:  ist.Rusage.Inblock,
-			Oublock:  ist.Rusage.Oublock,
-			Msgsnd:   ist.Rusage.Msgsnd,
-			Msgrcv:   ist.Rusage.Msgrcv,
-			Nsignals: ist.Rusage.Nsignals,
-			Nvcsw:    ist.Rusage.Nvcsw,
-			Nivcsw:   ist.Rusage.Nivcsw,
+			Maxrss:   int64(ist.Rusage.Maxrss),
+			Ixrss:    int64(ist.Rusage.Ixrss),
+			Idrss:    int64(ist.Rusage.Idrss),
+			Isrss:    int64(ist.Rusage.Isrss),
+			Minflt:   int64(ist.Rusage.Minflt),
+			Majflt:   int64(ist.Rusage.Majflt),
+			Nswap:    int64(ist.Rusage.Nswap),
+			Inblock:  int64(ist.Rusage.Inblock),
+			Oublock:  int64(ist.Rusage.Oublock),
+			Msgsnd:   int64(ist.Rusage.Msgsnd),
+			Msgrcv:   int64(ist.Rusage.Msgrcv),
+			Nsignals: int64(ist.Rusage.Nsignals),
+			Nvcsw:    int64(ist.Rusage.Nvcsw),
+			Nivcsw:   int64(ist.Rusage.Nivcsw),
 		},
 		Hostname: ist.Hostname,
 		Uname: &pb.Uname{
