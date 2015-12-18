@@ -471,7 +471,7 @@ func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) 
 		}
 	}
 
-	log.Printf("RPC(Result)")
+	log.Printf("RPC(Result) Lease %s", in.LeaseId)
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Result", st,
 		"github.com/ThomasHabets/qpov/dist/qpov/ResultRequest", in,
 		nil, "github.com/ThomasHabets/qpov/dist/qpov/ResultReply", &ret)
