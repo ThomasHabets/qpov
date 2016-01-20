@@ -29,7 +29,7 @@ animation to work with.
 mkdir go
 cd go
 GOPATH=$(pwd) go get github.com/ThomasHabets/qpov
-GOPATH=$(pwd) go build github.com/ThomasHabets/qpov/cmd/{bsp,dem,mdl,pak,render}
+for bin in bsp dem mdl pak render; do GOPATH=$(pwd) go build github.com/ThomasHabets/qpov/cmd/$bin;done
 ```
 
 You'll need the Quake data files, either shareware or full version.
