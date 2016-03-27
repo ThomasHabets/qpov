@@ -60,6 +60,7 @@ type state struct {
 const (
 	amazonCloud        = "Amazon"
 	googleCloud        = "Google"
+	digitalOceanCloud  = "DigitalOcean"
 	gceInstanceTypeURL = "http://metadata.google.internal./computeMetadata/v1/instance/machine-type"
 
 	doneRetryTimer = 10 * time.Second
@@ -260,7 +261,10 @@ func getCloud() (string, string) {
 		cmd := exec.Command("ec2metadata", "--instance-type")
 		cmd.Stdout = &b
 		if cmd.Run() == nil {
-			return amazonCloud, b.String()
+			t := strings.TrimSpace(b.String())
+			if t != "unavailable" {
+				return amazonCloud, t
+			}
 		}
 	}
 
@@ -281,6 +285,20 @@ func getCloud() (string, string) {
 				re := regexp.MustCompile(`.*/`)
 				return googleCloud, re.ReplaceAllString(string(b), "")
 			}
+		}
+	}
+
+	// Check for DigitalOcean.
+	{
+		// All files must exist.
+		do := true
+		for _, fn := range []string{"/etc/rc.digitalocean"} {
+			if _, err := os.Stat(fn); err != nil {
+				do = false
+			}
+		}
+		if do {
+			return digitalOceanCloud, "unknown"
 		}
 	}
 
