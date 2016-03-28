@@ -844,7 +844,7 @@ func userProperty(ctx context.Context, p string) bool {
 		}
 	}
 
-	row := db.QueryRow(`SELECT %s FROM users WHERE user_id=$1`, p, ownerID)
+	row := db.QueryRow(fmt.Sprintf(`SELECT %s FROM users WHERE user_id=$1`, p), ownerID)
 	var v bool
 	if err := row.Scan(&v); err != nil {
 		log.Printf("Looking up user %v: %v", ownerID, err)
