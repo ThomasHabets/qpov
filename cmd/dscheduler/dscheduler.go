@@ -722,6 +722,7 @@ ORDER BY %s`, metadataCol, ordering)
 	defer rows.Close()
 	logRet := &pb.LeasesReply{}
 
+	userPropertyAddresses := userProperty(ctx, propAddresses)
 	for rows.Next() {
 		if ctx.Err() != nil {
 			return err
@@ -753,7 +754,7 @@ ORDER BY %s`, metadataCol, ordering)
 				Order:     order,
 			},
 		}
-		if userProperty(ctx, propAddresses) {
+		if userPropertyAddresses {
 			e.Lease.Address = client.String
 		}
 		if userID != nil {
