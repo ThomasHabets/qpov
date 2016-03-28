@@ -11,6 +11,7 @@ import (
 	_ "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/grpclog"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/transport"
 
 	pb "github.com/ThomasHabets/qpov/dist/rpclog/proto"
@@ -30,11 +31,11 @@ func getAddr(ctx context.Context) string {
 }
 
 func getCN(ctx context.Context) string {
-	a, ok := credentials.FromContext(ctx)
+	p, ok := peer.FromContext(ctx)
 	if !ok {
 		return ""
 	}
-	at, ok := a.(credentials.TLSInfo)
+	at, ok := p.AuthInfo.(credentials.TLSInfo)
 	if !ok {
 		return ""
 	}

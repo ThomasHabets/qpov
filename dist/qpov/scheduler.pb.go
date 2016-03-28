@@ -112,6 +112,7 @@ type Lease struct {
 	Order     *Order             `protobuf:"bytes,8,opt,name=order" json:"order,omitempty"`
 	Metadata  *RenderingMetadata `protobuf:"bytes,9,opt,name=metadata" json:"metadata,omitempty"`
 	Failed    bool               `protobuf:"varint,10,opt,name=failed" json:"failed,omitempty"`
+	Address   string             `protobuf:"bytes,11,opt,name=address" json:"address,omitempty"`
 }
 
 func (m *Lease) Reset()         { *m = Lease{} }

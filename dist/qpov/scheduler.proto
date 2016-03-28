@@ -76,6 +76,7 @@ message Lease {
         Order order = 8;
         RenderingMetadata metadata = 9;
         bool failed = 10;
+        string address = 11;  // Last communication came from here.
 }
 
 message LeaseRequest {

@@ -28,6 +28,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	grpcmetadata "google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/transport"
 
 	"github.com/ThomasHabets/qpov/dist"
@@ -55,6 +56,8 @@ var (
 
 const (
 	infoSuffix = ".json"
+
+	propAddresses = "addresses"
 )
 
 // Log error and return gRPC error safe for returing to users.
@@ -114,11 +117,11 @@ func getOwnerIDByCN(cn string) (int, error) {
 // getOwnerID from the RPC channel TLS client cert.
 // Returns errNoCert if no cert is attached.
 func getOwnerID(ctx context.Context) (int, error) {
-	a, ok := credentials.FromContext(ctx)
+	p, ok := peer.FromContext(ctx)
 	if !ok {
 		return 0, errNoCert
 	}
-	at, ok := a.(credentials.TLSInfo)
+	at, ok := p.AuthInfo.(credentials.TLSInfo)
 	if !ok {
 		return 0, fmt.Errorf("auth type is not TLSInfo")
 	}
@@ -201,7 +204,7 @@ VALUES($1, false, $2, $3, NOW(), NOW(), $4)`, lease, orderID, ownerID, time.Now(
 }
 
 // renew is the backend for Renew().
-func (s *server) renew(ctx context.Context, lease string, secs int32) (time.Time, error) {
+func (s *server) renew(ctx context.Context, lease, address string, secs int32) (time.Time, error) {
 	if secs <= 0 {
 		secs = int32(defaultLeaseRenewTime.Seconds())
 	}
@@ -212,7 +215,7 @@ func (s *server) renew(ctx context.Context, lease string, secs int32) (time.Time
 		secs = int32(minLeaseRenewTime.Seconds())
 	}
 	n := time.Now().Add(time.Duration(int64(time.Second) * int64(secs)))
-	if _, err := db.Exec(`UPDATE leases SET updated=NOW(), expires=$1 WHERE lease_id=$2 AND done=FALSE AND failed=FALSE`, n, lease); err != nil {
+	if _, err := db.Exec(`UPDATE leases SET updated=NOW(), expires=$1, client=$3 WHERE lease_id=$2 AND done=FALSE AND failed=FALSE`, n, lease, address); err != nil {
 		return time.Now(), dbError("Updating lease", err)
 	}
 	return n, nil
@@ -221,7 +224,15 @@ func (s *server) renew(ctx context.Context, lease string, secs int32) (time.Time
 func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply, error) {
 	st := time.Now()
 	requestID := uuid.New()
-	n, err := s.renew(ctx, in.LeaseId, in.ExtendSec)
+
+	var client string
+	{
+		if p, ok := peer.FromContext(ctx); ok {
+			client, _, _ = net.SplitHostPort(p.Addr.String())
+		}
+	}
+
+	n, err := s.renew(ctx, in.LeaseId, client, in.ExtendSec)
 	if err != nil {
 		return nil, cleanError(err, codes.Internal, "You got the error message for the error message, you win.")
 	}
@@ -290,8 +301,16 @@ func leaseDone(id string) (bool, bool, error) {
 func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, error) {
 	st := time.Now()
 	requestID := uuid.New()
+
+	var client string
+	{
+		if p, ok := peer.FromContext(ctx); ok {
+			client, _, _ = net.SplitHostPort(p.Addr.String())
+		}
+	}
+
 	// First give us time to receive the data.
-	if _, err := s.renew(ctx, in.LeaseId, -1); err != nil {
+	if _, err := s.renew(ctx, in.LeaseId, client, -1); err != nil {
 		log.Printf("RPC(Done): Failed to renew before Done'ing: %v", err)
 	}
 	isDone, isFailed, err := leaseDone(in.LeaseId)
@@ -665,6 +684,7 @@ WHERE lease_id=$1`, in.LeaseId)
 }
 
 func (s *server) Leases(in *pb.LeasesRequest, stream pb.Scheduler_LeasesServer) error {
+	log.Printf("RPC(Leases)")
 	st := time.Now()
 	requestID := uuid.New()
 	ctx := stream.Context()
@@ -688,6 +708,7 @@ SELECT
   leases.created,
   updated,
   expires,
+  client,
   %s
 FROM leases
 JOIN orders ON orders.order_id=leases.order_id
@@ -710,7 +731,8 @@ ORDER BY %s`, metadataCol, ordering)
 		var created, updated, expires time.Time
 		var metadata *string
 		var def string
-		if err := rows.Scan(&orderID, &def, &leaseID, &userID, &created, &updated, &expires, &metadata); err != nil {
+		var client sql.NullString
+		if err := rows.Scan(&orderID, &def, &leaseID, &userID, &created, &updated, &expires, &client, &metadata); err != nil {
 			return dbError("Scanning leases", err)
 		}
 		var order *pb.Order
@@ -730,6 +752,9 @@ ORDER BY %s`, metadataCol, ordering)
 				ExpiresMs: expires.UnixNano() / 1000000,
 				Order:     order,
 			},
+		}
+		if userProperty(ctx, propAddresses) {
+			e.Lease.Address = client.String
 		}
 		if userID != nil {
 			e.Lease.UserId = int64(*userID)
@@ -764,7 +789,7 @@ func blockRestrictedUser(ctx context.Context) error {
 	if !ok {
 		return errPerUserCredentials
 	}
-	if v, _ := md["http:cookie"]; len(v) > 0 && v[0] == *secretTODO {
+	if v, _ := md["http.cookie"]; len(v) > 0 && v[0] == *secretTODO {
 		return nil
 	}
 	return errPerUserCredentials
@@ -779,11 +804,11 @@ func blockRestrictedAPIInternal(ctx context.Context) error {
 		st := t.ServerTransport()
 		log.Printf("Called from %v", st.RemoteAddr())
 	}
-	a, ok := credentials.FromContext(ctx)
+	p, ok := peer.FromContext(ctx)
 	if !ok {
-		return grpc.Errorf(codes.Unauthenticated, "no credentials")
+		return grpc.Errorf(codes.Unauthenticated, "no peer?")
 	}
-	at, ok := a.(credentials.TLSInfo)
+	at, ok := p.AuthInfo.(credentials.TLSInfo)
 	if !ok {
 		return internalError("auth type is not TLSInfo", "auth type is not TLSInfo")
 	}
@@ -800,6 +825,31 @@ func blockRestrictedAPI(ctx context.Context) error {
 		return grpc.Errorf(grpc.Code(err), "restricted API called without valid credentials")
 	}
 	return nil
+}
+
+func userProperty(ctx context.Context, p string) bool {
+	ownerID, err := getOwnerID(ctx)
+	if err != nil {
+		return false
+	}
+
+	// Take HTTP cookie into account, if present.
+	{
+		md, ok := grpcmetadata.FromContext(ctx)
+		if ok {
+			if v, _ := md["http.cookie"]; len(v) > 0 && v[0] == *secretTODO {
+				return true
+			}
+		}
+	}
+
+	row := db.QueryRow(`SELECT %s FROM users WHERE user_id=$1`, p, ownerID)
+	var v bool
+	if err := row.Scan(&v); err != nil {
+		log.Printf("Looking up user %v: %v", ownerID, err)
+		return false
+	}
+	return v
 }
 
 func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, error) {
