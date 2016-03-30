@@ -150,6 +150,15 @@ type server struct {
 	rpcLog *rpclog.Logger
 }
 
+func clientAddressFromContext(ctx context.Context) (string, error) {
+	p, ok := peer.FromContext(ctx)
+	if !ok {
+		return "", fmt.Errorf("no peer associated with context")
+	}
+	client, _, _ := net.SplitHostPort(p.Addr.String())
+	return client, nil
+}
+
 func (s *server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetReply, error) {
 	st := time.Now()
 	requestID := uuid.New()
@@ -185,8 +194,19 @@ LIMIT 1`)
 	}
 
 	lease := uuid.New()
-	if _, err := tx.Exec(`INSERT INTO leases(lease_id, done, order_id, user_id, created, updated, expires)
-VALUES($1, false, $2, $3, NOW(), NOW(), $4)`, lease, orderID, ownerID, time.Now().Add(*defaultLeaseRenewTime)); err != nil {
+	clientAddress, _ := clientAddressFromContext(ctx)
+	if _, err := tx.Exec(`
+INSERT INTO leases(
+  lease_id, done, order_id,
+  user_id, client,
+  created, updated, expires
+)
+VALUES(
+  $1, false, $2,
+  $3, $4,
+  NOW(), NOW(), $5
+)
+`, lease, orderID, ownerID, clientAddress, time.Now().Add(*defaultLeaseRenewTime)); err != nil {
 		return nil, dbError("Inserting lease", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -225,12 +245,7 @@ func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply
 	st := time.Now()
 	requestID := uuid.New()
 
-	var client string
-	{
-		if p, ok := peer.FromContext(ctx); ok {
-			client, _, _ = net.SplitHostPort(p.Addr.String())
-		}
-	}
+	client, _ := clientAddressFromContext(ctx)
 
 	n, err := s.renew(ctx, in.LeaseId, client, in.ExtendSec)
 	if err != nil {
