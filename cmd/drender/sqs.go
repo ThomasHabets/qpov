@@ -15,6 +15,7 @@ import (
 	"github.com/goamz/goamz/sqs"
 
 	"github.com/ThomasHabets/qpov/dist"
+	pb "github.com/ThomasHabets/qpov/dist/qpov"
 )
 
 func getAuth() aws.Auth {
@@ -47,7 +48,7 @@ func (s *sqsScheduler) renew(id string, dur time.Duration) (time.Time, error) {
 	return time.Now(), fmt.Errorf("not implemented")
 }
 
-func (s *sqsScheduler) done(id string, img, stdout, stderr []byte, j string) error {
+func (s *sqsScheduler) done(id string, img, stdout, stderr []byte, meta *pb.RenderingMetadata) error {
 	//_, err := s.q.DeleteMessage(&m)
 	return fmt.Errorf("not implemented")
 }

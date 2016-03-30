@@ -54,13 +54,13 @@ func (s *rpcScheduler) renew(id string, dur time.Duration) (time.Time, error) {
 	return n, nil
 }
 
-func (s *rpcScheduler) done(id string, img, stdout, stderr []byte, j string) error {
+func (s *rpcScheduler) done(id string, img, stdout, stderr []byte, meta *pb.RenderingMetadata) error {
 	_, err := s.client.Done(context.Background(), &pb.DoneRequest{
-		LeaseId:      id,
-		Image:        img,
-		Stdout:       stdout,
-		Stderr:       stderr,
-		JsonMetadata: j,
+		LeaseId:  id,
+		Image:    img,
+		Stdout:   stdout,
+		Stderr:   stderr,
+		Metadata: meta,
 	})
 	return err
 }

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/ThomasHabets/qpov/dist"
+	pb "github.com/ThomasHabets/qpov/dist/qpov"
 )
 
 var (
@@ -48,7 +49,7 @@ var (
 type scheduler interface {
 	get() (string, string, error)
 	renew(id string, dur time.Duration) (time.Time, error)
-	done(id string, img, stdout, stderr []byte, j string) error
+	done(id string, img, stdout, stderr []byte, meta *pb.RenderingMetadata) error
 }
 
 type state struct {
@@ -67,35 +68,6 @@ const (
 
 	infoSuffix = ".json"
 )
-
-type stats struct {
-	User string // TODO
-
-	Order string
-
-	// Run stats of POV-Ray.
-	Start                time.Time
-	End                  time.Time
-	SystemTime, UserTime time.Duration
-	Rusage               syscall.Rusage
-
-	// System info.
-	Hostname string   // os.Hostname
-	Uname    struct { // syscall.Uname
-		Sysname    string
-		Nodename   string
-		Release    string
-		Version    string
-		Machine    string
-		Domainname string
-	}
-	NumCPU       int    // runtime.CPUInfo
-	Version      string // runtime.Version
-	Cloud        string // Type of cloud. "Google" or "Amazon"
-	InstanceType string // E.g. "c4.8xlarge"
-	Comment      string // Custom comment.
-	CPUInfo      string // /proc/cpuinfo
-}
 
 // verifyPackage downloads and unpacks the package, if needed.
 func verifyPackage(n int, order *dist.Order) error {
@@ -191,7 +163,7 @@ func verifyPackage(n int, order *dist.Order) error {
 // * pov.stderr
 // * pov.stdout
 // * pov<.infoSuffix>
-func render(n int, order *dist.Order) error {
+func render(n int, order *dist.Order) (*pb.RenderingMetadata, error) {
 	log.Printf("(%d) Rendering...", n)
 	wd := path.Join(*root, path.Base(order.Package), order.Dir)
 	pov := order.File
@@ -211,47 +183,17 @@ func render(n int, order *dist.Order) error {
 	cmd.Dir = wd
 	cmd.Stdout, err = os.Create(path.Join(wd, order.File+".stdout"))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	cmd.Stderr, err = os.Create(path.Join(wd, order.File+".stderr"))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	startTime := time.Now()
 	if err := cmd.Run(); err != nil {
-		return err
+		return nil, err
 	}
-
-	// Write process info.
-	{
-		s := makeStats()
-		t, _ := json.Marshal(order)
-		s.Order = string(t)
-		s.Start = startTime
-		s.End = time.Now()
-		if t, _ := cmd.ProcessState.SysUsage().(*syscall.Rusage); t != nil {
-			s.Rusage = *t
-		}
-		s.SystemTime = cmd.ProcessState.SystemTime()
-		s.UserTime = cmd.ProcessState.UserTime()
-
-		f, err := os.Create(path.Join(wd, order.File+infoSuffix))
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		if str, err := json.Marshal(s); err != nil {
-			return err
-		} else {
-			if _, err := f.Write(str); err != nil {
-				return err
-			}
-			if err := f.Close(); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return makeStats(order, cmd, startTime), nil
 }
 
 func getCloud() (string, string) {
@@ -330,58 +272,133 @@ func cToStr(cin interface{}) string {
 	return string(s[0:l])
 }
 
-func makeStats() *stats {
-	s := &stats{
+func tv2us(i syscall.Timeval) int64 {
+	return int64(i.Sec)*1000000 + int64(i.Usec)
+}
+
+func makeStats(order *dist.Order, cmd *exec.Cmd, startTime time.Time) *pb.RenderingMetadata {
+	s := &pb.RenderingMetadata{
 		Comment: *comment,
 	}
 	s.Hostname, _ = os.Hostname()
 
 	var u syscall.Utsname
 	if err := syscall.Uname(&u); err == nil {
-		s.Uname.Sysname = cToStr(u.Sysname)
-		s.Uname.Nodename = cToStr(u.Nodename)
-		s.Uname.Release = cToStr(u.Release)
-		s.Uname.Version = cToStr(u.Version)
-		s.Uname.Machine = cToStr(u.Machine)
-		s.Uname.Domainname = cToStr(u.Domainname)
+		s.Uname = &pb.Uname{
+			Sysname:    cToStr(u.Sysname),
+			Nodename:   cToStr(u.Nodename),
+			Release:    cToStr(u.Release),
+			Version:    cToStr(u.Version),
+			Machine:    cToStr(u.Machine),
+			Domainname: cToStr(u.Domainname),
+		}
 	}
-	s.NumCPU = runtime.NumCPU()
+	s.NumCpu = int32(runtime.NumCPU())
 	s.Version = runtime.Version()
-	s.Cloud, s.InstanceType = getCloud()
-	t, _ := ioutil.ReadFile("/proc/cpuinfo")
-	s.CPUInfo = string(t)
+	{
+		provider, it := getCloud()
+		if provider != "" {
+			s.Cloud = &pb.Cloud{
+				Provider:     provider,
+				InstanceType: it,
+			}
+		}
+	}
+	{
+		t, _ := ioutil.ReadFile("/proc/cpuinfo")
+		if len(t) > 0 {
+			s.Cpuinfo = string(t)
+		}
+	}
+
+	if order != nil {
+		t, _ := json.Marshal(order)
+		s.OrderString = string(t)
+		s.Order = dist.LegacyOrderToOrder(order)
+	}
+	s.StartMs = startTime.UnixNano() / 1000000
+	s.EndMs = time.Now().UnixNano() / 1000000
+	if cmd != nil {
+		if t, _ := cmd.ProcessState.SysUsage().(*syscall.Rusage); t != nil {
+			s.Rusage = &pb.Rusage{
+				Utime:    tv2us(t.Utime),
+				Stime:    tv2us(t.Stime),
+				Maxrss:   int64(t.Maxrss),
+				Ixrss:    int64(t.Ixrss),
+				Idrss:    int64(t.Idrss),
+				Isrss:    int64(t.Isrss),
+				Minflt:   int64(t.Minflt),
+				Majflt:   int64(t.Majflt),
+				Nswap:    int64(t.Nswap),
+				Inblock:  int64(t.Inblock),
+				Oublock:  int64(t.Oublock),
+				Msgsnd:   int64(t.Msgsnd),
+				Msgrcv:   int64(t.Msgrcv),
+				Nsignals: int64(t.Nsignals),
+				Nvcsw:    int64(t.Nvcsw),
+				Nivcsw:   int64(t.Nivcsw),
+			}
+		}
+		s.SystemMs = cmd.ProcessState.SystemTime().Nanoseconds() / 1000000
+		s.UserMs = cmd.ProcessState.UserTime().Nanoseconds() / 1000000
+	}
 	return s
 }
 
-func handle(n int, order *dist.Order) error {
+func handle(n int, order *dist.Order) (*pb.RenderingMetadata, error) {
 	// Sanity check order.
 	bucket, dir, fn, err := dist.S3Parse(order.Destination)
 	if err != nil {
-		return fmt.Errorf("destination %q is not an s3 dir path", order.Destination)
+		return nil, fmt.Errorf("destination %q is not an s3 dir path", order.Destination)
 	}
 	if bucket == "" {
-		return fmt.Errorf("destination bucket is empty slash, was %q", order.Destination)
+		return nil, fmt.Errorf("destination bucket is empty slash, was %q", order.Destination)
 	}
 	if dir == "" {
-		return fmt.Errorf("refusing to put results in bucket root: %q", order.Destination)
+		return nil, fmt.Errorf("refusing to put results in bucket root: %q", order.Destination)
 	}
 	if fn != "" {
-		return fmt.Errorf("destination must end with slash, was %q", order.Destination)
+		return nil, fmt.Errorf("destination must end with slash, was %q", order.Destination)
 	}
 
 	// Run it.
 	if err := verifyPackage(n, order); err != nil {
-		return err
+		return nil, err
 	}
-	if err := render(n, order); err != nil {
-		return err
+	stats, err := render(n, order)
+	if err != nil {
+		return nil, err
 	}
+
 	if *schedAddr == "" {
+		// If SQS and not RPC.
+
+		// Write process info.
+		{
+
+			wd := path.Join(*root, path.Base(order.Package), order.Dir)
+			f, err := os.Create(path.Join(wd, order.File+infoSuffix))
+			if err != nil {
+				return nil, err
+			}
+			defer f.Close()
+			if str, err := json.Marshal(stats); err != nil {
+				return nil, err
+			} else {
+				if _, err := f.Write(str); err != nil {
+					return nil, err
+				}
+				if err := f.Close(); err != nil {
+					return nil, err
+				}
+			}
+		}
+
 		if err := upload(n, order); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return stats, nil
 }
 
 func refresh(q scheduler, id string, refreshCh, doneCh chan struct{}) {
@@ -427,6 +444,7 @@ func handler(n int, q scheduler) {
 		doneChan := make(chan struct{})
 		go refresh(q, id, refreshChan, doneChan)
 		var order dist.Order
+		var meta *pb.RenderingMetadata
 		ok := func() bool {
 			defer func() {
 				states[n].Lock()
@@ -445,7 +463,8 @@ func handler(n int, q scheduler) {
 			states[n].Order = order
 			states[n].Unlock()
 			if !*flush {
-				if err := handle(n, &order); err != nil {
+				meta, err = handle(n, &order)
+				if err != nil {
 					log.Printf("(%d) Failed to handle order %+v: %v", n, order, err)
 					return false
 				}
@@ -470,14 +489,9 @@ func handler(n int, q scheduler) {
 				log.Printf("(%d) Failed to read stderr: %v", err)
 				continue
 			}
-			j, err := ioutil.ReadFile(path.Join(base, order.File+infoSuffix))
-			if err != nil {
-				log.Printf("(%d) Failed to read json: %v", err)
-				continue
-			}
 			for {
 				// Retry forever. We don't want to lose work.
-				err := q.done(id, img, stdout, stderr, string(j))
+				err := q.done(id, img, stdout, stderr, meta)
 				if err == nil {
 					log.Printf("(%d) Done", n)
 					break
@@ -494,7 +508,7 @@ func handler(n int, q scheduler) {
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
-	st := makeStats()
+	st := makeStats(nil, nil, time.Now())
 	t := template.Must(template.New("root").Parse(`
 <html>
   <head>
@@ -509,7 +523,7 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
     <h1>drender on {{.Stats.Hostname}}</h1>
     <h2>System</h2>
     <table>
-      <tr><th>NumCPU</th><td>{{.Stats.NumCPU}}</td></tr>
+      <tr><th>NumCPU</th><td>{{.Stats.NumCpu}}</td></tr>
     </table>
     <h2>Activity</h2>
     <table id="activity">
@@ -539,7 +553,7 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 		defer states[n].Unlock()
 	}
 	if err := t.Execute(w, struct {
-		Stats  *stats
+		Stats  *pb.RenderingMetadata
 		States []state
 	}{
 		Stats:  st,
@@ -554,6 +568,10 @@ func main() {
 	if len(flag.Args()) != 0 {
 		log.Fatalf("Got extra args on cmdline: %q", flag.Args())
 	}
+	if *queueName != "" {
+		log.Fatalf("SQS code untested and will eventually be removed. Please use -scheduler.")
+	}
+
 	log.Printf("Starting up...")
 
 	var s scheduler

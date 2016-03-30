@@ -40,7 +40,7 @@ message Cloud {
 message RenderingMetadata {
         // Who and what.
         string user = 1;
-        string order_string = 2;
+        string order_string = 2; // DEPRECATED.
         Order order = 3;
 
         // POV-Ray run stats.

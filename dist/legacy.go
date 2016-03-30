@@ -98,13 +98,17 @@ func ParseLegacyJSON(buf []byte) (*pb.RenderingMetadata, error) {
 	if err := json.Unmarshal([]byte(ist.Order), &order); err != nil {
 		return nil, err
 	}
-	st.Order = &pb.Order{
-		Package: order.Package,
-		Dir:     order.Dir,
-		File:    order.File,
-		Args:    order.Args,
-	}
+	st.Order = LegacyOrderToOrder(&order)
 	return &st, nil
+}
+
+func LegacyOrderToOrder(in *Order) *pb.Order {
+	return &pb.Order{
+		Package: in.Package,
+		Dir:     in.Dir,
+		File:    in.File,
+		Args:    in.Args,
+	}
 }
 
 func Arch(m *pb.RenderingMetadata) string {
