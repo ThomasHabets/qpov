@@ -313,6 +313,25 @@ func leaseDone(id string) (bool, bool, error) {
 	return done, failed, nil
 }
 
+// Get the correct metadata and return it both as proto and string.
+func getMetadata(in *pb.DoneRequest) (*pb.RenderingMetadata, string, error) {
+	var stats *pb.RenderingMetadata
+	if in.Metadata != nil {
+		stats = in.Metadata
+	} else {
+		var err error
+		stats, err = dist.ParseLegacyJSON([]byte(in.JsonMetadata))
+		if err != nil {
+			return nil, "", fmt.Errorf("parsing metadata: %v", err)
+		}
+	}
+	b, err := json.Marshal(stats)
+	if err != nil {
+		return nil, "", fmt.Errorf("marshaling to newJSON: %v", err)
+	}
+	return stats, string(b), nil
+}
+
 func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, error) {
 	st := time.Now()
 	requestID := uuid.New()
@@ -355,18 +374,11 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	re := regexp.MustCompile(`\.pov$`)
 	image := re.ReplaceAllString(file, ".png")
 
-	// Create metadata to store in DB from oldJSON.
-	var newStats string
-	{
-		stats, err := dist.ParseLegacyJSON([]byte(in.JsonMetadata))
-		if err != nil {
-			log.Printf("Warning: bad JSON: %v", err)
-		}
-		b, err := json.Marshal(stats)
-		if err != nil {
-			log.Printf("Warning: failed to re-encode to newJSON: %v", err)
-		}
-		newStats = string(b)
+	// Create metadata to store in DB from oldJSON or proto.
+	_, newStats, err := getMetadata(in)
+	if err != nil {
+		log.Printf("Warning: Failed to get metadata: %v", err)
+		// newStats defaults to being empty.
 	}
 
 	files := []struct {

@@ -52,16 +52,24 @@ func (m *RenewReply) String() string { return proto.CompactTextString(m) }
 func (*RenewReply) ProtoMessage()    {}
 
 type DoneRequest struct {
-	LeaseId      string `protobuf:"bytes,1,opt,name=lease_id" json:"lease_id,omitempty"`
-	Image        []byte `protobuf:"bytes,2,opt,name=image,proto3" json:"image,omitempty"`
-	Stdout       []byte `protobuf:"bytes,3,opt,name=stdout,proto3" json:"stdout,omitempty"`
-	Stderr       []byte `protobuf:"bytes,4,opt,name=stderr,proto3" json:"stderr,omitempty"`
-	JsonMetadata string `protobuf:"bytes,5,opt,name=json_metadata" json:"json_metadata,omitempty"`
+	LeaseId      string             `protobuf:"bytes,1,opt,name=lease_id" json:"lease_id,omitempty"`
+	Image        []byte             `protobuf:"bytes,2,opt,name=image,proto3" json:"image,omitempty"`
+	Stdout       []byte             `protobuf:"bytes,3,opt,name=stdout,proto3" json:"stdout,omitempty"`
+	Stderr       []byte             `protobuf:"bytes,4,opt,name=stderr,proto3" json:"stderr,omitempty"`
+	JsonMetadata string             `protobuf:"bytes,5,opt,name=json_metadata" json:"json_metadata,omitempty"`
+	Metadata     *RenderingMetadata `protobuf:"bytes,6,opt,name=metadata" json:"metadata,omitempty"`
 }
 
 func (m *DoneRequest) Reset()         { *m = DoneRequest{} }
 func (m *DoneRequest) String() string { return proto.CompactTextString(m) }
 func (*DoneRequest) ProtoMessage()    {}
+
+func (m *DoneRequest) GetMetadata() *RenderingMetadata {
+	if m != nil {
+		return m.Metadata
+	}
+	return nil
+}
 
 type DoneReply struct {
 }

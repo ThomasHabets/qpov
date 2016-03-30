@@ -44,8 +44,8 @@ message DoneRequest {
         bytes image = 2;
         bytes stdout = 3;
         bytes stderr = 4;
-        string json_metadata = 5;
-        // RenderingMetadata metadata = 6;
+        string json_metadata = 5; // Deprecated.
+        RenderingMetadata metadata = 6;
 }
 
 message DoneReply {}
