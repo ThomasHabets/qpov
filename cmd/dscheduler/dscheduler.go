@@ -507,6 +507,29 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	return ret, nil
 }
 
+func resultsGCS(ctx context.Context, leaseID, base string, stream pb.Scheduler_ResultServer) error {
+	r, err := googleCloudStorage.Bucket(*bucketName).Object(path.Join(leaseID, base+".png")).NewReader(ctx)
+	if err == storage.ErrObjectNotExist {
+		return grpc.Errorf(codes.NotFound, "result %q not found", leaseID)
+	} else if err != nil {
+		return internalError("failed to stream results", "failed to stream results: %v", err)
+	}
+	const chunkSize = 1000
+	for {
+		buf := make([]byte, chunkSize, chunkSize)
+		n, err := r.Read(buf)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return internalError("failed to stream results", "failed to stream results while reading: %v", err)
+		}
+		if err := stream.Send(&pb.ResultReply{Data: buf[0:n]}); err != nil {
+			return internalError("failed to stream results", "failed to stream results while sending: %v", err)
+		}
+	}
+	return nil
+}
+
 func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) error {
 	st := time.Now()
 	requestID := uuid.New()
@@ -532,72 +555,14 @@ func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) 
 			log.Printf("Can't find order with lease %q: %v", in.LeaseId, err)
 			return grpc.Errorf(codes.NotFound, "unknown lease %q", in.LeaseId)
 		}
-		sthree := s3.New(getAuth(), aws.USEast, nil)
-		bucket, destDir, _, _ := dist.S3Parse(destination)
-		b := sthree.Bucket(bucket)
-		destDir2 := path.Join(destDir, in.LeaseId)
-		re := regexp.MustCompile(`\.pov$`)
-		image := re.ReplaceAllString(file, ".png")
-		fn := path.Join(destDir, image)
-		fn2 := path.Join(destDir2, image)
-		r, err := b.GetReader(fn)
-		if err != nil {
-			// Look in per-lease dir too.
-			r, err = b.GetReader(fn2)
-			if err != nil {
-				log.Printf("File %q not found on S3: %v", fn, err)
-				return grpc.Errorf(codes.NotFound, "file not found")
-			}
-		}
-		defer r.Close()
 
-		writerErr := make(chan error, 1)
-		ch := make(chan []byte, 1000)
-		// Writer.
-		go func() {
-			defer func() {
-				// Flush the channel, in case there was an error.
-				for _ = range ch {
-				}
-				close(writerErr)
-			}()
-			writerErr <- func() error {
-				for buf := range ch {
-					if err := stream.Send(&pb.ResultReply{Data: buf}); err != nil {
-						return internalError("failed to stream result", "failed to stream result: %v", err)
-					}
-				}
-				return nil
-			}()
-		}()
-
-		// Reader.
-		if err := func() error {
-			defer close(ch)
-			for {
-				select {
-				case err := <-writerErr:
-					return err
-				case <-ctx.Done(): // TODO: is this needed? Won't stream.Send() fail anyway if context cancels?
-					return internalError("timed out", "timed out streaming results %q: %v", image, err)
-				default:
-				}
-				buf := make([]byte, 1024, 1024)
-				n, err := r.Read(buf)
-				if err == io.EOF {
-					break
-				}
-				if err != nil {
-					return internalError("failed to stream result", "failed to stream result %q: %v", image, err)
-				}
-				ch <- buf[0:n]
+		base := strings.TrimSuffix(file, ".pov")
+		if err := resultsGCS(ctx, in.LeaseId, base, stream); err != nil {
+			log.Printf("Failed to read from GCS. Trying AWS: %v", err)
+			if err := resultsAWS(ctx, in.LeaseId, destination, file, stream); err != nil {
+				return err
 			}
-			return nil
-		}(); err != nil {
-			return err
-		}
-		if err := <-writerErr; err != nil {
-			return err
+
 		}
 	}
 
@@ -606,6 +571,74 @@ func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) 
 		"github.com/ThomasHabets/qpov/dist/qpov/ResultRequest", in,
 		nil, "github.com/ThomasHabets/qpov/dist/qpov/ResultReply", &ret)
 	return nil
+}
+
+func resultsAWS(ctx context.Context, leaseID, destination, file string, stream pb.Scheduler_ResultServer) error {
+	sthree := s3.New(getAuth(), aws.USEast, nil)
+	bucket, destDir, _, _ := dist.S3Parse(destination)
+	b := sthree.Bucket(bucket)
+	destDir2 := path.Join(destDir, leaseID)
+	re := regexp.MustCompile(`\.pov$`)
+	image := re.ReplaceAllString(file, ".png")
+	fn := path.Join(destDir, image)
+	fn2 := path.Join(destDir2, image)
+	r, err := b.GetReader(fn)
+	if err != nil {
+		// Look in per-lease dir too.
+		r, err = b.GetReader(fn2)
+		if err != nil {
+			log.Printf("File %q not found on S3: %v", fn, err)
+			return grpc.Errorf(codes.NotFound, "file not found")
+		}
+	}
+	defer r.Close()
+
+	writerErr := make(chan error, 1)
+	ch := make(chan []byte, 1000)
+	// Writer.
+	go func() {
+		defer func() {
+			// Flush the channel, in case there was an error.
+			for _ = range ch {
+			}
+			close(writerErr)
+		}()
+		writerErr <- func() error {
+			for buf := range ch {
+				if err := stream.Send(&pb.ResultReply{Data: buf}); err != nil {
+					return internalError("failed to stream result", "failed to stream result: %v", err)
+				}
+			}
+			return nil
+		}()
+	}()
+
+	// Reader.
+	if err := func() error {
+		defer close(ch)
+		for {
+			select {
+			case err := <-writerErr:
+				return err
+			case <-ctx.Done(): // TODO: is this needed? Won't stream.Send() fail anyway if context cancels?
+				return internalError("timed out", "timed out streaming results %q: %v", image, err)
+			default:
+			}
+			buf := make([]byte, 1024, 1024)
+			n, err := r.Read(buf)
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return internalError("failed to stream result", "failed to stream result %q: %v", image, err)
+			}
+			ch <- buf[0:n]
+		}
+		return nil
+	}(); err != nil {
+		return err
+	}
+	return <-writerErr
 }
 
 func (s *server) Orders(in *pb.OrdersRequest, stream pb.Scheduler_OrdersServer) error {
