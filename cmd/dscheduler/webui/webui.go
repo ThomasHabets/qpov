@@ -116,6 +116,18 @@ func getLeases(ctx context.Context, done bool) ([]*pb.Lease, error) {
 	return leases, nil
 }
 
+func rpcErrorToHTTPError(err error) int {
+	m := map[codes.Code]int{
+		codes.NotFound: http.StatusNotFound,
+	}
+	n, found := m[grpc.Code(err)]
+	if !found {
+		log.Printf("Unmapped grpc code %v", grpc.Code(err))
+		return http.StatusInternalServerError
+	}
+	return n
+}
+
 func handleImage(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(httpContext(r), time.Minute)
 	defer cancel()
@@ -153,6 +165,7 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 
 	func() {
 		defer close(ch)
+		sentAnything := false
 		for {
 			select {
 			case <-writerDone:
@@ -163,6 +176,12 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 			if err == io.EOF {
 				break
 			} else if err != nil {
+				if !sentAnything {
+					// Still time to make an error page.
+					w.Header().Set("Content-Type", "text/plain")
+					w.WriteHeader(rpcErrorToHTTPError(err))
+					fmt.Fprintf(w, "Failed to stream image data: %v\n", grpc.ErrorDesc(err))
+				}
 				log.Printf("Failed streaming result over RPC: %v", err)
 				return
 			}
@@ -170,7 +189,10 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 			if r.ContentType != "" {
 				w.Header().Set("Content-Type", r.ContentType)
 			}
-			ch <- r.Data
+			if len(r.Data) > 0 {
+				sentAnything = true
+				ch <- r.Data
+			}
 		}
 	}()
 	<-writerDone
@@ -189,9 +211,13 @@ func handleLease(ctx context.Context, w http.ResponseWriter, r *http.Request) (i
 	}
 	reply, err := sched.Lease(ctx, &pb.LeaseRequest{LeaseId: lease})
 	if err != nil {
-		if grpc.Code(err) == codes.Unauthenticated {
+		switch grpc.Code(err) {
+		case codes.Unauthenticated:
 			return nil, httpError(http.StatusForbidden, "Unauthenticated", "Unauthenticated")
-		} else {
+		case codes.NotFound:
+			msg := fmt.Sprintf("Lease %q not found", lease)
+			return nil, httpError(http.StatusNotFound, msg, msg)
+		default:
 			log.Printf("Backend call: %v", err)
 			return nil, fmt.Errorf("backend broke :-(")
 		}

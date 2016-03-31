@@ -775,7 +775,9 @@ WHERE lease_id=$1`, in.LeaseId)
 		&ret.Lease.Done,
 		&ret.Lease.Failed,
 		&ctime, &mtime, &dtime,
-		&metadata); err != nil {
+		&metadata); err == sql.ErrNoRows {
+		return nil, grpc.Errorf(codes.NotFound, "lease %q not found", in.LeaseId)
+	} else if err != nil {
 		return nil, dbError("Getting lease", err)
 	}
 	if metadata != nil {
