@@ -73,18 +73,17 @@ func httpContext(r *http.Request) context.Context {
 	return ctx
 }
 
+// Format milliseconds as a date using format string `s`.
 func fmsdate(s string, ms int64) string {
 	return time.Unix(ms/1000, 0).Format(s)
 }
 
-func fileonly(s string) string {
-	return path.Base(s)
-}
-
+// take two milliseconds, subtract them as time.Duration and return as string.
 func fmssub(a, b int64) string {
 	return time.Unix(a/1000, 0).Sub(time.Unix(b/1000, 0)).String()
 }
 
+// time from now until `ms`.
 func fmsuntil(ms int64) string {
 	now := time.Now().UnixNano() / 1000000000
 	return time.Unix(ms/1000, 0).Sub(time.Unix(now, 0)).String()
@@ -147,6 +146,7 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// TODO: This is needlessly complicated, and it should just provide a buffered writer to write to.
 	ch := make(chan []byte, 1000)
 	writerDone := make(chan struct{}, 1)
 	go func() {
@@ -381,7 +381,7 @@ func wrap(f handleFunc, t string) *handler {
 		"fmsuntil": fmsuntil,
 		"fmssince": fmssince,
 		"fmssub":   fmssub,
-		"fileonly": fileonly,
+		"fileonly": path.Base,
 	})
 	template.Must(tmpl.Parse(t))
 	return &handler{f: f, tmpl: tmpl}
@@ -435,6 +435,9 @@ func connectScheduler(addr string) error {
 	return nil
 }
 
+// perRPC is a magic callback that the gRPC framework calls on every RPC.
+// Here it's used to turn `context.Context` "values" into gRPC "Metadata".
+// On the other end of the RPC they can later be fetched using `grpcmetadata.FromContext(ctx)`
 type perRPC struct{}
 
 func (*perRPC) RequireTransportSecurity() bool {
@@ -481,7 +484,7 @@ func main() {
 	r := mux.NewRouter()
 	r.Handle(*root+"/", wrap(handleRoot, rootTmpl)).Methods("GET", "HEAD")
 	r.HandleFunc(path.Join("/", *root, "image/{leaseID}"), handleImage).Methods("GET", "HEAD")
-	r.Handle(path.Join("/", *root, "/lease/{leaseID}"), wrap(handleLease, leaseTmpl)).Methods("GET", "HEAD")
+	r.Handle(path.Join("/", *root, "lease/{leaseID}"), wrap(handleLease, leaseTmpl)).Methods("GET", "HEAD")
 	log.Printf("Running dscheduler webui...")
 	if err := fcgi.Serve(sock, r); err != nil {
 		log.Fatal("Failed to start serving fcgi: ", err)
