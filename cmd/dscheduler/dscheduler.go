@@ -56,8 +56,9 @@ var (
 	defaultLeaseRenewTime = flag.Duration("default_lease_time", time.Hour, "Default lease renew time.")
 
 	// Cloud config.
-	cloudCredentials = flag.String("cloud_credentials", "", "Path to JSON file containing credentials.")
-	bucketName       = flag.String("cloud_bucket", "", "Google cloud storage bucket name.")
+	cloudCredentials    = flag.String("cloud_credentials", "", "Path to JSON file containing credentials.")
+	uploadBucketName    = flag.String("cloud_upload_bucket", "", "Google cloud storage bucket name to upload to.")
+	downloadBucketNames = flag.String("cloud_download_buckets", "", "Google cloud storage bucket name to read from.")
 
 	errNoCert = errors.New("no cert provided")
 )
@@ -345,7 +346,7 @@ func (s *server) saveToCloud(ctx context.Context, in *pb.DoneRequest, realMeta *
 	var imageErr error
 	go func() {
 		defer wg.Done()
-		w := googleCloudStorage.Bucket(*bucketName).Object(path.Join(dir, base+".png")).NewWriter(ctx)
+		w := googleCloudStorage.Bucket(*uploadBucketName).Object(path.Join(dir, base+".png")).NewWriter(ctx)
 		defer func() {
 			if imageErr == nil {
 				imageErr = w.Close()
@@ -359,7 +360,7 @@ func (s *server) saveToCloud(ctx context.Context, in *pb.DoneRequest, realMeta *
 	var metaErr error
 	go func() {
 		defer wg.Done()
-		w := googleCloudStorage.Bucket(*bucketName).Object(path.Join(dir, base+".meta.pb.gz")).NewWriter(ctx)
+		w := googleCloudStorage.Bucket(*uploadBucketName).Object(path.Join(dir, base+".meta.pb.gz")).NewWriter(ctx)
 		defer func() {
 			if metaErr == nil {
 				metaErr = w.Close()
@@ -471,26 +472,30 @@ WHERE
 }
 
 func resultsGCS(ctx context.Context, leaseID, base string, stream pb.Scheduler_ResultServer) error {
-	r, err := googleCloudStorage.Bucket(*bucketName).Object(path.Join(leaseID, base+".png")).NewReader(ctx)
-	if err == storage.ErrObjectNotExist {
-		return grpc.Errorf(codes.NotFound, "result %q not found", leaseID)
-	} else if err != nil {
-		return internalError("failed to stream results", "failed to stream results: %v", err)
-	}
-	const chunkSize = 1000
-	for {
-		buf := make([]byte, chunkSize, chunkSize)
-		n, err := r.Read(buf)
-		if err == io.EOF {
-			break
+	for _, bucketName := range strings.Split(*downloadBucketNames, ",") {
+		r, err := googleCloudStorage.Bucket(bucketName).Object(path.Join(leaseID, base+".png")).NewReader(ctx)
+		if err == storage.ErrObjectNotExist {
+			// Try next bucket.
+			continue
 		} else if err != nil {
-			return internalError("failed to stream results", "failed to stream results while reading: %v", err)
+			return internalError("failed to stream results", "failed to open a reader: %v", err)
 		}
-		if err := stream.Send(&pb.ResultReply{Data: buf[0:n]}); err != nil {
-			return internalError("failed to stream results", "failed to stream results while sending: %v", err)
+		const chunkSize = 1000
+		for {
+			buf := make([]byte, chunkSize, chunkSize)
+			n, err := r.Read(buf)
+			if err == io.EOF {
+				break
+			} else if err != nil {
+				return internalError("failed to stream results", "failed to stream results while reading: %v", err)
+			}
+			if err := stream.Send(&pb.ResultReply{Data: buf[0:n]}); err != nil {
+				return internalError("failed to stream results", "failed to stream results while sending: %v", err)
+			}
 		}
+		return nil
 	}
-	return nil
+	return grpc.Errorf(codes.NotFound, "result %q not found", leaseID)
 }
 
 func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) error {
@@ -952,6 +957,13 @@ func main() {
 	flag.Parse()
 	if flag.NArg() > 0 {
 		log.Fatalf("Got extra args on cmdline: %q", flag.Args())
+	}
+
+	if *uploadBucketName == "" {
+		log.Fatalf("-cloud_upload_bucket must be specified")
+	}
+	if *downloadBucketNames == "" {
+		log.Fatalf("-cloud_download_buckets must be specified")
 	}
 
 	ctx := context.Background()
