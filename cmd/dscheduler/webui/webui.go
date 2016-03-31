@@ -469,8 +469,17 @@ func main() {
 		log.Fatalf("Unable to chmod socket: %v", err)
 	}
 
+	if *root != "" {
+		if (*root)[0] != '/' {
+			log.Fatalf("-root must be empty or begin with slash")
+		}
+		if (*root)[len(*root)-1] == '/' {
+			log.Fatalf("-root must not end with slash")
+		}
+	}
+
 	r := mux.NewRouter()
-	r.Handle(path.Join("/", *root)+"/", wrap(handleRoot, rootTmpl)).Methods("GET", "HEAD")
+	r.Handle(*root+"/", wrap(handleRoot, rootTmpl)).Methods("GET", "HEAD")
 	r.HandleFunc(path.Join("/", *root, "image/{leaseID}"), handleImage).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "/lease/{leaseID}"), wrap(handleLease, leaseTmpl)).Methods("GET", "HEAD")
 	log.Printf("Running dscheduler webui...")
