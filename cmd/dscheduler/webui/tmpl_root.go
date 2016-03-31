@@ -2,6 +2,7 @@
 package main
 
 const rootTmpl = `
+{{$root := .}}
 <style>
 .fixed {
   font-family: monospace;
@@ -92,10 +93,10 @@ tr:nth-child(odd) {
   <td nowrap>{{.CreatedMs|fmsdate "2006-01-02 15:04"}}</td>
   <td nowrap>{{.UpdatedMs|fmsdate "2006-01-02 15:04"}}</td>
   <td nowrap>{{.CreatedMs|fmssub .UpdatedMs}}</td>
-  <td nowrap><a href="/image/{{.LeaseId}}">Image</a></td>
+  <td nowrap><a href="/{{$root.Root}}/image/{{.LeaseId}}">Image</a></td>
 <!--  <td nowrap>{{.Order.Package|fileonly}}</td> -->
   <td nowrap>{{.Order.File}}</td>
-  <td nowrap><a href="/lease/{{.LeaseId}}">Details</a></td>
+  <td nowrap><a href="/{{$root.Root}}/lease/{{.LeaseId}}">Details</a></td>
 <!--  <td nowrap>{{.Order.Args}}</td> -->
 </tr>
 {{end}}

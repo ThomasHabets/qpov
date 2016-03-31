@@ -54,6 +54,7 @@ var (
 	certFile     = flag.String("cert_file", "", "Client cert file.")
 	keyFile      = flag.String("key_file", "", "Client key file.")
 	schedAddr    = flag.String("scheduler", "", "Scheduler address.")
+	root         = flag.String("root", "", "Path under root of domain that the web UI runs.")
 
 	sched    pb.SchedulerClient
 	tmplRoot template.Template
@@ -196,10 +197,12 @@ func handleLease(ctx context.Context, w http.ResponseWriter, r *http.Request) (i
 		}
 	}
 	return &struct {
+		Root     string
 		Lease    *pb.Lease
 		Ascii    string
 		PageTime time.Duration
 	}{
+		Root:     *root,
 		Lease:    reply.Lease,
 		Ascii:    proto.MarshalTextString(reply.Lease),
 		PageTime: time.Since(startTime),
@@ -263,6 +266,7 @@ func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 		log.Printf("Errors: %v", errs)
 	}
 	ret := &struct {
+		Root            string
 		Stats           *pb.StatsReply
 		Leases          []*pb.Lease
 		DoneLeases      []*pb.Lease
@@ -270,6 +274,7 @@ func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 		Errors          []error
 		PageTime        time.Duration
 	}{
+		Root:       *root,
 		Stats:      st,
 		Leases:     leases,
 		DoneLeases: doneLeases,
@@ -425,6 +430,8 @@ func main() {
 		log.Fatalf("Failed to connect to scheduler: %v", err)
 	}
 
+	os.Remove(*socketPath)
+
 	sock, err := net.Listen("unix", *socketPath)
 	if err != nil {
 		log.Fatalf("Unable to listen to socket: %v", err)
@@ -434,9 +441,9 @@ func main() {
 	}
 
 	r := mux.NewRouter()
-	r.Handle("/", wrap(handleRoot, rootTmpl)).Methods("GET", "HEAD")
-	r.HandleFunc("/image/{leaseID}", handleImage).Methods("GET", "HEAD")
-	r.Handle("/lease/{leaseID}", wrap(handleLease, leaseTmpl)).Methods("GET", "HEAD")
+	r.Handle(path.Join("/", *root)+"/", wrap(handleRoot, rootTmpl)).Methods("GET", "HEAD")
+	r.HandleFunc(path.Join("/", *root, "image/{leaseID}"), handleImage).Methods("GET", "HEAD")
+	r.Handle(path.Join("/", *root, "/lease/{leaseID}"), wrap(handleLease, leaseTmpl)).Methods("GET", "HEAD")
 	log.Printf("Running dscheduler webui...")
 	if err := fcgi.Serve(sock, r); err != nil {
 		log.Fatal("Failed to start serving fcgi: ", err)
