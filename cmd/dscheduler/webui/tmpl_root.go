@@ -52,6 +52,7 @@ tr:nth-child(odd) {
 <table>
 <tr>
   <th>Order</th>
+  <th>Lease</th>
   <th>Created</th>
   <th>Lifetime</th>
   <th>Updated</th>
@@ -63,6 +64,7 @@ tr:nth-child(odd) {
 {{range .Leases}}
 <tr>
   <td nowrap class="fixed">{{.OrderId}}</td>
+  <td nowrap class="fixed"><a href="/{{$root.Root}}/lease/{{.LeaseId}}">{{.LeaseId}}</a></td>
   <td nowrap>{{.CreatedMs|fmsdate "2006-01-02 15:04"}}</td>
   <td nowrap>{{.CreatedMs|fmssince}}</td>
   <td nowrap>{{.UpdatedMs|fmssince}}</td>

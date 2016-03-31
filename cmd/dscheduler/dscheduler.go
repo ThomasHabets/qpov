@@ -845,6 +845,7 @@ func (s *server) Leases(in *pb.LeasesRequest, stream pb.Scheduler_LeasesServer) 
 	if err := blockRestrictedAPI(ctx); err != nil {
 		return err
 	}
+
 	metadataCol := "NULL"
 	if in.Metadata {
 		metadataCol = "metadata"
@@ -901,12 +902,15 @@ ORDER BY %s`, metadataCol, ordering)
 		e := &pb.LeasesReply{
 			Lease: &pb.Lease{
 				OrderId:   orderID,
-				LeaseId:   leaseID,
 				CreatedMs: created.UnixNano() / 1000000,
 				UpdatedMs: updated.UnixNano() / 1000000,
 				ExpiresMs: expires.UnixNano() / 1000000,
 				Order:     order,
 			},
+		}
+		if blockRestrictedUser(ctx) == nil {
+			// Only set some fields for some users.
+			e.Lease.LeaseId = leaseID
 		}
 		if userPropertyAddresses {
 			e.Lease.Address = client.String
@@ -938,6 +942,8 @@ ORDER BY %s`, metadataCol, ordering)
 }
 
 // Block access for end-users that don't have the right cookie set.
+// TODO: This function should allow *some* peer certs, and for others (web certs)
+// it should require the cookie to be set.
 func blockRestrictedUser(ctx context.Context) error {
 	errPerUserCredentials := grpc.Errorf(codes.Unauthenticated, "need per-user credentials for this resource")
 	md, ok := grpcmetadata.FromContext(ctx)
