@@ -20,20 +20,18 @@ import (
 	"time"
 
 	"github.com/ThomasHabets/go-uuid/uuid"
+	"github.com/golang/protobuf/proto"
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
-
-	"github.com/golang/protobuf/proto"
+	"golang.org/x/oauth2/google"
+	"google.golang.org/cloud"
+	"google.golang.org/cloud/storage"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	grpcmetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/transport"
-
-	"golang.org/x/oauth2/google"
-	"google.golang.org/cloud"
-	"google.golang.org/cloud/storage"
 
 	"github.com/ThomasHabets/qpov/dist"
 	pb "github.com/ThomasHabets/qpov/dist/qpov"
@@ -89,6 +87,7 @@ func cleanError(err error, code codes.Code, public string, a ...interface{}) err
 	return grpc.Errorf(code, public, a...)
 }
 
+// parse definition text and turn it into an `Order` proto.
 func def2Order(def string) (*pb.Order, error) {
 	var order dist.Order
 	if err := json.Unmarshal([]byte(def), &order); err != nil {
@@ -270,19 +269,6 @@ func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply
 	return ret, nil
 }
 
-func getOrderDestByLeaseID(id string) (string, string, error) {
-	row := db.QueryRow(`SELECT orders.definition FROM orders JOIN leases ON orders.order_id=leases.order_id WHERE lease_id=$1`, id)
-	var def string
-	if err := row.Scan(&def); err != nil {
-		return "", "", err
-	}
-	var order dist.Order
-	if err := json.Unmarshal([]byte(def), &order); err != nil {
-		return "", "", err
-	}
-	return order.Destination, order.File, nil
-}
-
 func (s *server) Failed(ctx context.Context, in *pb.FailedRequest) (*pb.FailedReply, error) {
 	st := time.Now()
 	requestID := uuid.New()
@@ -424,7 +410,7 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 		return nil, grpc.Errorf(codes.AlreadyExists, "lease already failed: %q", in.LeaseId)
 	}
 
-	// Fetch the order. Needed for the destination.
+	// Fetch the order. Needed for the destination for AWS, and the filename for GCS and AWS.
 	destination, file, err := getOrderDestByLeaseID(in.LeaseId)
 	if err != nil {
 		log.Printf("RPC(Done): Can't find order with lease %q: %v", in.LeaseId, err)
@@ -941,7 +927,19 @@ func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, erro
 	}
 
 	id := uuid.New()
-	if _, err := db.Exec(`INSERT INTO orders(order_id, created, owner, definition) VALUES($1, NOW(), $2,$3)`, id, ownerID, in.OrderDefinition); err != nil {
+	if _, err := db.Exec(`
+INSERT INTO orders(
+    order_id,
+    created,
+    owner,
+    definition
+)
+VALUES(
+    $1,
+    NOW(),
+    $2,
+    $3
+)`, id, ownerID, in.OrderDefinition); err != nil {
 		return nil, dbError("Inserting order", err)
 	}
 	log.Printf("RPC(Add): Order: %q", id)

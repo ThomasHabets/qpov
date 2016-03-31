@@ -3,6 +3,7 @@ package main
 // aws.go contains legacy AWS code that eventually should be removed.
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -69,6 +70,19 @@ func awsUpload(leaseID, destination, file string, inImage, inStdout, inStderr []
 		return internalError("storing results", "Uploading to S3: %v", err)
 	}
 	return nil
+}
+
+func getOrderDestByLeaseID(id string) (string, string, error) {
+	row := db.QueryRow(`SELECT orders.definition FROM orders JOIN leases ON orders.order_id=leases.order_id WHERE lease_id=$1`, id)
+	var def string
+	if err := row.Scan(&def); err != nil {
+		return "", "", err
+	}
+	var order dist.Order
+	if err := json.Unmarshal([]byte(def), &order); err != nil {
+		return "", "", err
+	}
+	return order.Destination, order.File, nil
 }
 
 func resultsAWS(ctx context.Context, leaseID, destination, file string, stream pb.Scheduler_ResultServer) error {
