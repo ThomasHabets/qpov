@@ -15,14 +15,11 @@ import (
 	"net"
 	"os"
 	"path"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/ThomasHabets/go-uuid/uuid"
-	"github.com/goamz/goamz/aws"
-	"github.com/goamz/goamz/s3"
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
 
@@ -285,13 +282,6 @@ func getOrderDestByLeaseID(id string) (string, string, error) {
 	return order.Destination, order.File, nil
 }
 
-func getAuth() aws.Auth {
-	return aws.Auth{
-		AccessKey: os.Getenv("AWS_ACCESS_KEY_ID"),
-		SecretKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
-	}
-}
-
 func (s *server) Failed(ctx context.Context, in *pb.FailedRequest) (*pb.FailedReply, error) {
 	st := time.Now()
 	requestID := uuid.New()
@@ -456,49 +446,22 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	}
 
 	// TODO: stop uploading to AWS once Google cloud proves stable.
-	sthree := s3.New(getAuth(), aws.USEast, nil)
-	bucket, destDir, _, _ := dist.S3Parse(destination)
-	b := sthree.Bucket(bucket)
-	destDir = path.Join(destDir, in.LeaseId)
-	var wg sync.WaitGroup
+	if err := awsUpload(in.LeaseId, destination, file, in.Image, in.Stdout, in.Stderr, newStats); err != nil {
+		return nil, err
+	}
 
-	re := regexp.MustCompile(`\.pov$`)
-	image := re.ReplaceAllString(file, ".png")
-
-	files := []struct {
-		ct   string
-		fn   string
-		data []byte
-	}{
-		{"image/png", image, in.Image},
-		{"text/plain", file + ".stdout", in.Stdout},
-		{"text/plain", file + ".stderr", in.Stderr},
-		{"text/plain", file + infoSuffix, []byte(newStats)},
-	}
-	errCh := make(chan error, len(files))
-	wg.Add(len(files))
-	acl := s3.ACL("")
-	for _, e := range files {
-		e := e
-		go func() {
-			defer wg.Done()
-			if err := b.Put(path.Join(destDir, e.fn), e.data, e.ct, acl, s3.Options{}); err != nil {
-				log.Printf("S3 upload of %q error: %v", e.fn, err)
-				errCh <- fmt.Errorf("S3 upload error")
-			}
-		}()
-	}
-	go func() {
-		wg.Wait()
-		close(errCh)
-	}()
-	if err := <-errCh; err != nil {
-		return nil, internalError("storing results", "Uploading to S3: %v", err)
-	}
-	// Mark as completed.
-	if _, err := db.Exec(`UPDATE leases SET done=TRUE,updated=NOW(),metadata=$2 WHERE lease_id=$1`, in.LeaseId, newStats); err != nil {
+	// Mark as completed in database.
+	if _, err := db.Exec(`
+UPDATE leases
+SET
+    done=TRUE,
+    updated=NOW(),
+    metadata=$2
+WHERE
+    lease_id=$1`, in.LeaseId, newStats); err != nil {
 		return nil, dbError("Marking done", err)
 	}
+
 	log.Printf("RPC(Done): Lease: %q", in.LeaseId)
 	ret := &pb.DoneReply{}
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Done", st,
@@ -571,74 +534,6 @@ func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) 
 		"github.com/ThomasHabets/qpov/dist/qpov/ResultRequest", in,
 		nil, "github.com/ThomasHabets/qpov/dist/qpov/ResultReply", &ret)
 	return nil
-}
-
-func resultsAWS(ctx context.Context, leaseID, destination, file string, stream pb.Scheduler_ResultServer) error {
-	sthree := s3.New(getAuth(), aws.USEast, nil)
-	bucket, destDir, _, _ := dist.S3Parse(destination)
-	b := sthree.Bucket(bucket)
-	destDir2 := path.Join(destDir, leaseID)
-	re := regexp.MustCompile(`\.pov$`)
-	image := re.ReplaceAllString(file, ".png")
-	fn := path.Join(destDir, image)
-	fn2 := path.Join(destDir2, image)
-	r, err := b.GetReader(fn)
-	if err != nil {
-		// Look in per-lease dir too.
-		r, err = b.GetReader(fn2)
-		if err != nil {
-			log.Printf("File %q not found on S3: %v", fn, err)
-			return grpc.Errorf(codes.NotFound, "file not found")
-		}
-	}
-	defer r.Close()
-
-	writerErr := make(chan error, 1)
-	ch := make(chan []byte, 1000)
-	// Writer.
-	go func() {
-		defer func() {
-			// Flush the channel, in case there was an error.
-			for _ = range ch {
-			}
-			close(writerErr)
-		}()
-		writerErr <- func() error {
-			for buf := range ch {
-				if err := stream.Send(&pb.ResultReply{Data: buf}); err != nil {
-					return internalError("failed to stream result", "failed to stream result: %v", err)
-				}
-			}
-			return nil
-		}()
-	}()
-
-	// Reader.
-	if err := func() error {
-		defer close(ch)
-		for {
-			select {
-			case err := <-writerErr:
-				return err
-			case <-ctx.Done(): // TODO: is this needed? Won't stream.Send() fail anyway if context cancels?
-				return internalError("timed out", "timed out streaming results %q: %v", image, err)
-			default:
-			}
-			buf := make([]byte, 1024, 1024)
-			n, err := r.Read(buf)
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				return internalError("failed to stream result", "failed to stream result %q: %v", image, err)
-			}
-			ch <- buf[0:n]
-		}
-		return nil
-	}(); err != nil {
-		return err
-	}
-	return <-writerErr
 }
 
 func (s *server) Orders(in *pb.OrdersRequest, stream pb.Scheduler_OrdersServer) error {
@@ -980,6 +875,8 @@ func blockRestrictedAPIInternal(ctx context.Context) error {
 }
 
 // Verify certificate info and return nil or error suitable for sending to user.
+// This blocks RPCs completely, and thus does not consider web oauth `delegation`.
+// For that, see `blockRestrictedUser`.
 func blockRestrictedAPI(ctx context.Context) error {
 	if err := blockRestrictedAPIInternal(ctx); err != nil {
 		log.Printf("Restricted API: %v", err)
