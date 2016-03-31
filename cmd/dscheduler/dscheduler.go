@@ -1,6 +1,7 @@
 package main
 
 import (
+	"compress/gzip"
 	"crypto/tls"
 	"crypto/x509"
 	"database/sql"
@@ -24,12 +25,18 @@ import (
 	"github.com/goamz/goamz/s3"
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
+
+	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	grpcmetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/transport"
+
+	"golang.org/x/oauth2/google"
+	"google.golang.org/cloud"
+	"google.golang.org/cloud/storage"
 
 	"github.com/ThomasHabets/qpov/dist"
 	pb "github.com/ThomasHabets/qpov/dist/qpov"
@@ -50,6 +57,10 @@ var (
 	minLeaseRenewTime     = flag.Duration("min_lease_renew_time", time.Hour, "Minimum lease renew time.")
 	maxLeaseRenewTime     = flag.Duration("max_lease_renew_time", 48*time.Hour, "Minimum lease renew time.")
 	defaultLeaseRenewTime = flag.Duration("default_lease_time", time.Hour, "Default lease renew time.")
+
+	// Cloud config.
+	cloudCredentials = flag.String("cloud_credentials", "", "Path to JSON file containing credentials.")
+	bucketName       = flag.String("cloud_bucket", "", "Google cloud storage bucket name.")
 
 	errNoCert = errors.New("no cert provided")
 )
@@ -314,6 +325,7 @@ func leaseDone(id string) (bool, bool, error) {
 }
 
 // Get the correct metadata and return it both as proto and string.
+// TODO: Once all clients use proto version this function will not be needed.
 func getMetadata(in *pb.DoneRequest) (*pb.RenderingMetadata, string, error) {
 	var stats *pb.RenderingMetadata
 	if in.Metadata != nil {
@@ -330,6 +342,69 @@ func getMetadata(in *pb.DoneRequest) (*pb.RenderingMetadata, string, error) {
 		return nil, "", fmt.Errorf("marshaling to newJSON: %v", err)
 	}
 	return stats, string(b), nil
+}
+
+var googleCloudStorage *storage.Client
+
+// Save results to Google Cloud Storage under gs://<bucket>/<leaseID>/filename.{png,meta.pb.gz}
+func (s *server) saveToCloud(ctx context.Context, in *pb.DoneRequest, realMeta *pb.RenderingMetadata, base string) error {
+	dir := path.Join(in.LeaseId)
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	var imageErr error
+	go func() {
+		defer wg.Done()
+		w := googleCloudStorage.Bucket(*bucketName).Object(path.Join(dir, base+".png")).NewWriter(ctx)
+		defer func() {
+			if imageErr == nil {
+				imageErr = w.Close()
+			} else {
+				w.CloseWithError(imageErr)
+			}
+		}()
+		_, imageErr = w.Write(in.Image)
+	}()
+
+	var metaErr error
+	go func() {
+		defer wg.Done()
+		w := googleCloudStorage.Bucket(*bucketName).Object(path.Join(dir, base+".meta.pb.gz")).NewWriter(ctx)
+		defer func() {
+			if metaErr == nil {
+				metaErr = w.Close()
+			} else {
+				w.CloseWithError(metaErr)
+			}
+		}()
+		zw := gzip.NewWriter(w)
+		defer func() {
+			e := zw.Close()
+			if metaErr == nil {
+				metaErr = e
+			}
+		}()
+		// TODO: Client should send stdout/stderr in metadata directly, and this won't be needed.
+		d := proto.Clone(realMeta).(*pb.RenderingMetadata)
+		if len(d.Stdout) == 0 {
+			d.Stdout = in.Stdout
+		}
+		if len(d.Stderr) == 0 {
+			d.Stderr = in.Stderr
+		}
+		data, err := proto.Marshal(d)
+		if err != nil {
+			metaErr = err
+			return
+		}
+		_, metaErr = zw.Write(data)
+	}()
+
+	wg.Wait()
+	if imageErr != nil {
+		return imageErr
+	}
+	return metaErr
 }
 
 func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, error) {
@@ -365,6 +440,22 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 		return nil, grpc.Errorf(codes.NotFound, "unknown lease %q", in.LeaseId)
 	}
 
+	// Create metadata to store in DB from oldJSON or proto.
+	realMeta, newStats, err := getMetadata(in)
+	if err != nil {
+		log.Printf("Warning: Failed to get metadata: %v", err)
+		// newStats defaults to being empty.
+	}
+
+	// Upload to (Google) cloud.
+	{
+		basefile := strings.TrimSuffix(file, path.Ext(file))
+		if err := s.saveToCloud(ctx, in, realMeta, basefile); err != nil {
+			return nil, internalError("failed to save to cloud", "failed to save to cloud: %v", err)
+		}
+	}
+
+	// TODO: stop uploading to AWS once Google cloud proves stable.
 	sthree := s3.New(getAuth(), aws.USEast, nil)
 	bucket, destDir, _, _ := dist.S3Parse(destination)
 	b := sthree.Bucket(bucket)
@@ -373,13 +464,6 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 
 	re := regexp.MustCompile(`\.pov$`)
 	image := re.ReplaceAllString(file, ".png")
-
-	// Create metadata to store in DB from oldJSON or proto.
-	_, newStats, err := getMetadata(in)
-	if err != nil {
-		log.Printf("Warning: Failed to get metadata: %v", err)
-		// newStats defaults to being empty.
-	}
 
 	files := []struct {
 		ct   string
@@ -924,6 +1008,28 @@ func main() {
 		log.Fatalf("Got extra args on cmdline: %q", flag.Args())
 	}
 
+	ctx := context.Background()
+
+	// Connect to GCS.
+	{
+		jsonKey, err := ioutil.ReadFile(*cloudCredentials)
+		if err != nil {
+			log.Fatal(err)
+		}
+		conf, err := google.JWTConfigFromJSON(
+			jsonKey,
+			storage.ScopeFullControl,
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+		googleCloudStorage, err = storage.NewClient(ctx, cloud.WithTokenSource(conf.TokenSource(ctx)))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	// Connect to database.
 	var err error
 	db, err = sql.Open("postgres", *dbConnect)
 	if err != nil {
@@ -933,6 +1039,7 @@ func main() {
 		log.Fatalf("db ping: %v", err)
 	}
 
+	// Listen to RPC port.
 	lis, err := net.Listen("tcp", *addr)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
@@ -963,7 +1070,8 @@ func main() {
 		}
 		opts = append(opts, grpc.Creds(credentials.NewTLS(t)))
 	}
-	s := grpc.NewServer(opts...)
+
+	// Set up RPC logger.
 	now := time.Now()
 	fin, err := os.Create(path.Join(*rpclogDir, fmt.Sprintf("rpclog.%d.in.gob", now.Unix())))
 	if err != nil {
@@ -974,7 +1082,12 @@ func main() {
 		log.Fatalf("Opening rpclog: %v", err)
 	}
 	l := rpclog.New(fin, fout)
+
+	// Create RPC server.
+	s := grpc.NewServer(opts...)
 	pb.RegisterSchedulerServer(s, &server{rpcLog: l})
+
+	// Run forever.
 	log.Printf("Running...")
 	log.Fatal(s.Serve(lis))
 }

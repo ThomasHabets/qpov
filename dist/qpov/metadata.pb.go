@@ -117,6 +117,9 @@ type RenderingMetadata struct {
 	Cloud    *Cloud `protobuf:"bytes,24,opt,name=cloud" json:"cloud,omitempty"`
 	Comment  string `protobuf:"bytes,25,opt,name=comment" json:"comment,omitempty"`
 	Cpuinfo  string `protobuf:"bytes,26,opt,name=cpuinfo" json:"cpuinfo,omitempty"`
+	// POV-Ray.
+	Stdout []byte `protobuf:"bytes,30,opt,name=stdout,proto3" json:"stdout,omitempty"`
+	Stderr []byte `protobuf:"bytes,31,opt,name=stderr,proto3" json:"stderr,omitempty"`
 }
 
 func (m *RenderingMetadata) Reset()         { *m = RenderingMetadata{} }

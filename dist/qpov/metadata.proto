@@ -58,4 +58,8 @@ message RenderingMetadata {
         Cloud cloud = 24;
         string comment = 25;  // Custom comment from command line.
         string cpuinfo = 26;  // /proc/cpuinfo
+
+        // POV-Ray.
+        bytes stdout = 30;
+        bytes stderr = 31;
 }
