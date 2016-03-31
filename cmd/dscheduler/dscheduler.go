@@ -389,7 +389,7 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 		{"image/png", image, in.Image},
 		{"text/plain", file + ".stdout", in.Stdout},
 		{"text/plain", file + ".stderr", in.Stderr},
-		{"text/plain", file + infoSuffix, []byte(in.JsonMetadata)},
+		{"text/plain", file + infoSuffix, []byte(newStats)},
 	}
 	errCh := make(chan error, len(files))
 	wg.Add(len(files))
