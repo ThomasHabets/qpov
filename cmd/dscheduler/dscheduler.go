@@ -750,6 +750,10 @@ SELECT
 	return ret, nil
 }
 
+func verifyUUID(s string) bool {
+	return uuid.Parse(s) != nil
+}
+
 func (s *server) Lease(ctx context.Context, in *pb.LeaseRequest) (*pb.LeaseReply, error) {
 	st := time.Now()
 	requestID := uuid.New()
@@ -758,6 +762,10 @@ func (s *server) Lease(ctx context.Context, in *pb.LeaseRequest) (*pb.LeaseReply
 	}
 	if err := blockRestrictedUser(ctx); err != nil {
 		return nil, err
+	}
+
+	if !verifyUUID(in.LeaseId) {
+		return nil, grpc.Errorf(codes.InvalidArgument, "%q is not a valid UUID", in.LeaseId)
 	}
 
 	row := db.QueryRow(`

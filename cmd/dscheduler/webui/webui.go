@@ -212,6 +212,9 @@ func handleLease(ctx context.Context, w http.ResponseWriter, r *http.Request) (i
 	reply, err := sched.Lease(ctx, &pb.LeaseRequest{LeaseId: lease})
 	if err != nil {
 		switch grpc.Code(err) {
+		case codes.InvalidArgument:
+			msg := fmt.Sprintf("Bad request: %v", grpc.ErrorDesc(err))
+			return nil, httpError(http.StatusBadRequest, msg, msg)
 		case codes.Unauthenticated:
 			return nil, httpError(http.StatusForbidden, "Unauthenticated", "Unauthenticated")
 		case codes.NotFound:
