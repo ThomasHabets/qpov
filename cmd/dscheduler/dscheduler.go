@@ -324,8 +324,14 @@ func getMetadata(in *pb.DoneRequest) (*pb.RenderingMetadata, string, error) {
 var googleCloudStorage *storage.Client
 
 // Save results to Google Cloud Storage under gs://<bucket>/<leaseID>/filename.{png,meta.pb.gz}
-func (s *server) saveToCloud(ctx context.Context, in *pb.DoneRequest, realMeta *pb.RenderingMetadata, base string) error {
-	dir := path.Join(in.LeaseId)
+func (s *server) saveToCloud(ctx context.Context, in *pb.DoneRequest, realMeta *pb.RenderingMetadata, base string, batch uuid.UUID) error {
+	dir := ""
+	if batch != nil {
+		dir = path.Join(dir, "batch", batch.String())
+	} else {
+		dir = path.Join(dir, "single")
+	}
+	dir = path.Join(dir, in.LeaseId)
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -411,7 +417,7 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	}
 
 	// Fetch the order. Needed for the destination for AWS, and the filename for GCS and AWS.
-	destination, file, err := getOrderDestByLeaseID(in.LeaseId)
+	destination, file, batch, err := getOrderDestByLeaseID(in.LeaseId)
 	if err != nil {
 		log.Printf("RPC(Done): Can't find order with lease %q: %v", in.LeaseId, err)
 		return nil, grpc.Errorf(codes.NotFound, "unknown lease %q", in.LeaseId)
@@ -427,7 +433,7 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	// Upload to (Google) cloud.
 	{
 		basefile := strings.TrimSuffix(file, path.Ext(file))
-		if err := s.saveToCloud(ctx, in, realMeta, basefile); err != nil {
+		if err := s.saveToCloud(ctx, in, realMeta, basefile, batch); err != nil {
 			return nil, internalError("failed to save to cloud", "failed to save to cloud: %v", err)
 		}
 	}
@@ -457,9 +463,16 @@ WHERE
 	return ret, nil
 }
 
-func resultsGCS(ctx context.Context, leaseID, base string, stream pb.Scheduler_ResultServer) error {
+func resultsGCS(ctx context.Context, batch uuid.UUID, leaseID string, base string, stream pb.Scheduler_ResultServer) error {
+	dir := ""
+	if batch != nil {
+		dir = path.Join(dir, "batch", batch.String())
+	} else {
+		dir = path.Join(dir, "single")
+	}
+	dir = path.Join(dir, leaseID)
 	for _, bucketName := range strings.Split(*downloadBucketNames, ",") {
-		r, err := googleCloudStorage.Bucket(bucketName).Object(path.Join(leaseID, base+".png")).NewReader(ctx)
+		r, err := googleCloudStorage.Bucket(bucketName).Object(path.Join(dir, base+".png")).NewReader(ctx)
 		if err == storage.ErrObjectNotExist {
 			// Try next bucket.
 			continue
@@ -481,7 +494,7 @@ func resultsGCS(ctx context.Context, leaseID, base string, stream pb.Scheduler_R
 		}
 		return nil
 	}
-	return grpc.Errorf(codes.NotFound, "result %q not found", leaseID)
+	return grpc.Errorf(codes.NotFound, "result batch %q lease %q not found", batch, leaseID)
 }
 
 func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) error {
@@ -504,14 +517,14 @@ func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) 
 
 	// Send data, if requested.
 	if in.Data {
-		destination, file, err := getOrderDestByLeaseID(in.LeaseId)
+		destination, file, batch, err := getOrderDestByLeaseID(in.LeaseId)
 		if err != nil {
 			log.Printf("Can't find order with lease %q: %v", in.LeaseId, err)
 			return grpc.Errorf(codes.NotFound, "unknown lease %q", in.LeaseId)
 		}
 
 		base := strings.TrimSuffix(file, ".pov")
-		if err := resultsGCS(ctx, in.LeaseId, base, stream); err != nil {
+		if err := resultsGCS(ctx, batch, in.LeaseId, base, stream); err != nil {
 			log.Printf("Failed to read from GCS. Trying AWS: %v", err)
 			if err := resultsAWS(ctx, in.LeaseId, destination, file, stream); err != nil {
 				return err

@@ -3,6 +3,7 @@ package main
 // aws.go contains legacy AWS code that eventually should be removed.
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,6 +19,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 
+	"github.com/ThomasHabets/go-uuid/uuid"
 	"github.com/ThomasHabets/qpov/dist"
 	pb "github.com/ThomasHabets/qpov/dist/qpov"
 )
@@ -72,17 +74,18 @@ func awsUpload(leaseID, destination, file string, inImage, inStdout, inStderr []
 	return nil
 }
 
-func getOrderDestByLeaseID(id string) (string, string, error) {
-	row := db.QueryRow(`SELECT orders.definition FROM orders JOIN leases ON orders.order_id=leases.order_id WHERE lease_id=$1`, id)
+func getOrderDestByLeaseID(id string) (string, string, uuid.UUID, error) {
+	row := db.QueryRow(`SELECT orders.definition,batch_id FROM orders JOIN leases ON orders.order_id=leases.order_id WHERE lease_id=$1`, id)
 	var def string
-	if err := row.Scan(&def); err != nil {
-		return "", "", err
+	var b sql.NullString
+	if err := row.Scan(&def, &b); err != nil {
+		return "", "", nil, err
 	}
 	var order dist.Order
 	if err := json.Unmarshal([]byte(def), &order); err != nil {
-		return "", "", err
+		return "", "", nil, err
 	}
-	return order.Destination, order.File, nil
+	return order.Destination, order.File, uuid.Parse(b.String), nil
 }
 
 func resultsAWS(ctx context.Context, leaseID, destination, file string, stream pb.Scheduler_ResultServer) error {
