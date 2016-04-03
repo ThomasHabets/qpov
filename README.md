@@ -1,6 +1,6 @@
 # QPov
 
-Copyright Thomas Habets <thomas@habets.se> 2015
+Copyright Thomas Habets <thomas@habets.se> 2015-2016
 
 https://github.com/ThomasHabets/qpov
 
@@ -25,7 +25,8 @@ programatic realistic water, and a quake demo gives me a nice 3D
 animation to work with.
 
 ## Installing
-```
+
+```shell
 mkdir go
 cd go
 GOPATH=$(pwd) go get github.com/ThomasHabets/qpov
@@ -41,7 +42,7 @@ replacement textures.
 ## Running
 You need to convert Quake maps and models in addition to the demos.
 
-```
+```shell
 mkdir demo1
 bsp -pak /.../pak0.pak convert -lights=false -out demo1
 mdl -pak /.../pak0.pak convert -out demo1
@@ -51,31 +52,27 @@ avconv -r 30 -i demo1/frame-%08d.png -f mp4 -q:v 0 -vcodec mpeg4 demo1.mp4
 ```
 
 To mix in audio (can be created using `sound.sh` in `demo1` directory), run:
-```
+```shell
 avconv -i demo1.mp4 -i sound.wav -c copy demo1-sound.mp4
 ```
 
 ### Running a render node
 
 Suitable for EC2 Ubuntu:
-```
-export AWS_ACCESS_KEY_ID=…
-export AWS_SECRET_ACCESS_KEY=…
+```shell
 sed -i 's/^# deb / deb /' /etc/apt/sources.list
 apt-get update
 apt-get install schedtool povray{,-includes} screen rar
 mkdir qpov-wd
-drender -queue myqueue -wd qpov-wd
+drender -scheduler=addr-of-dscheduler:12345 -wd=qpov-wd
 ```
 
 ### Scheduling render work
 
-```
-export AWS_ACCESS_KEY_ID=…
-export AWS_SECRET_ACCESS_KEY=…
+```shell
 dmaster \
-    -queue myqueue \
-    -package s3://mybucket/balcony.rar \
+    -scheduler addr-of-dscheduler:12345 \
+    -package https://foo/bar.tar.gz \
     -dir balcony \
     -file balcony.pov \
     -destination s3://mybucket/balcony/ \
@@ -83,7 +80,8 @@ dmaster \
 ```
 
 ### Using retextures
-```
+
+```shell
 7zr x QRP_map_textures_v.1.00.pk3.7z
 unzip QRP_map_textures_v.1.00.pk3
 for d in . *; do (cd $d && for i in *.tga; do convert $i $(basename $i .tga).png; done); done
@@ -94,6 +92,7 @@ And then use `-retexture=/path/to/textures` with `bsp`.
 ## Hacking
 
 ### Example frames
+
 Assuming 30fps and QDQr recam:
 * light levels:
   * e1m1: 10 610
@@ -102,7 +101,9 @@ Assuming 30fps and QDQr recam:
   * e1m3: 300
 
 ### Blog posts this project
+
 * https://blog.habets.se/2015/03/Raytracing-Quake-demos
 
 ### Interesting links
+
 * https://www.quaddicted.com/engines/software_vs_glquake

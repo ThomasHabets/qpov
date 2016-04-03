@@ -390,6 +390,27 @@ func (s *server) saveToCloud(ctx context.Context, in *pb.DoneRequest, realMeta *
 	return metaErr
 }
 
+// getOrderDestByLeastID returns the filename and batch ID of an order.
+func getOrderDestByLeaseID(leaseID string) (string, uuid.UUID, error) {
+	row := db.QueryRow(`
+SELECT
+  orders.definition,
+  orders.batch_id
+FROM orders
+JOIN leases ON orders.order_id=leases.order_id
+WHERE lease_id=$1`, leaseID)
+	var def string
+	var b sql.NullString
+	if err := row.Scan(&def, &b); err != nil {
+		return "", nil, err
+	}
+	var order dist.Order
+	if err := json.Unmarshal([]byte(def), &order); err != nil {
+		return "", nil, err
+	}
+	return order.File, uuid.Parse(b.String), nil
+}
+
 func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, error) {
 	st := time.Now()
 	requestID := uuid.New()
@@ -416,8 +437,8 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 		return nil, grpc.Errorf(codes.AlreadyExists, "lease already failed: %q", in.LeaseId)
 	}
 
-	// Fetch the order. Needed for the destination for AWS, and the filename for GCS and AWS.
-	destination, file, batch, err := getOrderDestByLeaseID(in.LeaseId)
+	// Fetch the order ID so we can assemble the path.
+	file, batch, err := getOrderDestByLeaseID(in.LeaseId)
 	if err != nil {
 		log.Printf("RPC(Done): Can't find order with lease %q: %v", in.LeaseId, err)
 		return nil, grpc.Errorf(codes.NotFound, "unknown lease %q", in.LeaseId)
@@ -436,11 +457,6 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 		if err := s.saveToCloud(ctx, in, realMeta, basefile, batch); err != nil {
 			return nil, internalError("failed to save to cloud", "failed to save to cloud: %v", err)
 		}
-	}
-
-	// TODO: stop uploading to AWS once Google cloud proves stable.
-	if err := awsUpload(in.LeaseId, destination, file, in.Image, in.Stdout, in.Stderr, newStats); err != nil {
-		return nil, err
 	}
 
 	// Mark as completed in database.
@@ -517,7 +533,7 @@ func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) 
 
 	// Send data, if requested.
 	if in.Data {
-		destination, file, batch, err := getOrderDestByLeaseID(in.LeaseId)
+		file, batch, err := getOrderDestByLeaseID(in.LeaseId)
 		if err != nil {
 			log.Printf("Can't find order with lease %q: %v", in.LeaseId, err)
 			return grpc.Errorf(codes.NotFound, "unknown lease %q", in.LeaseId)
@@ -525,11 +541,7 @@ func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) 
 
 		base := strings.TrimSuffix(file, ".pov")
 		if err := resultsGCS(ctx, batch, in.LeaseId, base, stream); err != nil {
-			log.Printf("Failed to read from GCS. Trying AWS: %v", err)
-			if err := resultsAWS(ctx, in.LeaseId, destination, file, stream); err != nil {
-				return err
-			}
-
+			return err
 		}
 	}
 
