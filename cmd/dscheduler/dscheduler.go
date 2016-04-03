@@ -786,6 +786,7 @@ SELECT
   updated,
   expires,
   client,
+  leases.done,
   %s
 FROM leases
 JOIN orders ON orders.order_id=leases.order_id
@@ -810,7 +811,8 @@ ORDER BY %s`, metadataCol, ordering)
 		var metadata *string
 		var def string
 		var client sql.NullString
-		if err := rows.Scan(&orderID, &def, &leaseID, &userID, &created, &updated, &expires, &client, &metadata); err != nil {
+		var done bool
+		if err := rows.Scan(&orderID, &def, &leaseID, &userID, &created, &updated, &expires, &client, &done, &metadata); err != nil {
 			return dbError("Scanning leases", err)
 		}
 		var order *pb.Order
@@ -830,7 +832,7 @@ ORDER BY %s`, metadataCol, ordering)
 				Order:     order,
 			},
 		}
-		if blockRestrictedUser(ctx) == nil {
+		if done || blockRestrictedUser(ctx) == nil {
 			// Only set some fields for some users.
 			e.Lease.LeaseId = leaseID
 		}
