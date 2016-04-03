@@ -243,7 +243,16 @@ func (s *server) renew(ctx context.Context, lease, address string, secs int32) (
 		secs = int32(minLeaseRenewTime.Seconds())
 	}
 	n := time.Now().Add(time.Duration(int64(time.Second) * int64(secs)))
-	if _, err := db.Exec(`UPDATE leases SET updated=NOW(), expires=$1, client=$3 WHERE lease_id=$2 AND done=FALSE AND failed=FALSE`, n, lease, address); err != nil {
+	if _, err := db.Exec(`
+UPDATE leases
+SET
+    updated=NOW(),
+    expires=$1,
+    client=$3
+WHERE lease_id=$2
+AND   done=FALSE
+AND   failed=FALSE
+`, n, lease, address); err != nil {
 		return time.Now(), dbError("Updating lease", err)
 	}
 	return n, nil
@@ -466,8 +475,10 @@ SET
     done=TRUE,
     updated=NOW(),
     metadata=$2
-WHERE
-    lease_id=$1`, in.LeaseId, newStats); err != nil {
+WHERE lease_id=$1
+AND   done=FALSE
+AND   failed=FALSE
+`, in.LeaseId, newStats); err != nil {
 		return nil, dbError("Marking done", err)
 	}
 
