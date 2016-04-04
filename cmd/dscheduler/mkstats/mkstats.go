@@ -1,15 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"math"
+	"os"
+	"os/exec"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -22,6 +27,18 @@ var (
 	// TODO: Ask the scheduler for the leases instead of getting them from the DB directly.
 	dbConnect = flag.String("db", "", "Database connect string.")
 )
+
+type event struct {
+	time    time.Time
+	lease   int
+	cpuTime int64
+}
+
+type byTime []event
+
+func (a byTime) Len() int           { return len(a) }
+func (a byTime) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a byTime) Less(i, j int) bool { return a[i].time.Before(a[j].time) }
 
 func mkstats() error {
 	rows, err := db.Query(`
@@ -39,11 +56,6 @@ AND metadata IS NOT NULL
 	bogoRE := regexp.MustCompile(`(?m)^bogomips\s*:\s*([\d.]+)$`)
 
 	// Deltas.
-	type event struct {
-		time    time.Time
-		lease   int
-		cpuTime int64
-	}
 	var events []event
 	for rows.Next() {
 		var meta sql.NullString
@@ -82,11 +94,11 @@ AND metadata IS NOT NULL
 		realMS += stats.EndMs - stats.StartMs
 		events = append(events,
 			event{
-				time:  time.Unix(stats.StartMs*1000000, 0),
+				time:  time.Unix(stats.StartMs/1000, stats.StartMs%1000*1000000),
 				lease: 1,
 			},
 			event{
-				time:  time.Unix(stats.EndMs*1000000, 0),
+				time:  time.Unix(stats.EndMs/1000, stats.EndMs%1000*1000000),
 				lease: -1,
 			})
 	}
@@ -111,7 +123,62 @@ AND metadata IS NOT NULL
 	for _, b := range bogoIPS {
 		fmt.Printf("    %-20s:        %v\n", b.name, formatDuration(time.Duration(1e9*bogoI/b.bogoSpeed)))
 	}
-	return nil
+
+	sort.Sort(byTime(events))
+	var leases int
+	var data []tsInt
+	for _, e := range events {
+		data = append(data, tsInt{e.time, leases})
+		leases += e.lease
+		data = append(data, tsInt{e.time, leases})
+	}
+	return graphTimeLine(data, tsLine{
+		LineTitle:  "Active leases",
+		OutputFile: "line.svg",
+	})
+}
+
+type tsInt struct {
+	time  time.Time
+	value int
+}
+
+type tsLine struct {
+	OutputFile string
+	LineTitle  string
+}
+
+var (
+	tsLineTmpl = template.Must(template.New("").Parse(`
+set timefmt "%Y-%m-%d_%H:%M:%S"
+set xdata time
+set format x "%Y-%m-%d"
+set xrange [ "2016-01-01":"2016-04-04" ]
+
+set terminal svg size 800,300
+set output "{{.OutputFile}}"
+plot "-" using 1:2 w l title "{{.LineTitle}}"
+`))
+)
+
+func graphTimeLine(ts []tsInt, data tsLine) error {
+	if data.OutputFile == "" {
+		return fmt.Errorf("must supply an output file name")
+	}
+	if data.LineTitle == "" {
+		data.LineTitle = "data"
+	}
+	cmd := exec.Command("gnuplot")
+	var def bytes.Buffer
+	if err := tsLineTmpl.Execute(&def, &data); err != nil {
+		return err
+	}
+	for _, s := range ts {
+		fmt.Fprintf(&def, "%v %d\n", s.time.Format("2006-01-02_15:04:05"), s.value)
+	}
+	cmd.Stdin = &def
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func formatInt(i int64) string {
