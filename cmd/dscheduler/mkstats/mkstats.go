@@ -28,7 +28,7 @@ var (
 type event struct {
 	time    time.Time
 	lease   int
-	cpuTime int64
+	cpuRate int64
 }
 
 type byTime []event
@@ -119,14 +119,17 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 		machine2numcpu[machine] = cores
 		machine2cloud[machine] = meta.Cloud
 
+		cpuRate := ((meta.Rusage.Utime + meta.Rusage.Stime) / 1000) / (meta.EndMs - meta.StartMs)
 		events = append(events,
 			event{
-				time:  time.Unix(meta.StartMs/1000, meta.StartMs%1000*1000000),
-				lease: 1,
+				time:    time.Unix(meta.StartMs/1000, meta.StartMs%1000*1000000),
+				cpuRate: cpuRate,
+				lease:   1,
 			},
 			event{
-				time:  time.Unix(meta.EndMs/1000, meta.EndMs%1000*1000000),
-				lease: -1,
+				time:    time.Unix(meta.EndMs/1000, meta.EndMs%1000*1000000),
+				cpuRate: -cpuRate,
+				lease:   -1,
 			})
 		machine2jobs[machine]++
 		machine2userTime[machine] += meta.Rusage.Utime
@@ -152,18 +155,36 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 	}
 
 	sort.Sort(byTime(events))
-	var leases int
-	var data []tsInt
-	for _, e := range events {
-		data = append(data, tsInt{e.time, leases})
-		leases += e.lease
-		data = append(data, tsInt{e.time, leases})
+	{
+		var leases int64
+		var data []tsInt
+		for _, e := range events {
+			data = append(data, tsInt{e.time, leases})
+			leases += int64(e.lease)
+			data = append(data, tsInt{e.time, leases})
+		}
+		if err := graphTimeLine(data, tsLine{
+			LineTitle:  "Active leases",
+			OutputFile: "leases.svg",
+		}); err != nil {
+			return nil, err
+		}
 	}
-	if err := graphTimeLine(data, tsLine{
-		LineTitle:  "Active leases",
-		OutputFile: "line.svg",
-	}); err != nil {
-		return nil, err
+	{
+		var cpuRate int64
+		var data []tsInt
+		for _, e := range events {
+			data = append(data, tsInt{e.time, cpuRate})
+			cpuRate += e.cpuRate
+			data = append(data, tsInt{e.time, cpuRate})
+		}
+		if err := graphTimeLine(data, tsLine{
+			LineTitle:  "CPU Rate",
+			YAxisLabel: "CPU s/s",
+			OutputFile: "cpurate.svg",
+		}); err != nil {
+			return nil, err
+		}
 	}
 	return stats, nil
 }

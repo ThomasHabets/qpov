@@ -12,12 +12,13 @@ import (
 
 type tsInt struct {
 	time  time.Time
-	value int
+	value int64
 }
 
 type tsLine struct {
 	OutputFile string
 	LineTitle  string
+	YAxisLabel string
 	From, To   time.Time
 }
 
@@ -25,6 +26,7 @@ var (
 	tsLineTmpl = template.Must(template.New("").Parse(`
 set timefmt "%Y-%m-%d_%H:%M:%S"
 set xdata time
+set ylabel "{{.YAxisLabel}}"
 set format x "%Y-%m-%d"
 set xrange [ "{{.From}}":"{{.To}}" ]
 
@@ -46,7 +48,7 @@ func graphTimeLine(ts []tsInt, data tsLine) error {
 	}
 	if data.From.IsZero() {
 		var err error
-		data.From, err = time.Parse("2006-01-02", "2016-01-01")
+		data.From, err = time.Parse("2006-01-02", "2015-11-01")
 		if err != nil {
 			log.Fatalf("can't happen: %v", err)
 		}
