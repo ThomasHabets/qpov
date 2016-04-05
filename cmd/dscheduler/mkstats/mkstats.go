@@ -157,6 +157,12 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 	}
 
 	sort.Sort(byTime(events))
+
+	from, err := time.Parse("2006-01-02", "2015-11-01")
+	if err != nil {
+		log.Fatal(err)
+	}
+	to := time.Now()
 	{
 		var leases int64
 		var data []tsInt
@@ -167,6 +173,8 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 		}
 		if err := graphTimeLine(data, tsLine{
 			LineTitle:  "Active leases",
+			From:       from,
+			To:         to,
 			OutputFile: path.Join(*outDir, "leases.svg"),
 		}); err != nil {
 			return nil, err
@@ -182,8 +190,42 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 		}
 		if err := graphTimeLine(data, tsLine{
 			LineTitle:  "CPU Rate",
+			From:       from,
+			To:         to,
 			YAxisLabel: "CPU s/s",
 			OutputFile: path.Join(*outDir, "cpurate.svg"),
+		}); err != nil {
+			return nil, err
+		}
+	}
+	{
+		var data []tsInt
+		cur := 0
+		for i := int64(from.Unix()) % 86400; i < int64(to.Unix()); i += 86400 {
+			rfrom := i - 86400
+			rto := i
+			for cur > 0 && events[cur].time.Unix() > rfrom {
+				cur--
+			}
+			// backed one too many.
+			if events[cur].time.Unix() < rfrom {
+				cur++
+			}
+			var n int64
+			for cur < len(events) && events[cur].time.Unix() < rto {
+				cur++
+				if events[cur].lease < 0 {
+					n++
+				}
+			}
+			data = append(data, tsInt{time.Unix(i, 0), n})
+		}
+		if err := graphTimeLine(data, tsLine{
+			LineTitle:  "Frame rate",
+			YAxisLabel: "Frames per day",
+			From:       from,
+			To:         to,
+			OutputFile: path.Join(*outDir, "framerate.svg"),
 		}); err != nil {
 			return nil, err
 		}
@@ -265,8 +307,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := tmplStatsText.Execute(os.Stdout, stats); err != nil {
-		log.Fatal(err)
+	if false {
+		if err := tmplStatsText.Execute(os.Stdout, stats); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	// Write stats to file.

@@ -24,6 +24,7 @@ const tmplsStatsHTML = `
   <body>
     <h1>QPov stats</h1>
 
+    <img src="framerate.svg" />
     <img src="cpurate.svg" />
     <img src="leases.svg" />
 
