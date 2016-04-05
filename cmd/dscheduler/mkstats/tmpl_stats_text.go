@@ -26,11 +26,9 @@ Per frame machine CPU time:
 : {{.Jobs|sprintf "%4d"}} (time: {{.CpuTime|sumcpu|div6464 .Jobs|seconds2string}}
 {{end}}`
 
-var tmplStatsText *template.Template
-
-func init() {
-	tmplStatsText = template.New("")
-	tmplStatsText.Funcs(template.FuncMap{
+var (
+	tmplStatsText  *template.Template
+	tmplStatsFuncs = map[string]interface{}{
 		"sprintf": fmt.Sprintf,
 		"sumcpu":  func(c *pb.StatsCPUTime) int64 { return c.UserSeconds + c.SystemSeconds },
 		"div6432": func(b int32, a int64) int64 { return a / int64(b) },
@@ -41,6 +39,11 @@ func init() {
 		"cputime2string": func(c *pb.StatsCPUTime) string {
 			return fmtSecondDuration(c.UserSeconds + c.SystemSeconds)
 		},
-	})
+	}
+)
+
+func init() {
+	tmplStatsText = template.New("tmpl_stats_text")
+	tmplStatsText.Funcs(tmplStatsFuncs)
 	template.Must(tmplStatsText.Parse(tmplsStatsText))
 }

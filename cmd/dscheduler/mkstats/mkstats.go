@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
@@ -23,6 +24,7 @@ var (
 	db *sql.DB
 	// TODO: Ask the scheduler for the leases instead of getting them from the DB directly.
 	dbConnect = flag.String("db", "", "Database connect string.")
+	outDir    = flag.String("out", ".", "Directory to write stats files to.")
 )
 
 type event struct {
@@ -165,7 +167,7 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 		}
 		if err := graphTimeLine(data, tsLine{
 			LineTitle:  "Active leases",
-			OutputFile: "leases.svg",
+			OutputFile: path.Join(*outDir, "leases.svg"),
 		}); err != nil {
 			return nil, err
 		}
@@ -181,7 +183,7 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 		if err := graphTimeLine(data, tsLine{
 			LineTitle:  "CPU Rate",
 			YAxisLabel: "CPU s/s",
-			OutputFile: "cpurate.svg",
+			OutputFile: path.Join(*outDir, "cpurate.svg"),
 		}); err != nil {
 			return nil, err
 		}
@@ -265,5 +267,39 @@ func main() {
 
 	if err := tmplStatsText.Execute(os.Stdout, stats); err != nil {
 		log.Fatal(err)
+	}
+
+	// Write stats to file.
+	{
+		bin, err := proto.Marshal(stats)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fo, err := os.Create(path.Join(*outDir, "overall.pb"))
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer fo.Close()
+		if _, err := fo.Write(bin); err != nil {
+			log.Fatal(err)
+		}
+		if err := fo.Close(); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	// Write HTML to file.
+	{
+		fo, err := os.Create(path.Join(*outDir, "index.html"))
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer fo.Close()
+		if err := tmplStatsHTML.Execute(fo, stats); err != nil {
+			log.Fatal(err)
+		}
+		if err := fo.Close(); err != nil {
+			log.Fatal(err)
+		}
 	}
 }
