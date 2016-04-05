@@ -1,0 +1,36 @@
+syntax = "proto3";
+package qpov;
+import "metadata.proto";
+
+message StatsCPUTime {
+        int64 user_seconds = 2;
+        int64 system_seconds = 3;
+}
+
+message MachineStats {
+        // E.g. "Amazon/c4.8xlarge 36 x Intel(R) Xeon(R) CPU E5-2666 v3 @ 2.90GHz".
+        string arch_summary = 1;
+        string cpu = 2;
+        int32 num_cpu = 3;
+        Cloud cloud = 4;
+
+        StatsCPUTime cpu_time = 5;
+        int64 jobs = 6;
+}
+
+message StatsOverall {
+        // When these stats were calculated.
+        int64 stats_timestamp = 1;
+
+        // User and system time.
+        StatsCPUTime cpu_time = 2;
+
+        // (user_seconds+system_seconds) / CPU cores.
+        StatsCPUTime machine_time = 3;
+
+        // Total time completed leases have been outstanding.
+        int64 lease_seconds = 4;
+
+        // Split out by machine type.
+        repeated MachineStats machine_stats = 5;
+}
