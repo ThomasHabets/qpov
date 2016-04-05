@@ -30,6 +30,7 @@ var (
 type event struct {
 	time    time.Time
 	lease   int
+	arch    string
 	cpuRate int64
 }
 
@@ -126,11 +127,13 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 			event{
 				time:    time.Unix(meta.StartMs/1000, meta.StartMs%1000*1000000),
 				cpuRate: cpuRate,
+				arch:    meta.Uname.Machine,
 				lease:   1,
 			},
 			event{
 				time:    time.Unix(meta.EndMs/1000, meta.EndMs%1000*1000000),
 				cpuRate: -cpuRate,
+				arch:    meta.Uname.Machine,
 				lease:   -1,
 			})
 		machine2jobs[machine]++
@@ -163,6 +166,8 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 		log.Fatal(err)
 	}
 	to := time.Now()
+
+	// Leases.
 	{
 		var leases int64
 		var data []tsInt
@@ -171,25 +176,37 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 			leases += int64(e.lease)
 			data = append(data, tsInt{e.time, leases})
 		}
-		if err := graphTimeLine(data, tsLine{
-			LineTitle:  "Active leases",
+		if err := graphTimeLine([][]tsInt{data}, tsLine{
+			LineTitles: []string{"Active leases"},
 			From:       from,
+			YAxisLabel: "Leases",
 			To:         to,
 			OutputFile: path.Join(*outDir, "leases.svg"),
 		}); err != nil {
 			return nil, err
 		}
 	}
+	// CPU rate.
 	{
-		var cpuRate int64
-		var data []tsInt
+		var cpuRate []int64
+		pos := make(map[string]int)
+		var data [][]tsInt
+		var lineTitles []string
 		for _, e := range events {
-			data = append(data, tsInt{e.time, cpuRate})
-			cpuRate += e.cpuRate
-			data = append(data, tsInt{e.time, cpuRate})
+			n, found := pos[e.arch]
+			if !found {
+				n = len(pos)
+				pos[e.arch] = n
+				lineTitles = append(lineTitles, e.arch)
+				cpuRate = append(cpuRate, 0)
+				data = append(data, []tsInt{})
+			}
+			data[n] = append(data[n], tsInt{e.time, cpuRate[n]})
+			cpuRate[n] += e.cpuRate
+			data[n] = append(data[n], tsInt{e.time, cpuRate[n]})
 		}
 		if err := graphTimeLine(data, tsLine{
-			LineTitle:  "CPU Rate",
+			LineTitles: lineTitles,
 			From:       from,
 			To:         to,
 			YAxisLabel: "CPU s/s",
@@ -198,6 +215,8 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 			return nil, err
 		}
 	}
+
+	// Frame rate.
 	{
 		var data []tsInt
 		cur := 0
@@ -220,8 +239,8 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 			}
 			data = append(data, tsInt{time.Unix(i, 0), n})
 		}
-		if err := graphTimeLine(data, tsLine{
-			LineTitle:  "Frame rate",
+		if err := graphTimeLine([][]tsInt{data}, tsLine{
+			LineTitles: []string{"Frame rate"},
 			YAxisLabel: "Frames per day",
 			From:       from,
 			To:         to,
