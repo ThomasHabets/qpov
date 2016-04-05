@@ -12,11 +12,11 @@ import (
 	"os/exec"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"text/template"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	_ "github.com/lib/pq"
 
 	pb "github.com/ThomasHabets/qpov/dist/qpov"
@@ -40,7 +40,37 @@ func (a byTime) Len() int           { return len(a) }
 func (a byTime) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a byTime) Less(i, j int) bool { return a[i].time.Before(a[j].time) }
 
-func mkstats() error {
+// Return descriptive specs, short name, and core count
+func getMachine(cloud *pb.Cloud, cpuinfo string) (string, string, int) {
+	cNamePrefix := ""
+	if cloud != nil {
+		t := proto.Clone(cloud).(*pb.Cloud)
+		if t.Provider == "Amazon" && t.InstanceType == "unavailable\n" {
+			t.Provider = "DigitalOcean"
+			t.InstanceType = "unknown"
+		}
+		cNamePrefix = strings.TrimSpace(fmt.Sprintf("%s/%s", t.Provider, t.InstanceType)) + " "
+	}
+	cpuRE := regexp.MustCompile(`(?m)^model name\s+:\s+(.*)$`)
+	spacesRE := regexp.MustCompile(`\s+`)
+	m := cpuRE.FindAllStringSubmatch(cpuinfo, -1)
+	if len(m) != 0 {
+		name := m[0][1]
+		num := len(m)
+		desc := spacesRE.ReplaceAllString(fmt.Sprintf("%s%d x %s", cNamePrefix, num, name), " ")
+		short, _ := map[string]string{
+			// Yes, the order here is correct. Pi2 has 5, Pi3 has 4.
+			`1 x ARMv6-compatible processor rev 7 (v6l)`: "Raspberry Pi 1",
+			`4 x ARMv7 Processor rev 5 (v7l)`:            "Raspberry Pi 2",
+			`4 x ARMv7 Processor rev 4 (v7l)`:            "Raspberry Pi 3",
+			`2 x ARMv7 Processor rev 4 (v7l)`:            "Banana Pi",
+		}[desc]
+		return desc, short, num
+	}
+	return "unknown", "", 0
+}
+
+func streamMeta(metaChan chan<- *pb.RenderingMetadata) error {
 	rows, err := db.Query(`
 SELECT metadata
 FROM leases
@@ -51,77 +81,77 @@ AND metadata IS NOT NULL
 		return err
 	}
 	defer rows.Close()
-	var cpuUS, realMS int64
-	var bogoI float64
-	bogoRE := regexp.MustCompile(`(?m)^bogomips\s*:\s*([\d.]+)$`)
-
-	// Deltas.
-	var events []event
 	for rows.Next() {
-		var meta sql.NullString
-		if err := rows.Scan(&meta); err != nil {
+		var metas sql.NullString
+		if err := rows.Scan(&metas); err != nil {
 			return err
 		}
-		var stats pb.RenderingMetadata
-		if err := json.Unmarshal([]byte(meta.String), &stats); err != nil {
-			log.Printf("Parsing %q: %v", meta.String, err)
+		meta := &pb.RenderingMetadata{}
+		if err := json.Unmarshal([]byte(metas.String), &meta); err != nil {
+			log.Printf("Parsing %q: %v", metas.String, err)
 			continue
 		}
-		sbogo := bogoRE.FindAllStringSubmatch(stats.Cpuinfo, -1)
-		var bogo float64
-		// Get average bogomips.
-		if len(sbogo) > 0 {
-			var t float64
-			var n int
-			for _, b := range sbogo {
-				bogo, err = strconv.ParseFloat(b[1], 64)
-				if err != nil {
-					log.Printf("Failed to parse bogomips %q: %v", b[1], err)
-				} else {
-					n++
-					t += bogo
-				}
-			}
-			if n > 0 {
-				bogo = t / float64(n)
-			}
-			if n != int(stats.NumCpu) {
-				log.Printf("#bogomips != numcpu: %d != %d", n, stats.NumCpu)
-			}
-		}
-		bogoI += float64(stats.Rusage.Utime+stats.Rusage.Stime) * bogo
-		cpuUS += stats.Rusage.Utime + stats.Rusage.Stime
-		realMS += stats.EndMs - stats.StartMs
-		events = append(events,
-			event{
-				time:  time.Unix(stats.StartMs/1000, stats.StartMs%1000*1000000),
-				lease: 1,
-			},
-			event{
-				time:  time.Unix(stats.EndMs/1000, stats.EndMs%1000*1000000),
-				lease: -1,
-			})
+		metaChan <- meta
 	}
 	if rows.Err() != nil {
 		return err
 	}
-	fmt.Printf("CPU time:     %40s\n", formatDuration(time.Duration(cpuUS*1000)))
-	fmt.Printf("Machine time: %40s\n", formatDuration(time.Duration(realMS*1000000)))
-	fmt.Printf("BogoI:        %40s\n", formatFloat(bogoI))
+	return nil
+}
 
-	// BogoSpeed of various machines.
-	bogoIPS := []struct {
-		name      string
-		bogoSpeed float64
-	}{
-		{"Raspberry Pi 2", 4 * 64.0 * 1e6},
-		{"Raspberry Pi 3", 4 * 76.80 * 1e6},
-		{"Viking", 32 * 4800 * 1e6},
-		{"EC2 c4.8xlarge", 36 * 5800 * 1e6},
+func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
+	stats := &pb.StatsOverall{
+		StatsTimestamp: int64(time.Now().Unix()),
+		CpuTime:        &pb.StatsCPUTime{},
+		MachineTime:    &pb.StatsCPUTime{},
 	}
-	fmt.Printf("Machine equivalents:\n")
-	for _, b := range bogoIPS {
-		fmt.Printf("    %-20s:        %v\n", b.name, formatDuration(time.Duration(1e9*bogoI/b.bogoSpeed)))
+
+	// Deltas.
+	var events []event
+	machine2cloud := make(map[string]*pb.Cloud)
+	machine2numcpu := make(map[string]int)
+	machine2cpu := make(map[string]string)
+	machine2jobs := make(map[string]int)
+	machine2userTime := make(map[string]int64)
+	machine2systemTime := make(map[string]int64)
+	for meta := range metaChan {
+		machine, name, cores := getMachine(meta.Cloud, meta.Cpuinfo)
+		if name != "" {
+			machine = fmt.Sprintf("%s: %s", name, machine)
+		}
+		machine2numcpu[machine] = cores
+		machine2cloud[machine] = meta.Cloud
+
+		events = append(events,
+			event{
+				time:  time.Unix(meta.StartMs/1000, meta.StartMs%1000*1000000),
+				lease: 1,
+			},
+			event{
+				time:  time.Unix(meta.EndMs/1000, meta.EndMs%1000*1000000),
+				lease: -1,
+			})
+		machine2jobs[machine]++
+		machine2userTime[machine] += meta.Rusage.Utime
+		machine2systemTime[machine] += meta.Rusage.Stime
+	}
+
+	for _, k := range sortedMapKeysSI(machine2jobs) {
+		stats.MachineTime.UserSeconds += int64(machine2userTime[k]) / 1000000 / int64(machine2numcpu[k])
+		stats.MachineTime.UserSeconds += int64(machine2systemTime[k]) / 1000000 / int64(machine2numcpu[k])
+		stats.CpuTime.UserSeconds += int64(machine2userTime[k]) / 1000000
+		stats.CpuTime.SystemSeconds += int64(machine2systemTime[k]) / 1000000
+		stats.MachineStats = append(stats.MachineStats, &pb.MachineStats{
+			ArchSummary: k,
+			Cpu:         machine2cpu[k],
+			Cloud:       machine2cloud[k],
+			NumCpu:      int32(machine2numcpu[k]),
+			CpuTime: &pb.StatsCPUTime{
+				UserSeconds:   int64(machine2userTime[k]) / 1000000,
+				SystemSeconds: int64(machine2systemTime[k]) / 1000000,
+			},
+			Jobs: int64(machine2jobs[k]),
+		})
 	}
 
 	sort.Sort(byTime(events))
@@ -132,10 +162,22 @@ AND metadata IS NOT NULL
 		leases += e.lease
 		data = append(data, tsInt{e.time, leases})
 	}
-	return graphTimeLine(data, tsLine{
+	if err := graphTimeLine(data, tsLine{
 		LineTitle:  "Active leases",
 		OutputFile: "line.svg",
-	})
+	}); err != nil {
+		return nil, err
+	}
+	return stats, nil
+}
+
+func sortedMapKeysSI(m map[string]int) []string {
+	var ret []string
+	for k := range m {
+		ret = append(ret, k)
+	}
+	sort.Strings(ret)
+	return ret
 }
 
 type tsInt struct {
@@ -146,6 +188,7 @@ type tsInt struct {
 type tsLine struct {
 	OutputFile string
 	LineTitle  string
+	From, To   time.Time
 }
 
 var (
@@ -153,7 +196,7 @@ var (
 set timefmt "%Y-%m-%d_%H:%M:%S"
 set xdata time
 set format x "%Y-%m-%d"
-set xrange [ "2016-01-01":"2016-04-04" ]
+set xrange [ "{{.From}}":"{{.To}}" ]
 
 set terminal svg size 800,300
 set output "{{.OutputFile}}"
@@ -162,11 +205,24 @@ plot "-" using 1:2 w l title "{{.LineTitle}}"
 )
 
 func graphTimeLine(ts []tsInt, data tsLine) error {
+	tsLineTmpl.Funcs(template.FuncMap{
+		"fdate": func(t time.Time) string { return t.Format("2006-01-02") },
+	})
 	if data.OutputFile == "" {
 		return fmt.Errorf("must supply an output file name")
 	}
 	if data.LineTitle == "" {
 		data.LineTitle = "data"
+	}
+	if data.From.IsZero() {
+		var err error
+		data.From, err = time.Parse("2006-01-02", "2016-01-01")
+		if err != nil {
+			log.Fatalf("can't happen: %v", err)
+		}
+	}
+	if data.To.IsZero() {
+		data.To = time.Now()
 	}
 	cmd := exec.Command("gnuplot")
 	var def bytes.Buffer
@@ -211,12 +267,16 @@ func formatDuration(t time.Duration) string {
 	return fmt.Sprintf("%4dy %3dd %2dh %2dm %2ds", y, d, h, m, s)
 }
 
+func fmtSecondDuration(e int64) string {
+	return formatDuration(time.Second * time.Duration(e))
+}
+
 func main() {
 	flag.Parse()
 	if flag.NArg() > 0 {
 		log.Fatalf("Got extra args on cmdline: %q", flag.Args())
 	}
-
+	log.Printf("Running mkstats")
 	// Connect to database.
 	var err error
 	db, err = sql.Open("postgres", *dbConnect)
@@ -227,7 +287,22 @@ func main() {
 		log.Fatalf("db ping: %v", err)
 	}
 
-	if err := mkstats(); err != nil {
+	metaChan := make(chan *pb.RenderingMetadata)
+	streamErr := make(chan error, 1)
+	go func() {
+		defer close(metaChan)
+		defer close(streamErr)
+		streamErr <- streamMeta(metaChan)
+	}()
+	stats, err := mkstats(metaChan)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := <-streamErr; err != nil {
+		log.Fatal(err)
+	}
+
+	if err := tmplStatsText.Execute(os.Stdout, stats); err != nil {
 		log.Fatal(err)
 	}
 }

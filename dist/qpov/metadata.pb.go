@@ -9,6 +9,7 @@ It is generated from these files:
 	metadata.proto
 	order.proto
 	scheduler.proto
+	stats.proto
 
 It has these top-level messages:
 	Rusage
@@ -39,6 +40,9 @@ It has these top-level messages:
 	StatsReply
 	ResultRequest
 	ResultReply
+	StatsCPUTime
+	MachineStats
+	StatsOverall
 */
 package qpov
 
