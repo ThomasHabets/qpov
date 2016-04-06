@@ -167,30 +167,17 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 	}
 	to := time.Now()
 
-	// Leases.
+	// Simple non-cumulative graphs.
 	{
-		var leases int64
-		var data []tsInt
-		for _, e := range events {
-			data = append(data, tsInt{e.time, leases})
-			leases += int64(e.lease)
-			data = append(data, tsInt{e.time, leases})
-		}
-		if err := graphTimeLine([][]tsInt{data}, tsLine{
-			LineTitles: []string{"Active leases"},
-			From:       from,
-			YAxisLabel: "Leases",
-			To:         to,
-			OutputFile: path.Join(*outDir, "leases.svg"),
-		}); err != nil {
-			return nil, err
-		}
-	}
-	// CPU rate.
-	{
-		var cpuRate []int64
 		pos := make(map[string]int)
-		var data [][]tsInt
+
+		state := make(map[string][]int64)
+		data := make(map[string][][]tsInt)
+		types := map[string]func(e event) int64{
+			"cpurate": func(e event) int64 { return e.cpuRate },
+			"leases":  func(e event) int64 { return int64(e.lease) },
+		}
+
 		var lineTitles []string
 		for _, e := range events {
 			n, found := pos[e.arch]
@@ -198,25 +185,32 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 				n = len(pos)
 				pos[e.arch] = n
 				lineTitles = append(lineTitles, e.arch)
-				cpuRate = append(cpuRate, 0)
-				data = append(data, []tsInt{})
+				for k := range types {
+					state[k] = append(state[k], 0)
+					data[k] = append(data[k], []tsInt{})
+				}
 			}
-			data[n] = append(data[n], tsInt{e.time, cpuRate[n]})
-			cpuRate[n] += e.cpuRate
-			data[n] = append(data[n], tsInt{e.time, cpuRate[n]})
+			for k, f := range types {
+				data[k][n] = append(data[k][n], tsInt{e.time, state[k][n]})
+				state[k][n] += f(e)
+				data[k][n] = append(data[k][n], tsInt{e.time, state[k][n]})
+			}
 		}
-		if err := graphTimeLine(data, tsLine{
-			LineTitles: lineTitles,
-			From:       from,
-			To:         to,
-			YAxisLabel: "CPU s/s",
-			OutputFile: path.Join(*outDir, "cpurate.svg"),
-		}); err != nil {
-			return nil, err
+		for k := range types {
+			if err := graphTimeLine(data[k], tsLine{
+				LineTitles: lineTitles,
+				From:       from,
+				To:         to,
+				YAxisLabel: "CPU s/s",
+				OutputFile: path.Join(*outDir, fmt.Sprintf("%s.svg", k)),
+			}); err != nil {
+				return nil, err
+			}
 		}
 	}
 
-	// Frame rate.
+	// Cumulative graphs (only frame rate for now).
+	// TODO: add hertz.
 	{
 		var data []tsInt
 		cur := 0
