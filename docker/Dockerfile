@@ -9,4 +9,4 @@ RUN apt-get -y update
 RUN apt-get install -y povray schedtool wget atop rar curl vim
 COPY drender /
 EXPOSE 4900
-CMD /drender -queue=qpov -wd=/tmp -addr=:4900
+CMD /drender -scheduler=qpov.retrofitta.se:9999 -wd=/tmp -addr=:4900
