@@ -99,6 +99,32 @@ AND metadata IS NOT NULL
 	return nil
 }
 
+type sortGraphsT struct {
+	t string
+	d []tsInt
+}
+type sortGraphsTT []sortGraphsT
+
+func (a sortGraphsTT) Len() int           { return len(a) }
+func (a sortGraphsTT) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a sortGraphsTT) Less(i, j int) bool { return a[i].t < a[j].t }
+
+func sortGraphs(lineTitles []string, data [][]tsInt) ([]string, [][]tsInt) {
+	var s []sortGraphsT
+	for n := range lineTitles {
+		s = append(s, sortGraphsT{t: lineTitles[n], d: data[n]})
+	}
+	sort.Sort(sortGraphsTT(s))
+	var l []string
+	var d [][]tsInt
+	for n := range lineTitles {
+		l = append(l, s[n].t)
+		d = append(d, s[n].d)
+	}
+	//lineTitles, data = sortGraphs(lineTitles, data)
+	return l, d
+}
+
 func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 	stats := &pb.StatsOverall{
 		StatsTimestamp: int64(time.Now().Unix()),
@@ -169,10 +195,10 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 
 	// Simple non-cumulative graphs.
 	{
-		pos := make(map[string]int)
+		pos := make(map[string]int)        // Mapping from arch to line index.
+		state := make(map[string][]int64)  // Map of graph name to current value.
+		data := make(map[string][][]tsInt) // Map of graph name to a slice of line->linedata.
 
-		state := make(map[string][]int64)
-		data := make(map[string][][]tsInt)
 		types := map[string]func(e event) int64{
 			"cpurate": func(e event) int64 { return e.cpuRate },
 			"leases":  func(e event) int64 { return int64(e.lease) },
@@ -197,8 +223,9 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 			}
 		}
 		for k := range types {
-			if err := graphTimeLine(data[k], tsLine{
-				LineTitles: lineTitles,
+			t, d := sortGraphs(lineTitles, data[k])
+			if err := graphTimeLine(d, tsLine{
+				LineTitles: t,
 				From:       from,
 				To:         to,
 				YAxisLabel: "CPU s/s",
