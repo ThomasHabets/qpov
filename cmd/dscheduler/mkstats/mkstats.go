@@ -199,9 +199,12 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 		state := make(map[string][]int64)  // Map of graph name to current value.
 		data := make(map[string][][]tsInt) // Map of graph name to a slice of line->linedata.
 
-		types := map[string]func(e event) int64{
-			"cpurate": func(e event) int64 { return e.cpuRate },
-			"leases":  func(e event) int64 { return int64(e.lease) },
+		types := map[string]struct {
+			yAxisLabel string
+			extractor  func(e event) int64
+		}{
+			"cpurate": {"CPU s/s", func(e event) int64 { return e.cpuRate }},
+			"leases":  {"Leases", func(e event) int64 { return int64(e.lease) }},
 		}
 
 		var lineTitles []string
@@ -216,19 +219,19 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 					data[k] = append(data[k], []tsInt{})
 				}
 			}
-			for k, f := range types {
+			for k, v := range types {
 				data[k][n] = append(data[k][n], tsInt{e.time, state[k][n]})
-				state[k][n] += f(e)
+				state[k][n] += v.extractor(e)
 				data[k][n] = append(data[k][n], tsInt{e.time, state[k][n]})
 			}
 		}
-		for k := range types {
+		for k, v := range types {
 			t, d := sortGraphs(lineTitles, data[k])
 			if err := graphTimeLine(d, tsLine{
 				LineTitles: t,
 				From:       from,
 				To:         to,
-				YAxisLabel: "CPU s/s",
+				YAxisLabel: v.yAxisLabel,
 				OutputFile: path.Join(*outDir, fmt.Sprintf("%s.svg", k)),
 			}); err != nil {
 				return nil, err
