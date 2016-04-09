@@ -902,7 +902,8 @@ func lookupOAuthKey(s string) (interface{}, error) {
 
 // verify JWT and return email and oauthSubject.
 func verifyJWT(ctx context.Context, t string) (string, string, error) {
-	token, err := jwt.Parse(t, func(token *jwt.Token) (interface{}, error) {
+	parser := jwt.Parser{UseJSONNumber: true}
+	token, err := parser.Parse(t, func(token *jwt.Token) (interface{}, error) {
 		return lookupOAuthKey(token.Header["kid"].(string))
 	})
 
