@@ -6,9 +6,8 @@ const rootTmpl = `
 <html>
   <head>
     <title>QPov</title>
-    <meta name="google-signin-scope" content="profile email">
-    <!-- TODO: Move client ID to cmdline or something -->
-    <meta name="google-signin-client_id" content="814877621236-5bji24sq74hqecapr2h13ac07nj7m7ci.apps.googleusercontent.com">
+    <meta name="google-signin-scope" content="email">
+    <meta name="google-signin-client_id" content="{{.OAuthClientID}}">
     <script src="https://apis.google.com/js/platform.js" async defer></script>
     <script>
     function signOut() {

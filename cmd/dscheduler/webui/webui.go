@@ -48,13 +48,14 @@ const (
 )
 
 var (
-	pageDeadline = flag.Duration("page_deadline", time.Second, "Page timeout.")
-	socketPath   = flag.String("socket", "", "Unix socket to listen to.")
-	caFile       = flag.String("ca_file", "", "Server CA file.")
-	certFile     = flag.String("cert_file", "", "Client cert file.")
-	keyFile      = flag.String("key_file", "", "Client key file.")
-	schedAddr    = flag.String("scheduler", "", "Scheduler address.")
-	root         = flag.String("root", "", "Path under root of domain that the web UI runs.")
+	pageDeadline  = flag.Duration("page_deadline", time.Second, "Page timeout.")
+	socketPath    = flag.String("socket", "", "Unix socket to listen to.")
+	caFile        = flag.String("ca_file", "", "Server CA file.")
+	certFile      = flag.String("cert_file", "", "Client cert file.")
+	keyFile       = flag.String("key_file", "", "Client key file.")
+	schedAddr     = flag.String("scheduler", "", "Scheduler address.")
+	root          = flag.String("root", "", "Path under root of domain that the web UI runs.")
+	oauthClientID = flag.String("oauth_client_id", "", "Google OAuth Client ID.")
 
 	sched    pb.SchedulerClient
 	tmplRoot template.Template
@@ -300,6 +301,7 @@ func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 		log.Printf("Errors: %v", errs)
 	}
 	ret := &struct {
+		OAuthClientID   string
 		Root            string
 		Stats           *pb.StatsReply
 		Leases          []*pb.Lease
@@ -308,12 +310,13 @@ func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 		Errors          []error
 		PageTime        time.Duration
 	}{
-		Root:       *root,
-		Stats:      st,
-		Leases:     leases,
-		DoneLeases: doneLeases,
-		Errors:     errs,
-		PageTime:   time.Since(startTime),
+		OAuthClientID: *oauthClientID,
+		Root:          *root,
+		Stats:         st,
+		Leases:        leases,
+		DoneLeases:    doneLeases,
+		Errors:        errs,
+		PageTime:      time.Since(startTime),
 	}
 	if st != nil {
 		ret.UnstartedOrders = st.SchedulingStats.Orders - st.SchedulingStats.DoneOrders
