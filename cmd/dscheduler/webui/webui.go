@@ -59,7 +59,7 @@ var (
 	sched    pb.SchedulerClient
 	tmplRoot template.Template
 
-	forwardRPCKeys = []string{"id", "source", "http.remote_addr", "http.cookie"}
+	forwardRPCKeys = []string{"id", "source", "http.remote_addr", "http.cookie", "jwt"}
 )
 
 func httpContext(r *http.Request) context.Context {
@@ -69,6 +69,9 @@ func httpContext(r *http.Request) context.Context {
 	ctx = context.WithValue(ctx, "http.remote_addr", r.RemoteAddr)
 	if c, err := r.Cookie("qpov"); err == nil {
 		ctx = context.WithValue(ctx, "http.cookie", c.Value)
+	}
+	if c, err := r.Cookie("jwt"); err == nil {
+		ctx = context.WithValue(ctx, "jwt", c.Value)
 	}
 	return ctx
 }

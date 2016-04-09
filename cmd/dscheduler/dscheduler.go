@@ -13,6 +13,8 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -23,6 +25,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
+	"golang.org/x/net/context/ctxhttp"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/cloud"
 	"google.golang.org/cloud/storage"
@@ -48,7 +51,6 @@ var (
 	clientCAFile          = flag.String("client_ca_file", "", "The client CA file.")
 	maxConcurrentStreams  = flag.Int("max_concurrent_streams", 10000, "Max concurrent RPC streams.")
 	rpclogDir             = flag.String("rpclog_dir", ".", "RPC log directory.")
-	secretTODO            = flag.String("secret_TODO", "", "Secret word to be able to see secrets. to be replaced with oauth stuff.")
 	minLeaseRenewTime     = flag.Duration("min_lease_renew_time", time.Hour, "Minimum lease renew time.")
 	maxLeaseRenewTime     = flag.Duration("max_lease_renew_time", 48*time.Hour, "Minimum lease renew time.")
 	defaultLeaseRenewTime = flag.Duration("default_lease_time", time.Hour, "Default lease renew time.")
@@ -801,6 +803,7 @@ ORDER BY %s`, metadataCol, ordering)
 	logRet := &pb.LeasesReply{}
 
 	userPropertyAddresses := userProperty(ctx, propAddresses)
+	userCanSeeLease := blockRestrictedUser(ctx) == nil
 	for rows.Next() {
 		if ctx.Err() != nil {
 			return err
@@ -832,7 +835,7 @@ ORDER BY %s`, metadataCol, ordering)
 				Order:     order,
 			},
 		}
-		if done || blockRestrictedUser(ctx) == nil {
+		if done || userCanSeeLease {
 			// Only set some fields for some users.
 			e.Lease.LeaseId = leaseID
 		}
@@ -865,6 +868,31 @@ ORDER BY %s`, metadataCol, ordering)
 	return nil
 }
 
+func verifyJWT(ctx context.Context, jwt string) (string, error) {
+	r, err := ctxhttp.PostForm(ctx, nil, "https://www.googleapis.com/oauth2/v3/tokeninfo", url.Values{"id_token": {jwt}})
+	if err != nil {
+		return "", err
+	}
+	defer r.Body.Close()
+	if r.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("OAuth response not 200: %d", r.StatusCode)
+	}
+	// TODO: use ctx for timeout.
+	b, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return "", err
+	}
+
+	// There are more fields, but these are the ones we care about.
+	j := struct {
+		Email string
+	}{}
+	if err := json.Unmarshal(b, &j); err != nil {
+		return "", err
+	}
+	return j.Email, nil
+}
+
 // Block access for end-users that don't have the right cookie set.
 // TODO: This function should allow *some* peer certs, and for others (web certs)
 // it should require the cookie to be set.
@@ -874,10 +902,27 @@ func blockRestrictedUser(ctx context.Context) error {
 	if !ok {
 		return errPerUserCredentials
 	}
-	if v, _ := md["http.cookie"]; len(v) > 0 && v[0] == *secretTODO {
-		return nil
+	v, _ := md["jwt"]
+	if len(v) == 0 {
+		return errPerUserCredentials
 	}
-	return errPerUserCredentials
+
+	e, err := verifyJWT(ctx, v[0])
+	if err != nil {
+		log.Printf("verifyJWT: %v", err)
+		return errPerUserCredentials
+	}
+
+	var addr bool
+	if err := db.QueryRow(`SELECT addresses FROM users WHERE email=$1`, e).Scan(&addr); err == sql.ErrNoRows {
+	} else if err != nil {
+		log.Printf("Failed to read permissions: %v", err)
+		return errPerUserCredentials
+	}
+	if !addr {
+		return errPerUserCredentials
+	}
+	return nil
 }
 
 func blockRestrictedAPIInternal(ctx context.Context) error {
@@ -915,28 +960,39 @@ func blockRestrictedAPI(ctx context.Context) error {
 }
 
 func userProperty(ctx context.Context, p string) bool {
-	ownerID, err := getOwnerID(ctx)
-	if err != nil {
-		return false
+	// Check if RPC endpoint can just do this.
+	{
+		ownerID, err := getOwnerID(ctx)
+		if err == nil {
+			row := db.QueryRow(fmt.Sprintf(`SELECT %s FROM users WHERE user_id=$1`, p), ownerID)
+			var v bool
+			if err := row.Scan(&v); err != nil {
+				log.Printf("Looking up user %v: %v", ownerID, err)
+			} else if v {
+				return true
+			}
+		}
 	}
 
 	// Take HTTP cookie into account, if present.
 	{
 		md, ok := grpcmetadata.FromContext(ctx)
 		if ok {
-			if v, _ := md["http.cookie"]; len(v) > 0 && v[0] == *secretTODO {
-				return true
+			if v, _ := md["jwt"]; len(v) > 0 {
+				if u, err := verifyJWT(ctx, v[0]); err == nil {
+					row := db.QueryRow(fmt.Sprintf(`SELECT %s FROM users WHERE email=$1`, p), u)
+					var v bool
+					if err := row.Scan(&v); err == sql.ErrNoRows {
+					} else if err != nil {
+						log.Printf("Looking up email %v: %v", u, err)
+					} else if v {
+						return true
+					}
+				}
 			}
 		}
 	}
-
-	row := db.QueryRow(fmt.Sprintf(`SELECT %s FROM users WHERE user_id=$1`, p), ownerID)
-	var v bool
-	if err := row.Scan(&v); err != nil {
-		log.Printf("Looking up user %v: %v", ownerID, err)
-		return false
-	}
-	return v
+	return false
 }
 
 func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, error) {
