@@ -930,8 +930,6 @@ func verifyJWT(ctx context.Context, t string) (string, string, error) {
 	if !ok || oauthSubject == "" {
 		return "", "", fmt.Errorf("missing oauthSubject")
 	}
-	log.Printf("%+v", token)
-	log.Printf("%+v", token.Claims)
 	return email, oauthSubject, nil
 }
 
