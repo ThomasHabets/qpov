@@ -52,6 +52,7 @@ var (
 	minLeaseRenewTime     = flag.Duration("min_lease_renew_time", time.Hour, "Minimum lease renew time.")
 	maxLeaseRenewTime     = flag.Duration("max_lease_renew_time", 48*time.Hour, "Minimum lease renew time.")
 	defaultLeaseRenewTime = flag.Duration("default_lease_time", time.Hour, "Default lease renew time.")
+	oauthClientID         = flag.String("oauth_client_id", "", "Google OAuth Client ID.")
 
 	// Cloud config.
 	cloudCredentials    = flag.String("cloud_credentials", "", "Path to JSON file containing credentials.")
@@ -59,6 +60,11 @@ var (
 	downloadBucketNames = flag.String("cloud_download_buckets", "", "Google cloud storage bucket name to read from.")
 
 	errNoCert = errors.New("no cert provided")
+
+	validOAuthIssuers = map[string]bool{
+		"accounts.google.com":         true,
+		"https://accounts.google.com": true,
+	}
 )
 
 const (
@@ -894,22 +900,38 @@ func lookupOAuthKey(s string) (interface{}, error) {
 	return v, nil
 }
 
-func verifyJWT(ctx context.Context, t string) (string, error) {
+// verify JWT and return email and oauthSubject.
+func verifyJWT(ctx context.Context, t string) (string, string, error) {
 	token, err := jwt.Parse(t, func(token *jwt.Token) (interface{}, error) {
 		return lookupOAuthKey(token.Header["kid"].(string))
 	})
 
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if !token.Valid {
-		return "", fmt.Errorf("invalid token")
+		return "", "", fmt.Errorf("invalid token")
 	}
 	if t, _ := token.Claims["email_verified"].(bool); !t {
-		return "", fmt.Errorf("email not verified")
+		return "", "", fmt.Errorf("email not verified")
 	}
-	email, _ := token.Claims["email"].(string)
-	return email, nil
+	if t, _ := token.Claims["aud"].(string); t == "" || t != *oauthClientID {
+		return "", "", fmt.Errorf("incorrect client ID %q", t)
+	}
+	if t, _ := token.Claims["iss"].(string); !validOAuthIssuers[t] {
+		return "", "", fmt.Errorf("invalid issuer ID %q", t)
+	}
+	email, ok := token.Claims["email"].(string)
+	if !ok || email == "" {
+		return "", "", fmt.Errorf("missing email")
+	}
+	oauthSubject, ok := token.Claims["sub"].(string)
+	if !ok || oauthSubject == "" {
+		return "", "", fmt.Errorf("missing oauthSubject")
+	}
+	log.Printf("%+v", token)
+	log.Printf("%+v", token.Claims)
+	return email, oauthSubject, nil
 }
 
 // Block access for end-users that don't have the right cookie set.
@@ -926,22 +948,52 @@ func blockRestrictedUser(ctx context.Context) error {
 		return errPerUserCredentials
 	}
 
-	e, err := verifyJWT(ctx, v[0])
+	e, sub, err := verifyJWT(ctx, v[0])
 	if err != nil {
 		log.Printf("verifyJWT: %v", err)
 		return errPerUserCredentials
 	}
 
 	var addr bool
-	if err := db.QueryRow(`SELECT addresses FROM users WHERE email=$1`, e).Scan(&addr); err == sql.ErrNoRows {
-	} else if err != nil {
-		log.Printf("Failed to read permissions: %v", err)
-		return errPerUserCredentials
+	var dbEmail string
+	getBySub := func() error {
+		if err := db.QueryRow(`
+SELECT email,addresses
+FROM   users
+WHERE  oauth_subject=$1`, sub).Scan(&dbEmail, &addr); err != nil {
+			return err
+		}
+		if dbEmail != e {
+			log.Printf("Warning! oauth subject %q has changed email. database says %q, oauth says %q", sub, dbEmail, e)
+		}
+		return err
+	}
+
+	// First try by subject.
+	if err := getBySub(); err == sql.ErrNoRows {
+		// Subject not found. Update oauth_subject for any user with that email.
+		// Don't allow "stealing" email addresses.
+		// Email addresses should ONLY be added manually
+		// and ONLY used on first login to connect the DB entry to the oauth subject.
+		if _, err := db.Exec(`
+UPDATE users
+SET    oauth_subject=$2
+WHERE  email=$1
+AND    oauth_subject IS NULL
+`, e, sub); err == nil {
+			// Then try again.
+			getBySub()
+		} else if err == sql.ErrNoRows {
+		} else {
+			log.Printf("Failed to read permissions: %v", err)
+			return errPerUserCredentials
+		}
 	}
 	if !addr {
 		return errPerUserCredentials
 	}
 	return nil
+
 }
 
 func blockRestrictedAPIInternal(ctx context.Context) error {
@@ -998,12 +1050,12 @@ func userProperty(ctx context.Context, p string) bool {
 		md, ok := grpcmetadata.FromContext(ctx)
 		if ok {
 			if v, _ := md["jwt"]; len(v) > 0 {
-				if u, err := verifyJWT(ctx, v[0]); err == nil {
-					row := db.QueryRow(fmt.Sprintf(`SELECT %s FROM users WHERE email=$1`, p), u)
+				if email, sub, err := verifyJWT(ctx, v[0]); err == nil {
+					row := db.QueryRow(fmt.Sprintf(`SELECT %s FROM users WHERE oauth_subject=$1`, p), sub)
 					var v bool
 					if err := row.Scan(&v); err == sql.ErrNoRows {
 					} else if err != nil {
-						log.Printf("Looking up email %v: %v", u, err)
+						log.Printf("Looking up subject %s/%s: %v", email, sub, err)
 					} else if v {
 						return true
 					}
