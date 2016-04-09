@@ -70,6 +70,8 @@ func httpContext(r *http.Request) context.Context {
 	if c, err := r.Cookie("qpov"); err == nil {
 		ctx = context.WithValue(ctx, "http.cookie", c.Value)
 	}
+	// TODO: instead of setting a JWT cookie and forwarding it all the time,
+	// only send it once and hand back a UUID in cookie form.
 	if c, err := r.Cookie("jwt"); err == nil {
 		ctx = context.WithValue(ctx, "jwt", c.Value)
 	}
