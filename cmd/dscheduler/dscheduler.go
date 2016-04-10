@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/ThomasHabets/go-uuid/uuid"
-	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/golang/protobuf/proto"
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
@@ -61,6 +60,7 @@ var (
 
 	errNoCert = errors.New("no cert provided")
 
+	oauthKeys         *OAuthKeys
 	validOAuthIssuers = map[string]bool{
 		"accounts.google.com":         true,
 		"https://accounts.google.com": true,
@@ -872,67 +872,6 @@ ORDER BY %s`, metadataCol, ordering)
 	return nil
 }
 
-var (
-	oauthKeysS = map[string]string{
-		// Google OAuth.
-		"6ffa18d15602f7c5d06ce6697d1dc00dd2ede610": "-----BEGIN CERTIFICATE-----\nMIIDJjCCAg6gAwIBAgIIWDnyvsBjdZcwDQYJKoZIhvcNAQEFBQAwNjE0MDIGA1UE\nAxMrZmVkZXJhdGVkLXNpZ25vbi5zeXN0ZW0uZ3NlcnZpY2VhY2NvdW50LmNvbTAe\nFw0xNjA0MDkwNTU4MzRaFw0xNjA0MTAxODU4MzRaMDYxNDAyBgNVBAMTK2ZlZGVy\nYXRlZC1zaWdub24uc3lzdGVtLmdzZXJ2aWNlYWNjb3VudC5jb20wggEiMA0GCSqG\nSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC0jMZyhV0JM1vr5ddVPi0mHes6YhcmxBYp\nMpdsR7HFSb9R5BZG42isfdWqZwyj/Fy9C2k+IEbGtpXWkq15EKQ4JWXQqZ5BXf+U\nxENgcpS6TLqZbHZKmcz/K+r7MhSYUqNUzQh/XH4Q5gb3s6WMWZfxgWOl7CPjAKH/\n1v8LSVmITc7oG+bcw0ou8s+J+IvVH8SWd3RcDdoKEuePvPFc6gQLm283XEUOJtDy\ncQ8tdkV+VFf+W2o/P6QDgdAIrZT8spW9eGArxgph8LqRRacT5RaSPz0KHPb2JSpe\nQGhcb5B85PihMExneD7PC0TQg/rj/Kqvhi/FcvosnbDErBHJwtx5AgMBAAGjODA2\nMAwGA1UdEwEB/wQCMAAwDgYDVR0PAQH/BAQDAgeAMBYGA1UdJQEB/wQMMAoGCCsG\nAQUFBwMCMA0GCSqGSIb3DQEBBQUAA4IBAQCwVnxpYt1hn2S37vEP7Ty167Hg/4js\nBM7rYjageUBMtmmnQLqrIFuAEC5/7s6xq+s7dTrG2j1PISaWLymk+v7aeBxkVR7/\nnHegmbHGSukl4Gd72xxe9U9rxbrgn6JIsC9tudutSm+wAS3ASnfmtfjZCyreqJQY\ncM+7a+3+hauOVRCCKdaznArv2O4O1yFACTuwJBx2FfhzlLjcFNci98bG14IlqrNQ\neBuz6As8H2xubQMlRUUTF2O4Wpka+Bf4LHWei/ahn2+DYmbv/FPsXaWSJPnFd9Gu\nFMmoAatBkzNkf3MBm8IDRRUTcsPBA160r2hMB9sYYGvNgVVa/3JZcOzQ\n-----END CERTIFICATE-----\n",
-		// Google OAuth.
-		"604c942611537ddac40cf5dd8f9301a6d96dc674": "-----BEGIN CERTIFICATE-----\nMIIDJjCCAg6gAwIBAgIIC1X+DaFC5K4wDQYJKoZIhvcNAQEFBQAwNjE0MDIGA1UE\nAxMrZmVkZXJhdGVkLXNpZ25vbi5zeXN0ZW0uZ3NlcnZpY2VhY2NvdW50LmNvbTAe\nFw0xNjA0MDgwNjEzMzRaFw0xNjA0MDkxOTEzMzRaMDYxNDAyBgNVBAMTK2ZlZGVy\nYXRlZC1zaWdub24uc3lzdGVtLmdzZXJ2aWNlYWNjb3VudC5jb20wggEiMA0GCSqG\nSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC/i1OrJ/9cUky/t9yBhETV5ADXcaMiqWxf\nrGU+M5SD39Dn87QwsFgAAtmH5iA3Jc1t7KjyjaY1SWEzTbwc0tPzozGlC59Kqti5\noxhTLUyCkyjZeshD7TJDNwDODGNEJt2JCTMGLw+vh8M0LbssTI6A5MWBfCe2X5DV\n/nyEN/GXBlGXiAhEljeioZWSDwnzutLDLkYWkgi61kCraV7wdQvfcRyBmj0DN/0h\nlUJ9ACGXIH4tCcL7Iog4OJ55f9C0QA9MHMXCbyDhFSr2Z778Mk+e5G+HFoFWG4Jl\nbbWiy+KuS5AKwTchzrmg+q0VfAo/+PqsRB0+d/jgtY8OQMhAlC2XAgMBAAGjODA2\nMAwGA1UdEwEB/wQCMAAwDgYDVR0PAQH/BAQDAgeAMBYGA1UdJQEB/wQMMAoGCCsG\nAQUFBwMCMA0GCSqGSIb3DQEBBQUAA4IBAQBTj6BUoGPSrsYSLfKCPIod30mNti+N\nVbXW3gwk6r8e/A0dZZmMvcDSEwAtsd29t4P2H8NzHQ/A/Ls5W814Q8l+CyJeHtQI\nTDS7ubvqY8/zfDYBbWb4jEgKgkwjGfZt9TA3c3NdNAdgQhSucclAXQcNoQr8l/eP\nAaB6qaT+wRirphbb3BhuuUWgPL+pxHD8x1nK3xEQJ1nGEQ38kzPyxWEl+dwN6vu2\nhMi0yKp2TRlNVt7jrNgtTCSHC+yZ5mrJx1izI1vWscinLXpazaFi58Xe+zsISEw8\nDcTbivUXVcssAjN0YhngJIv1omSGqvgLgnxk2Sk2bLLXy/bSkQ96GxQl\n-----END CERTIFICATE-----\n",
-	}
-	oauthKeys = make(map[string]interface{})
-)
-
-func init() {
-	for k, v := range oauthKeysS {
-		t, err := jwt.ParseRSAPublicKeyFromPEM([]byte(v))
-		if err != nil {
-			panic(err)
-		}
-		oauthKeys[k] = t
-	}
-}
-
-func lookupOAuthKey(s string) (interface{}, error) {
-	v, found := oauthKeys[s]
-	if !found {
-		return nil, fmt.Errorf("oauth key not found")
-	}
-	return v, nil
-}
-
-// verify JWT and return email and oauthSubject.
-func verifyJWT(ctx context.Context, t string) (string, string, error) {
-	parser := jwt.Parser{UseJSONNumber: true}
-	token, err := parser.Parse(t, func(token *jwt.Token) (interface{}, error) {
-		return lookupOAuthKey(token.Header["kid"].(string))
-	})
-
-	if err != nil {
-		return "", "", err
-	}
-	if !token.Valid {
-		return "", "", fmt.Errorf("invalid token")
-	}
-	if t, _ := token.Claims["email_verified"].(bool); !t {
-		return "", "", fmt.Errorf("email not verified")
-	}
-	if t, _ := token.Claims["aud"].(string); t == "" || t != *oauthClientID {
-		return "", "", fmt.Errorf("incorrect client ID %q", t)
-	}
-	if t, _ := token.Claims["iss"].(string); !validOAuthIssuers[t] {
-		return "", "", fmt.Errorf("invalid issuer ID %q", t)
-	}
-	email, ok := token.Claims["email"].(string)
-	if !ok || email == "" {
-		return "", "", fmt.Errorf("missing email")
-	}
-	oauthSubject, ok := token.Claims["sub"].(string)
-	if !ok || oauthSubject == "" {
-		return "", "", fmt.Errorf("missing oauthSubject")
-	}
-	return email, oauthSubject, nil
-}
-
 // Block access for end-users that don't have the right cookie set.
 // TODO: This function should allow *some* peer certs, and for others (web certs)
 // it should require the cookie to be set.
@@ -947,7 +886,7 @@ func blockRestrictedUser(ctx context.Context) error {
 		return errPerUserCredentials
 	}
 
-	e, sub, err := verifyJWT(ctx, v[0])
+	e, sub, err := oauthKeys.VerifyJWT(v[0])
 	if err != nil {
 		log.Printf("verifyJWT: %v", err)
 		return errPerUserCredentials
@@ -1049,7 +988,7 @@ func userProperty(ctx context.Context, p string) bool {
 		md, ok := grpcmetadata.FromContext(ctx)
 		if ok {
 			if v, _ := md["jwt"]; len(v) > 0 {
-				if email, sub, err := verifyJWT(ctx, v[0]); err == nil {
+				if email, sub, err := oauthKeys.VerifyJWT(v[0]); err == nil {
 					row := db.QueryRow(fmt.Sprintf(`SELECT %s FROM users WHERE oauth_subject=$1`, p), sub)
 					var v bool
 					if err := row.Scan(&v); err == sql.ErrNoRows {
@@ -1129,6 +1068,24 @@ func main() {
 	}
 
 	ctx := context.Background()
+
+	// Set up OAuth verifier.
+	{
+
+		var err error
+		oauthKeys, err = NewOAuthKeys(ctx, OAuthURLGoogle)
+		if err != nil {
+			log.Fatalf("OAuth setup failure: %v", err)
+		}
+		go func() {
+			for {
+				time.Sleep(time.Hour)
+				if err := oauthKeys.Update(ctx); err != nil {
+					log.Printf("Updating OAuthKeys: %v", err)
+				}
+			}
+		}()
+	}
 
 	// Connect to GCS.
 	{
