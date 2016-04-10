@@ -433,7 +433,7 @@ func connectScheduler(addr string) error {
 	cr := credentials.NewTLS(&tlsConfig)
 	conn, err := grpc.Dial(addr,
 		grpc.WithTransportCredentials(cr),
-		grpc.WithPerRPCCredentials(&perRPC{}),
+		grpc.WithPerRPCCredentials(dist.NewPerRPC(forwardRPCKeys)),
 		grpc.WithUserAgent(userAgent),
 	)
 	if err != nil {
@@ -441,26 +441,6 @@ func connectScheduler(addr string) error {
 	}
 	sched = pb.NewSchedulerClient(conn)
 	return nil
-}
-
-// perRPC is a magic callback that the gRPC framework calls on every RPC.
-// Here it's used to turn `context.Context` "values" into gRPC "Metadata".
-// On the other end of the RPC they can later be fetched using `grpcmetadata.FromContext(ctx)`
-type perRPC struct{}
-
-func (*perRPC) RequireTransportSecurity() bool {
-	return true
-}
-
-func (*perRPC) GetRequestMetadata(ctx context.Context, uri ...string) (map[string]string, error) {
-	ret := make(map[string]string)
-	for _, k := range forwardRPCKeys {
-		t, ok := ctx.Value(k).(string)
-		if ok {
-			ret[k] = t
-		}
-	}
-	return ret, nil
 }
 
 func main() {

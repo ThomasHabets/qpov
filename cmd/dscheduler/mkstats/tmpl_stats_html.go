@@ -65,7 +65,7 @@ const tmplsStatsHTML = `
       {{end}}
     </table>
 
-    <h2>Per frame machine CPU time</h2>
+    <h2>Per frame CPU core time</h2>
     <table>
       {{range .MachineStats}}
       <tr>

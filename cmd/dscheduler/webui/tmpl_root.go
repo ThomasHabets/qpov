@@ -127,7 +127,7 @@ tr:nth-child(odd) {
           <td nowrap>{{.ExpiresMs|fmsuntil}}</td>
           <!--  <td nowrap>{{.Order.Package|fileonly}}</td> -->
           <td nowrap>{{.Order.File}}</td>
-          <td nowrap>{{.Address}}</td>
+          <td nowrap>{{.Address}} {{.Hostname}}</td>
         </tr>
       {{end}}
     </table>
@@ -156,7 +156,7 @@ tr:nth-child(odd) {
           <td nowrap><a href="{{$root.Root}}/image/{{.LeaseId}}">Image</a></td>
           <!--  <td nowrap>{{.Order.Package|fileonly}}</td> -->
           <td nowrap>{{.Order.File}}</td>
-          <td nowrap>{{.Address}}</td>
+          <td nowrap>{{.Address}} {{.Hostname}}</td>
           <!--  <td nowrap>{{.Order.Args}}</td> -->
         </tr>
       {{end}}

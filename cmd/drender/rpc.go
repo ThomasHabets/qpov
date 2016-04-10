@@ -21,6 +21,8 @@ var (
 	caFile   = flag.String("ca_file", "", "Server CA file.")
 	certFile = flag.String("cert_file", "", "Client cert file.")
 	keyFile  = flag.String("key_file", "", "Client key file.")
+
+	forwardRPCKeys []string
 )
 
 const (
@@ -103,6 +105,7 @@ func newRPCScheduler(addr string) (scheduler, error) {
 	cr := credentials.NewTLS(&tlsConfig)
 	conn, err := grpc.Dial(addr,
 		grpc.WithTransportCredentials(cr),
+		grpc.WithPerRPCCredentials(dist.NewPerRPC(forwardRPCKeys)),
 		grpc.WithUserAgent(userAgent),
 	)
 	if err != nil {

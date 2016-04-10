@@ -186,10 +186,10 @@ func (s *server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetReply, erro
 	// TODO: Hand out expired and failed leases too.
 	row := tx.QueryRow(`
 SELECT orders.order_id, orders.definition
-FROM orders
+FROM   orders
 LEFT OUTER JOIN leases ON orders.order_id=leases.order_id
 WHERE leases.lease_id IS NULL
-OR (FALSE AND leases.expires < NOW() AND leases.done = FALSE)
+OR    (FALSE AND leases.expires < NOW() AND leases.done = FALSE)
 ORDER BY RANDOM()
 LIMIT 1`)
 
@@ -212,15 +212,15 @@ LIMIT 1`)
 	if _, err := tx.Exec(`
 INSERT INTO leases(
   lease_id, done, order_id,
-  user_id, client,
+  user_id, client, hostname,
   created, updated, expires
 )
 VALUES(
   $1, false, $2,
-  $3, $4,
-  NOW(), NOW(), $5
+  $3, $4, $5,
+  NOW(), NOW(), $6
 )
-`, lease, orderID, ownerID, clientAddress, time.Now().Add(*defaultLeaseRenewTime)); err != nil {
+`, lease, orderID, ownerID, clientAddress, getRPCMetadataSQL(ctx, "hostname"), time.Now().Add(*defaultLeaseRenewTime)); err != nil {
 		return nil, dbError("Inserting lease", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -237,6 +237,30 @@ VALUES(
 	return ret, nil
 }
 
+func getRPCMetadataSQL(ctx context.Context, s string) sql.NullString {
+	var ret sql.NullString
+	h, err := getRPCMetadata(ctx, s)
+	if err != nil {
+		log.Printf("Couldn't get metadata %q: %v", s, err)
+		return ret
+	}
+	ret.Valid = true
+	ret.String = h
+	return ret
+}
+
+func getRPCMetadata(ctx context.Context, s string) (string, error) {
+	md, ok := grpcmetadata.FromContext(ctx)
+	if !ok {
+		return "", fmt.Errorf("could not get RPC metadata")
+	}
+	v, _ := md[s]
+	if len(v) == 0 {
+		return "", fmt.Errorf("no %q in RPC metadata", s)
+	}
+	return v[0], nil
+}
+
 // renew is the backend for Renew().
 func (s *server) renew(ctx context.Context, lease, address string, secs int32) (time.Time, error) {
 	if secs <= 0 {
@@ -248,17 +272,19 @@ func (s *server) renew(ctx context.Context, lease, address string, secs int32) (
 	if secs < int32(minLeaseRenewTime.Seconds()) {
 		secs = int32(minLeaseRenewTime.Seconds())
 	}
+
 	n := time.Now().Add(time.Duration(int64(time.Second) * int64(secs)))
 	if _, err := db.Exec(`
 UPDATE leases
 SET
     updated=NOW(),
     expires=$1,
-    client=$3
+    client=$3,
+    hostname=$4
 WHERE lease_id=$2
 AND   done=FALSE
 AND   failed=FALSE
-`, n, lease, address); err != nil {
+`, n, lease, address, getRPCMetadataSQL(ctx, "hostname")); err != nil {
 		return time.Now(), dbError("Updating lease", err)
 	}
 	return n, nil
@@ -792,6 +818,7 @@ SELECT
   updated,
   expires,
   client,
+  hostname,
   leases.done,
   %s
 FROM leases
@@ -817,9 +844,9 @@ ORDER BY %s`, metadataCol, ordering)
 		var created, updated, expires time.Time
 		var metadata *string
 		var def string
-		var client sql.NullString
+		var client, clientHostname sql.NullString
 		var done bool
-		if err := rows.Scan(&orderID, &def, &leaseID, &userID, &created, &updated, &expires, &client, &done, &metadata); err != nil {
+		if err := rows.Scan(&orderID, &def, &leaseID, &userID, &created, &updated, &expires, &client, &clientHostname, &done, &metadata); err != nil {
 			return dbError("Scanning leases", err)
 		}
 		var order *pb.Order
@@ -845,6 +872,9 @@ ORDER BY %s`, metadataCol, ordering)
 		}
 		if userPropertyAddresses {
 			e.Lease.Address = client.String
+		}
+		if userPropertyAddresses {
+			e.Lease.Hostname = clientHostname.String
 		}
 		if userID != nil {
 			e.Lease.UserId = int64(*userID)

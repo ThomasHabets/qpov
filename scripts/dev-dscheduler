@@ -9,6 +9,7 @@ DBHOST=127.0.0.1
 # DBPASSWORD=
 # CLOUD_CREDENTIALS=
 # CLOUD_BUCKET=
+# CLOUD_OAUTHID=
 source dev-dscheduler.conf
 
 # Copy production database, but remove most orders.
@@ -32,7 +33,7 @@ exec ./dscheduler \
     -cloud_download_buckets="$CLOUD_BUCKET" \
     -cert_file=qpov.retrofitta.se.crt \
     -key_file=qpov.retrofitta.se.key \
+    -oauth_client_id="$CLOUD_OAUTHID" \
     -client_ca_file="$HOME/go/qpov/ca.crt" \
     -rpclog_dir=dev/rpclog/ \
-    -secret_TODO=secret \
     -min_lease_renew_time=30s

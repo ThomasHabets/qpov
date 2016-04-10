@@ -77,6 +77,7 @@ message Lease {
         RenderingMetadata metadata = 9;
         bool failed = 10;
         string address = 11;  // Last communication came from here.
+        string hostname = 12; // Hostname of that node (if available).
 }
 
 message LeaseRequest {
