@@ -173,7 +173,7 @@ func render(n int, order *dist.Order) (*pb.RenderingMetadata, error) {
 	var args []string
 	if *idle {
 		bin = *schedtool
-		args = append(args, "-D", "-e", *povray)
+		args = append(args, "-D", "-n", "19", "-e", *povray)
 	} else {
 		bin = *povray
 	}
