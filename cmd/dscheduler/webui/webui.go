@@ -57,6 +57,9 @@ var (
 	root          = flag.String("root", "", "Path under root of domain that the web UI runs.")
 	oauthClientID = flag.String("oauth_client_id", "", "Google OAuth Client ID.")
 
+	// TODO: move to GCS?
+	statsDir = flag.String("stats_dir", "", "Dir containing stats data.")
+
 	sched    pb.SchedulerClient
 	tmplRoot template.Template
 
@@ -245,7 +248,7 @@ func handleLease(ctx context.Context, w http.ResponseWriter, r *http.Request) (i
 }
 
 func handleStats(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
-	f, err := os.Open("/var/www/tmp/qpovstats/overall.pb")
+	f, err := os.Open(path.Join(*statsDir, "overall.pb"))
 	if err != nil {
 		return nil, err
 	}
@@ -258,11 +261,16 @@ func handleStats(ctx context.Context, w http.ResponseWriter, r *http.Request) (i
 	if err := proto.Unmarshal(b, stats); err != nil {
 		return nil, err
 	}
-	return stats, nil
+	return &struct {
+		Stats *pb.StatsOverall
+		Root  *string
+	}{
+		Stats: stats,
+		Root:  root,
+	}, nil
 }
 
 func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
-	startTime := time.Now()
 	var errs []error
 	var m sync.Mutex
 	var wg sync.WaitGroup
@@ -318,22 +326,18 @@ func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 		log.Printf("Errors: %v", errs)
 	}
 	ret := &struct {
-		OAuthClientID   string
 		Root            string
 		Stats           *pb.StatsReply
 		Leases          []*pb.Lease
 		DoneLeases      []*pb.Lease
 		UnstartedOrders int64
 		Errors          []error
-		PageTime        time.Duration
 	}{
-		OAuthClientID: *oauthClientID,
-		Root:          *root,
-		Stats:         st,
-		Leases:        leases,
-		DoneLeases:    doneLeases,
-		Errors:        errs,
-		PageTime:      time.Since(startTime),
+		Root:       *root,
+		Stats:      st,
+		Leases:     leases,
+		DoneLeases: doneLeases,
+		Errors:     errs,
 	}
 	if st != nil {
 		ret.UnstartedOrders = st.SchedulingStats.Orders - st.SchedulingStats.DoneOrders
@@ -365,6 +369,7 @@ func (e *httpErr) Error() string {
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Strict-Transport-Security", "max-age=2592000")
 	ctx, cancel := context.WithTimeout(httpContext(r), *pageDeadline)
 	defer cancel()
@@ -391,8 +396,28 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Internal error: Failed to render page")
 		return
 	}
+
+	var buf2 bytes.Buffer
+	if err := tmplDesign.Execute(&buf2, &struct {
+		OAuthClientID string
+		Root          string
+		Errors        []string
+		Content       template.HTML
+		PageTime      time.Duration
+	}{
+		OAuthClientID: *oauthClientID,
+		Root:          *root,
+		Content:       template.HTML(buf.String()),
+		PageTime:      time.Since(startTime),
+	}); err != nil {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("Template rendering failed: %v", err)
+		fmt.Fprintf(w, "Internal error: Failed to render page")
+		return
+	}
 	if r.Method != "HEAD" {
-		if _, err := w.Write(buf.Bytes()); err != nil {
+		if _, err := w.Write(buf2.Bytes()); err != nil {
 			log.Printf("Failed to write page to network: %v", err)
 			return
 		}
@@ -495,6 +520,7 @@ func main() {
 	r.HandleFunc(path.Join("/", *root, "image/{leaseID}"), handleImage).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "lease/{leaseID}"), wrap(handleLease, leaseTmpl)).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "stats"), wrapTmpl(handleStats, dist.TmplStatsHTML)).Methods("GET", "HEAD")
+	r.Handle(path.Join("/", *root, "stats/{blaha}"), http.FileServer(http.Dir(*statsDir))).Methods("GET", "HEAD")
 	log.Printf("Running dscheduler webui...")
 	if err := fcgi.Serve(sock, r); err != nil {
 		log.Fatal("Failed to start serving fcgi: ", err)
