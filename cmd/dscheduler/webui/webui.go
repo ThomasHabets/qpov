@@ -34,16 +34,8 @@ const (
 	userAgent = "dscheduler-webui"
 
 	leaseTmpl = `
-<html>
-  <head>
-  </head>
-  <body>
-    <h1>Lease {{.Lease.LeaseId}}</h1>
-    <pre>{{.Ascii}}</pre>
-    <hr>
-    Page server time: {{.PageTime}}
-  </body>
-</html>
+<h1>Lease {{.Lease.LeaseId}}</h1>
+<pre>{{.Ascii}}</pre>
 `
 )
 
@@ -208,7 +200,6 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleLease(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
-	startTime := time.Now()
 	ctx, cancel := context.WithTimeout(httpContext(r), 10*time.Second)
 	defer cancel()
 
@@ -235,15 +226,13 @@ func handleLease(ctx context.Context, w http.ResponseWriter, r *http.Request) (i
 		}
 	}
 	return &struct {
-		Root     string
-		Lease    *pb.Lease
-		Ascii    string
-		PageTime time.Duration
+		Root  string
+		Lease *pb.Lease
+		Ascii string
 	}{
-		Root:     *root,
-		Lease:    reply.Lease,
-		Ascii:    proto.MarshalTextString(reply.Lease),
-		PageTime: time.Since(startTime),
+		Root:  *root,
+		Lease: reply.Lease,
+		Ascii: proto.MarshalTextString(reply.Lease),
 	}, nil
 }
 
