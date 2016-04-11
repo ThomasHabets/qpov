@@ -368,7 +368,10 @@ func main() {
 			log.Fatal(err)
 		}
 		defer fo.Close()
-		if err := dist.TmplStatsHTML.Execute(fo, stats); err != nil {
+		if err := dist.TmplStatsHTML.Execute(fo, &struct {
+			Root  *string
+			Stats *pb.StatsOverall
+		}{Stats: stats}); err != nil {
 			log.Fatal(err)
 		}
 		if err := fo.Close(); err != nil {
