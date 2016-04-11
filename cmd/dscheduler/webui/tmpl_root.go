@@ -81,7 +81,8 @@ tr:nth-child(odd) {
 </style>
   </head>
   <div id="nav">
-    QPov
+    <span><a href="{{$root.Root}}/">QPov</a></span>
+    <span><a href="{{$root.Root}}/stats">Stats</a></span>
     <div id="gbuttons">
       <div class="g-signin2" data-onsuccess="onSignIn" data-theme="dark"></div>
     </div>

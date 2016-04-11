@@ -17,6 +17,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	_ "github.com/lib/pq"
 
+	"github.com/ThomasHabets/qpov/dist"
 	pb "github.com/ThomasHabets/qpov/dist/qpov"
 )
 
@@ -304,21 +305,6 @@ func formatFloat(in float64) string {
 	return fmt.Sprintf("%s%s", formatInt(int64(i)), fs)
 }
 
-func formatDuration(t time.Duration) string {
-	h, m, s := int(t.Hours()), int(t.Minutes()), int(t.Seconds())
-	d := h / 24
-	y := d / 365
-	d %= 365
-	h %= 24
-	m %= 60
-	s %= 60
-	return fmt.Sprintf("%4dy %3dd %2dh %2dm %2ds", y, d, h, m, s)
-}
-
-func fmtSecondDuration(e int64) string {
-	return formatDuration(time.Second * time.Duration(e))
-}
-
 func main() {
 	flag.Parse()
 	if flag.NArg() > 0 {
@@ -351,7 +337,7 @@ func main() {
 	}
 
 	if false {
-		if err := tmplStatsText.Execute(os.Stdout, stats); err != nil {
+		if err := dist.TmplStatsText.Execute(os.Stdout, stats); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -382,7 +368,7 @@ func main() {
 			log.Fatal(err)
 		}
 		defer fo.Close()
-		if err := tmplStatsHTML.Execute(fo, stats); err != nil {
+		if err := dist.TmplStatsHTML.Execute(fo, stats); err != nil {
 			log.Fatal(err)
 		}
 		if err := fo.Close(); err != nil {

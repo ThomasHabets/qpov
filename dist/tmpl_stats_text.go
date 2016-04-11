@@ -1,8 +1,9 @@
-package main
+package dist
 
 import (
 	"fmt"
 	"text/template"
+	"time"
 
 	pb "github.com/ThomasHabets/qpov/dist/qpov"
 )
@@ -27,7 +28,7 @@ Per frame machine CPU time:
 {{end}}`
 
 var (
-	tmplStatsText  *template.Template
+	TmplStatsText  *template.Template
 	tmplStatsFuncs = map[string]interface{}{
 		"sprintf": fmt.Sprintf,
 		"sumcpu":  func(c *pb.StatsCPUTime) int64 { return c.UserSeconds + c.SystemSeconds },
@@ -42,8 +43,23 @@ var (
 	}
 )
 
+func formatDuration(t time.Duration) string {
+	h, m, s := int(t.Hours()), int(t.Minutes()), int(t.Seconds())
+	d := h / 24
+	y := d / 365
+	d %= 365
+	h %= 24
+	m %= 60
+	s %= 60
+	return fmt.Sprintf("%4dy %3dd %2dh %2dm %2ds", y, d, h, m, s)
+}
+
+func fmtSecondDuration(e int64) string {
+	return formatDuration(time.Second * time.Duration(e))
+}
+
 func init() {
-	tmplStatsText = template.New("tmpl_stats_text")
-	tmplStatsText.Funcs(tmplStatsFuncs)
-	template.Must(tmplStatsText.Parse(tmplsStatsText))
+	TmplStatsText = template.New("tmpl_stats_text")
+	TmplStatsText.Funcs(tmplStatsFuncs)
+	template.Must(TmplStatsText.Parse(tmplsStatsText))
 }

@@ -1,11 +1,11 @@
 // -*- html -*-
-package main
+package dist
 
 import (
 	"html/template"
 )
 
-var tmplStatsHTML *template.Template
+var TmplStatsHTML *template.Template
 
 const tmplsStatsHTML = `
 <html>
@@ -80,7 +80,7 @@ const tmplsStatsHTML = `
 `
 
 func init() {
-	tmplStatsHTML = template.New("tmpl_stats_html")
-	tmplStatsHTML.Funcs(tmplStatsFuncs)
-	template.Must(tmplStatsHTML.Parse(tmplsStatsHTML))
+	TmplStatsHTML = template.New("tmpl_stats_html")
+	TmplStatsHTML.Funcs(tmplStatsFuncs)
+	template.Must(TmplStatsHTML.Parse(tmplsStatsHTML))
 }

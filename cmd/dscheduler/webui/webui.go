@@ -244,6 +244,23 @@ func handleLease(ctx context.Context, w http.ResponseWriter, r *http.Request) (i
 	}, nil
 }
 
+func handleStats(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
+	f, err := os.Open("/var/www/tmp/qpovstats/overall.pb")
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	b, err := ioutil.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+	stats := &pb.StatsOverall{}
+	if err := proto.Unmarshal(b, stats); err != nil {
+		return nil, err
+	}
+	return stats, nil
+}
+
 func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
 	startTime := time.Now()
 	var errs []error
@@ -392,6 +409,10 @@ func wrap(f handleFunc, t string) *handler {
 		"fileonly": path.Base,
 	})
 	template.Must(tmpl.Parse(t))
+	return wrapTmpl(f, tmpl)
+}
+
+func wrapTmpl(f handleFunc, tmpl *template.Template) *handler {
 	return &handler{f: f, tmpl: tmpl}
 }
 
@@ -473,6 +494,7 @@ func main() {
 	r.Handle(*root+"/", wrap(handleRoot, rootTmpl)).Methods("GET", "HEAD")
 	r.HandleFunc(path.Join("/", *root, "image/{leaseID}"), handleImage).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "lease/{leaseID}"), wrap(handleLease, leaseTmpl)).Methods("GET", "HEAD")
+	r.Handle(path.Join("/", *root, "stats"), wrapTmpl(handleStats, dist.TmplStatsHTML)).Methods("GET", "HEAD")
 	log.Printf("Running dscheduler webui...")
 	if err := fcgi.Serve(sock, r); err != nil {
 		log.Fatal("Failed to start serving fcgi: ", err)
