@@ -12,12 +12,12 @@ var tmplDesign = template.Must(template.New("design").Parse(`
     <title>QPov</title>
     <meta name="google-signin-scope" content="email">
     <meta name="google-signin-client_id" content="{{.OAuthClientID}}">
+    <script type="text/javascript" src="//ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
     <script src="https://apis.google.com/js/platform.js" async defer></script>
     <script>
     function signOut() {
       var auth2 = gapi.auth2.getAuthInstance();
       auth2.signOut().then(function () {});
-      document.cookie = "jwt=;max-age=0";
       location.reload();
     }
     function onSignIn(googleUser) {
@@ -28,11 +28,13 @@ var tmplDesign = template.Must(template.New("design").Parse(`
       }
       document.getElementById("sign-out").style.display = "inline";
       document.getElementById("profile-email").innerHTML = profile.getEmail();
-      document.cookie = "jwt=" + googleUser.getAuthResponse().id_token + ";secure";
-      // TODO: do ajax call to exchange for qpov cookie that is httponly, and
-      // delete the jwt cookie. The reload can then happen when new login, and
-      // do a refresh. Also the jwt cookie is pretty big.
-      // location.reload();
+      $.post("{{$root.Root}}/login", {"jwt": googleUser.getAuthResponse().id_token},
+          function() {
+            // TODO: if we just logged in for the first time: reload.
+            // location.reload();
+            console.log("Logged in OK");
+        }
+      );
     };
   </script>
 <style>

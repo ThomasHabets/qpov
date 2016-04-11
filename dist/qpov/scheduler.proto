@@ -2,6 +2,21 @@ syntax = "proto3";
 package qpov;
 import "order.proto";
 import "metadata.proto";
+
+// CookieMonster keeps login state keyed by cookie.
+service CookieMonster {
+        rpc Login (LoginRequest) returns (LoginReply) {}
+}
+
+message LoginRequest {
+        string cookie = 1; // If existing.
+        string jwt = 2;
+}
+
+message LoginReply {
+        string cookie = 1;
+}
+
 service Scheduler {
         // Render client API.
         rpc Get (GetRequest) returns (GetReply) {}

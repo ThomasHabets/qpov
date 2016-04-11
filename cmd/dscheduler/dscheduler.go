@@ -173,6 +173,37 @@ func clientAddressFromContext(ctx context.Context) (string, error) {
 	return client, nil
 }
 
+func (s *server) Login(ctx context.Context, in *pb.LoginRequest) (*pb.LoginReply, error) {
+	if err := blockRestrictedAPI(ctx); err != nil {
+		return nil, err
+	}
+
+	if _, _, err := oauthKeys.VerifyJWT(in.Jwt); err != nil {
+		log.Printf("RPC(Login): %v", err)
+		return nil, fmt.Errorf("failed to verify jwt")
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, dbError("begin transaction", err)
+	}
+	defer tx.Rollback()
+
+	c := in.Cookie
+	if c == "" {
+		c = uuid.New()
+	}
+	if _, err := tx.Exec(`DELETE FROM cookies WHERE cookie=$1`, c); err != nil {
+		return nil, dbError("clearing old cookie", err)
+	}
+	if _, err := tx.Exec(`INSERT INTO cookies(cookie, jwt) VALUES($1, $2)`, c, in.Jwt); err != nil {
+		return nil, dbError("saving cookie", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, dbError("Committing transaction", err)
+	}
+	return &pb.LoginReply{Cookie: c}, nil
+}
+
 func (s *server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetReply, error) {
 	st := time.Now()
 	requestID := uuid.New()
@@ -902,66 +933,21 @@ ORDER BY %s`, metadataCol, ordering)
 	return nil
 }
 
+func getJWTFromCookie(v string) (string, error) {
+	var j string
+	if err := db.QueryRow(`SELECT jwt FROM cookies WHERE cookie=$1`, v).Scan(&j); err != nil {
+		return "", err
+	}
+	return j, nil
+}
+
 // Block access for end-users that don't have the right cookie set.
-// TODO: This function should allow *some* peer certs, and for others (web certs)
-// it should require the cookie to be set.
+// TODO: remove this function since it just calls another?
 func blockRestrictedUser(ctx context.Context) error {
-	errPerUserCredentials := grpc.Errorf(codes.Unauthenticated, "need per-user credentials for this resource")
-	md, ok := grpcmetadata.FromContext(ctx)
-	if !ok {
-		return errPerUserCredentials
-	}
-	v, _ := md["jwt"]
-	if len(v) == 0 {
-		return errPerUserCredentials
-	}
-
-	e, sub, err := oauthKeys.VerifyJWT(v[0])
-	if err != nil {
-		log.Printf("verifyJWT: %v", err)
-		return errPerUserCredentials
-	}
-
-	var addr bool
-	var dbEmail string
-	getBySub := func() error {
-		if err := db.QueryRow(`
-SELECT email,addresses
-FROM   users
-WHERE  oauth_subject=$1`, sub).Scan(&dbEmail, &addr); err != nil {
-			return err
-		}
-		if dbEmail != e {
-			log.Printf("Warning! oauth subject %q has changed email. database says %q, oauth says %q", sub, dbEmail, e)
-		}
-		return err
-	}
-
-	// First try by subject.
-	if err := getBySub(); err == sql.ErrNoRows {
-		// Subject not found. Update oauth_subject for any user with that email.
-		// Don't allow "stealing" email addresses.
-		// Email addresses should ONLY be added manually
-		// and ONLY used on first login to connect the DB entry to the oauth subject.
-		if _, err := db.Exec(`
-UPDATE users
-SET    oauth_subject=$2
-WHERE  email=$1
-AND    oauth_subject IS NULL
-`, e, sub); err == nil {
-			// Then try again.
-			getBySub()
-		} else if err == sql.ErrNoRows {
-		} else {
-			log.Printf("Failed to read permissions: %v", err)
-			return errPerUserCredentials
-		}
-	}
-	if !addr {
-		return errPerUserCredentials
+	if !userProperty(ctx, "addresses") {
+		return grpc.Errorf(codes.Unauthenticated, "need per-user credentials for this resource")
 	}
 	return nil
-
 }
 
 func blockRestrictedAPIInternal(ctx context.Context) error {
@@ -1013,25 +999,64 @@ func userProperty(ctx context.Context, p string) bool {
 		}
 	}
 
+	var prop bool
 	// Take HTTP cookie into account, if present.
-	{
+	func() {
 		md, ok := grpcmetadata.FromContext(ctx)
-		if ok {
-			if v, _ := md["jwt"]; len(v) > 0 {
-				if email, sub, err := oauthKeys.VerifyJWT(v[0]); err == nil {
-					row := db.QueryRow(fmt.Sprintf(`SELECT %s FROM users WHERE oauth_subject=$1`, p), sub)
-					var v bool
-					if err := row.Scan(&v); err == sql.ErrNoRows {
-					} else if err != nil {
-						log.Printf("Looking up subject %s/%s: %v", email, sub, err)
-					} else if v {
-						return true
-					}
-				}
-			}
+		if !ok {
+			return
 		}
-	}
-	return false
+
+		v, _ := md["http.cookie"]
+		if len(v) == 0 {
+			return
+		}
+
+		j, err := getJWTFromCookie(v[0])
+		if err != nil {
+			log.Printf("Failed to get JWT from cookie %q: %v", v[0], err)
+			return
+		}
+
+		email, sub, err := oauthKeys.VerifyJWT(j)
+		if err != nil {
+			log.Printf("Failed to verify JWT: %v", err)
+			return
+		}
+
+		getBySub := func() (bool, error) {
+			row := db.QueryRow(fmt.Sprintf(`SELECT email,%s FROM users WHERE oauth_subject=$1`, p), sub)
+			var v bool
+			var dbEmail string
+			if err := row.Scan(&dbEmail, &v); err != nil {
+				return false, err
+			}
+			if dbEmail != email {
+				log.Printf("Warning! oauth subject %q has changed email. database says %q, oauth says %q", sub, dbEmail, email)
+			}
+			return v, nil
+		}
+		if prop, err = getBySub(); err == nil {
+			return
+		} else if err != sql.ErrNoRows {
+			return
+		}
+		// Subject not found. Update oauth_subject for any user with that email.
+		// Don't allow "stealing" email addresses.
+		// Email addresses should ONLY be added manually
+		// and ONLY used on first login to connect the DB entry to the oauth subject.
+		if _, err := db.Exec(`
+UPDATE users
+SET    oauth_subject=$2
+WHERE  email=$1
+AND    oauth_subject IS NULL
+`, email, sub); err != nil {
+			return
+		}
+		// Then try again.
+		prop, _ = getBySub()
+	}()
+	return prop
 }
 
 func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, error) {
@@ -1192,7 +1217,9 @@ func main() {
 
 	// Create RPC server.
 	s := grpc.NewServer(opts...)
-	pb.RegisterSchedulerServer(s, &server{rpcLog: l})
+	serv := server{rpcLog: l}
+	pb.RegisterSchedulerServer(s, &serv)
+	pb.RegisterCookieMonsterServer(s, &serv)
 
 	// Run forever.
 	log.Printf("Running...")

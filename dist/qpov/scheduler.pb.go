@@ -18,6 +18,23 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+type LoginRequest struct {
+	Cookie string `protobuf:"bytes,1,opt,name=cookie" json:"cookie,omitempty"`
+	Jwt    string `protobuf:"bytes,2,opt,name=jwt" json:"jwt,omitempty"`
+}
+
+func (m *LoginRequest) Reset()         { *m = LoginRequest{} }
+func (m *LoginRequest) String() string { return proto.CompactTextString(m) }
+func (*LoginRequest) ProtoMessage()    {}
+
+type LoginReply struct {
+	Cookie string `protobuf:"bytes,1,opt,name=cookie" json:"cookie,omitempty"`
+}
+
+func (m *LoginReply) Reset()         { *m = LoginReply{} }
+func (m *LoginReply) String() string { return proto.CompactTextString(m) }
+func (*LoginReply) ProtoMessage()    {}
+
 type GetRequest struct {
 }
 
@@ -283,6 +300,63 @@ func (*ResultReply) ProtoMessage()    {}
 // Reference imports to suppress errors if they are not otherwise used.
 var _ context.Context
 var _ grpc.ClientConn
+
+// Client API for CookieMonster service
+
+type CookieMonsterClient interface {
+	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginReply, error)
+}
+
+type cookieMonsterClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewCookieMonsterClient(cc *grpc.ClientConn) CookieMonsterClient {
+	return &cookieMonsterClient{cc}
+}
+
+func (c *cookieMonsterClient) Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginReply, error) {
+	out := new(LoginReply)
+	err := grpc.Invoke(ctx, "/qpov.CookieMonster/Login", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Server API for CookieMonster service
+
+type CookieMonsterServer interface {
+	Login(context.Context, *LoginRequest) (*LoginReply, error)
+}
+
+func RegisterCookieMonsterServer(s *grpc.Server, srv CookieMonsterServer) {
+	s.RegisterService(&_CookieMonster_serviceDesc, srv)
+}
+
+func _CookieMonster_Login_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+	in := new(LoginRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	out, err := srv.(CookieMonsterServer).Login(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+var _CookieMonster_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "qpov.CookieMonster",
+	HandlerType: (*CookieMonsterServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Login",
+			Handler:    _CookieMonster_Login_Handler,
+		},
+	},
+	Streams: []grpc.StreamDesc{},
+}
 
 // Client API for Scheduler service
 

@@ -52,10 +52,11 @@ var (
 	// TODO: move to GCS?
 	statsDir = flag.String("stats_dir", "", "Dir containing stats data.")
 
-	sched    pb.SchedulerClient
-	tmplRoot template.Template
+	sched         pb.SchedulerClient
+	cookieMonster pb.CookieMonsterClient
+	tmplRoot      template.Template
 
-	forwardRPCKeys = []string{"id", "source", "http.remote_addr", "http.cookie", "jwt"}
+	forwardRPCKeys = []string{"id", "source", "http.remote_addr", "http.cookie"}
 )
 
 func httpContext(r *http.Request) context.Context {
@@ -65,11 +66,6 @@ func httpContext(r *http.Request) context.Context {
 	ctx = context.WithValue(ctx, "http.remote_addr", r.RemoteAddr)
 	if c, err := r.Cookie("qpov"); err == nil {
 		ctx = context.WithValue(ctx, "http.cookie", c.Value)
-	}
-	// TODO: instead of setting a JWT cookie and forwarding it all the time,
-	// only send it once and hand back a UUID in cookie form.
-	if c, err := r.Cookie("jwt"); err == nil {
-		ctx = context.WithValue(ctx, "jwt", c.Value)
 	}
 	return ctx
 }
@@ -126,6 +122,37 @@ func rpcErrorToHTTPError(err error) int {
 		return http.StatusInternalServerError
 	}
 	return n
+}
+
+func handleLogin(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(httpContext(r), time.Minute)
+	defer cancel()
+
+	j := r.PostFormValue("jwt")
+
+	// Reuse old cookie, if available.
+	var q string
+	if c, err := r.Cookie("qpov"); err == nil {
+		q = c.Value
+	}
+
+	resp, err := cookieMonster.Login(ctx, &pb.LoginRequest{Jwt: j, Cookie: q})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("Login: failed to RPC: %v", err)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "qpov",
+		Value:    resp.Cookie,
+		HttpOnly: true,
+		MaxAge:   30 * 86400,
+		Secure:   true,
+	})
+	w.Header().Set("Content-Type", "text/plain")
+	if _, err := w.Write([]byte("OK\n")); err != nil {
+		log.Printf("Login: failed to write: %v", err)
+	}
 }
 
 func handleImage(w http.ResponseWriter, r *http.Request) {
@@ -465,16 +492,20 @@ func connectScheduler(addr string) error {
 		tlsConfig.Certificates = []tls.Certificate{cert}
 	}
 
-	cr := credentials.NewTLS(&tlsConfig)
-	conn, err := grpc.Dial(addr,
-		grpc.WithTransportCredentials(cr),
-		grpc.WithPerRPCCredentials(dist.NewPerRPC(forwardRPCKeys)),
-		grpc.WithUserAgent(userAgent),
-	)
-	if err != nil {
-		return fmt.Errorf("dialing scheduler %q: %v", addr, err)
+	// Connect to scheduler.
+	{
+		cr := credentials.NewTLS(&tlsConfig)
+		conn, err := grpc.Dial(addr,
+			grpc.WithTransportCredentials(cr),
+			grpc.WithPerRPCCredentials(dist.NewPerRPC(forwardRPCKeys)),
+			grpc.WithUserAgent(userAgent),
+		)
+		if err != nil {
+			return fmt.Errorf("dialing scheduler %q: %v", addr, err)
+		}
+		sched = pb.NewSchedulerClient(conn)
+		cookieMonster = pb.NewCookieMonsterClient(conn)
 	}
-	sched = pb.NewSchedulerClient(conn)
 	return nil
 }
 
@@ -509,6 +540,7 @@ func main() {
 	r.HandleFunc(path.Join("/", *root, "image/{leaseID}"), handleImage).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "lease/{leaseID}"), wrap(handleLease, leaseTmpl)).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "stats"), wrapTmpl(handleStats, dist.TmplStatsHTML)).Methods("GET", "HEAD")
+	r.HandleFunc(path.Join("/", *root, "login"), handleLogin).Methods("POST")
 	r.Handle(path.Join("/", *root, "stats/{blaha}"), http.FileServer(http.Dir(*statsDir))).Methods("GET", "HEAD")
 	log.Printf("Running dscheduler webui...")
 	if err := fcgi.Serve(sock, r); err != nil {

@@ -17,6 +17,8 @@ It has these top-level messages:
 	Cloud
 	RenderingMetadata
 	Order
+	LoginRequest
+	LoginReply
 	GetRequest
 	GetReply
 	RenewRequest
