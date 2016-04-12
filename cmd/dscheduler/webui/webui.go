@@ -358,20 +358,6 @@ func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 		}
 	}()
 
-	// Get done Leases.
-	var doneLeases []*pb.Lease
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		var err error
-		doneLeases, err = getLeases(ctx, true)
-		if err != nil {
-			m.Lock()
-			defer m.Unlock()
-			errs = append(errs, fmt.Errorf("getLeases(true): %v", err))
-			return
-		}
-	}()
 	wg.Wait()
 	if len(errs) > 0 {
 		log.Printf("Errors: %v", errs)
@@ -384,7 +370,6 @@ func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 		Root            string
 		Stats           *pb.StatsReply
 		Leases          []*pb.Lease
-		DoneLeases      []*pb.Lease
 		UnstartedOrders int64
 		Errors          []error
 		StatsOverall    *pb.StatsOverall
@@ -392,12 +377,37 @@ func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 		Root:         *root,
 		Stats:        st,
 		Leases:       leases,
-		DoneLeases:   doneLeases,
 		Errors:       errs,
 		StatsOverall: statsOverall,
 	}
 	if st != nil {
 		ret.UnstartedOrders = st.SchedulingStats.Orders - st.SchedulingStats.DoneOrders
+	}
+	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
+	return ret, nil
+}
+
+func handleDone(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
+	var errs []error
+
+	// Get done Leases.
+	var doneLeases []*pb.Lease
+	{
+		var err error
+		doneLeases, err = getLeases(ctx, true)
+		if err != nil {
+			log.Printf("Error: %v", err)
+			errs = append(errs, fmt.Errorf("getLeases(true): %v", err))
+		}
+	}
+	ret := &struct {
+		Root       string
+		DoneLeases []*pb.Lease
+		Errors     []error
+	}{
+		Root:       *root,
+		DoneLeases: doneLeases,
+		Errors:     errs,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
 	return ret, nil
@@ -579,6 +589,7 @@ func main() {
 
 	r := mux.NewRouter()
 	r.Handle(*root+"/", wrap(handleRoot, rootTmpl)).Methods("GET", "HEAD")
+	r.Handle(path.Join("/", *root, "done"), wrap(handleDone, doneTmpl)).Methods("GET", "HEAD")
 	r.HandleFunc(path.Join("/", *root, "image/{leaseID}"), handleImage).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "lease/{leaseID}"), wrap(handleLease, leaseTmpl)).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "stats"), wrapTmpl(handleStats, dist.TmplStatsHTML)).Methods("GET", "HEAD")

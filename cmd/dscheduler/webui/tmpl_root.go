@@ -18,35 +18,7 @@ const rootTmpl = `
       </table>
     {{end}}
 
-    <h2>Active leases</h2>
-    <table>
-      <tr>
-        <th>Order</th>
-        <th>Lease</th>
-        <th>Created</th>
-        <th>Lifetime</th>
-        <th>Updated</th>
-        <th>Expires</th>
-        <!--  <th>Package</th> -->
-        <th>File</th>
-        <th>Client</th>
-      </tr>
-      {{range .Leases}}
-        <tr>
-          <td nowrap class="fixed">{{.OrderId}}</td>
-          <td nowrap class="fixed"><a href="{{$root.Root}}/lease/{{.LeaseId}}">{{.LeaseId}}</a></td>
-          <td nowrap>{{.CreatedMs|fmsdate "2006-01-02 15:04"}}</td>
-          <td nowrap>{{.CreatedMs|fmssince}}</td>
-          <td nowrap>{{.UpdatedMs|fmssince}}</td>
-          <td nowrap>{{.ExpiresMs|fmsuntil}}</td>
-          <!--  <td nowrap>{{.Order.Package|fileonly}}</td> -->
-          <td nowrap>{{.Order.File}}</td>
-          <td nowrap>{{.Address}} {{.Hostname}}</td>
-        </tr>
-      {{end}}
-    </table>
-
-    <h2>Batches</h2>
+    <h2>Batches (data is delayed)</h2>
     <table>
       <tr>
         <th>Batch</th>
@@ -64,32 +36,30 @@ const rootTmpl = `
       {{end}}
     </table>
 
-    <h2>Finished</h2>
+    <h2>Active leases</h2>
     <table>
       <tr>
         <th>Order</th>
         <th>Lease</th>
         <th>Created</th>
-        <th>Done</th>
-        <th>Time</th>
-        <th>Image</th>
+        <th>Lifetime</th>
+        <th>Updated</th>
+        <th>Expires</th>
         <!--  <th>Package</th> -->
         <th>File</th>
-        <!--  <th>Args</th> -->
         <th>Client</th>
       </tr>
-      {{range .DoneLeases}}
+      {{range .Leases}}
         <tr>
           <td nowrap class="fixed">{{.OrderId}}</td>
-          <td nowrap class="fixed"><a href="{{$root.Root}}/lease/{{.LeaseId}}">{{.LeaseId}}</a></td>
+          <td nowrap class="fixed">{{if .LeaseId}}<a href="{{$root.Root}}/lease/{{.LeaseId}}">link</a>{{end}}</td>
           <td nowrap>{{.CreatedMs|fmsdate "2006-01-02 15:04"}}</td>
-          <td nowrap>{{.UpdatedMs|fmsdate "2006-01-02 15:04"}}</td>
-          <td nowrap>{{.CreatedMs|fmssub .UpdatedMs}}</td>
-          <td nowrap><a href="{{$root.Root}}/image/{{.LeaseId}}">Image</a></td>
+          <td nowrap>{{.CreatedMs|fmssince}}</td>
+          <td nowrap>{{.UpdatedMs|fmssince}}</td>
+          <td nowrap>{{.ExpiresMs|fmsuntil}}</td>
           <!--  <td nowrap>{{.Order.Package|fileonly}}</td> -->
           <td nowrap>{{.Order.File}}</td>
           <td nowrap>{{.Address}} {{.Hostname}}</td>
-          <!--  <td nowrap>{{.Order.Args}}</td> -->
         </tr>
       {{end}}
     </table>
