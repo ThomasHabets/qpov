@@ -155,6 +155,33 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func handleLogout(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(httpContext(r), time.Minute)
+	defer cancel()
+
+	var q string
+	if c, err := r.Cookie("qpov"); err == nil {
+		q = c.Value
+	}
+
+	if _, err := cookieMonster.Logout(ctx, &pb.LogoutRequest{Cookie: q}); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("Logout: failed to RPC: %v", err)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "qpov",
+		Value:    "",
+		HttpOnly: true,
+		MaxAge:   -1,
+		Secure:   true,
+	})
+	w.Header().Set("Content-Type", "text/plain")
+	if _, err := w.Write([]byte("OK\n")); err != nil {
+		log.Printf("Logout: failed to write: %v", err)
+	}
+}
+
 func handleImage(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(httpContext(r), time.Minute)
 	defer cancel()
@@ -541,6 +568,7 @@ func main() {
 	r.Handle(path.Join("/", *root, "lease/{leaseID}"), wrap(handleLease, leaseTmpl)).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "stats"), wrapTmpl(handleStats, dist.TmplStatsHTML)).Methods("GET", "HEAD")
 	r.HandleFunc(path.Join("/", *root, "login"), handleLogin).Methods("POST")
+	r.HandleFunc(path.Join("/", *root, "logout"), handleLogout).Methods("POST")
 	r.Handle(path.Join("/", *root, "stats/{blaha}"), http.FileServer(http.Dir(*statsDir))).Methods("GET", "HEAD")
 	log.Printf("Running dscheduler webui...")
 	if err := fcgi.Serve(sock, r); err != nil {

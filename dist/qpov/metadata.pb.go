@@ -19,6 +19,8 @@ It has these top-level messages:
 	Order
 	LoginRequest
 	LoginReply
+	LogoutRequest
+	LogoutReply
 	GetRequest
 	GetReply
 	RenewRequest

@@ -6,6 +6,7 @@ import "metadata.proto";
 // CookieMonster keeps login state keyed by cookie.
 service CookieMonster {
         rpc Login (LoginRequest) returns (LoginReply) {}
+        rpc Logout (LogoutRequest) returns (LogoutReply) {}
 }
 
 message LoginRequest {
@@ -16,6 +17,12 @@ message LoginRequest {
 message LoginReply {
         string cookie = 1;
 }
+
+message LogoutRequest {
+        string cookie = 1;
+}
+
+message LogoutReply {}
 
 service Scheduler {
         // Render client API.

@@ -35,6 +35,21 @@ func (m *LoginReply) Reset()         { *m = LoginReply{} }
 func (m *LoginReply) String() string { return proto.CompactTextString(m) }
 func (*LoginReply) ProtoMessage()    {}
 
+type LogoutRequest struct {
+	Cookie string `protobuf:"bytes,1,opt,name=cookie" json:"cookie,omitempty"`
+}
+
+func (m *LogoutRequest) Reset()         { *m = LogoutRequest{} }
+func (m *LogoutRequest) String() string { return proto.CompactTextString(m) }
+func (*LogoutRequest) ProtoMessage()    {}
+
+type LogoutReply struct {
+}
+
+func (m *LogoutReply) Reset()         { *m = LogoutReply{} }
+func (m *LogoutReply) String() string { return proto.CompactTextString(m) }
+func (*LogoutReply) ProtoMessage()    {}
+
 type GetRequest struct {
 }
 
@@ -305,6 +320,7 @@ var _ grpc.ClientConn
 
 type CookieMonsterClient interface {
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginReply, error)
+	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutReply, error)
 }
 
 type cookieMonsterClient struct {
@@ -324,10 +340,20 @@ func (c *cookieMonsterClient) Login(ctx context.Context, in *LoginRequest, opts 
 	return out, nil
 }
 
+func (c *cookieMonsterClient) Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutReply, error) {
+	out := new(LogoutReply)
+	err := grpc.Invoke(ctx, "/qpov.CookieMonster/Logout", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // Server API for CookieMonster service
 
 type CookieMonsterServer interface {
 	Login(context.Context, *LoginRequest) (*LoginReply, error)
+	Logout(context.Context, *LogoutRequest) (*LogoutReply, error)
 }
 
 func RegisterCookieMonsterServer(s *grpc.Server, srv CookieMonsterServer) {
@@ -346,6 +372,18 @@ func _CookieMonster_Login_Handler(srv interface{}, ctx context.Context, dec func
 	return out, nil
 }
 
+func _CookieMonster_Logout_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+	in := new(LogoutRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	out, err := srv.(CookieMonsterServer).Logout(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 var _CookieMonster_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "qpov.CookieMonster",
 	HandlerType: (*CookieMonsterServer)(nil),
@@ -353,6 +391,10 @@ var _CookieMonster_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Login",
 			Handler:    _CookieMonster_Login_Handler,
+		},
+		{
+			MethodName: "Logout",
+			Handler:    _CookieMonster_Logout_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{},

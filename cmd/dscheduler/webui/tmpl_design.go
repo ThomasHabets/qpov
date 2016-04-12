@@ -18,7 +18,12 @@ var tmplDesign = template.Must(template.New("design").Parse(`
     function signOut() {
       var auth2 = gapi.auth2.getAuthInstance();
       auth2.signOut().then(function () {});
-      location.reload();
+      $.post("{{$root.Root}}/logout", {},
+          function() {
+            console.log("Logged out OK");
+            location.reload();
+          }
+      );
     }
     function onSignIn(googleUser) {
       var profile = googleUser.getBasicProfile();

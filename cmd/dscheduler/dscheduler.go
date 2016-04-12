@@ -204,6 +204,13 @@ func (s *server) Login(ctx context.Context, in *pb.LoginRequest) (*pb.LoginReply
 	return &pb.LoginReply{Cookie: c}, nil
 }
 
+func (s *server) Logout(ctx context.Context, in *pb.LogoutRequest) (*pb.LogoutReply, error) {
+	if _, err := db.Exec(`DELETE FROM cookies WHERE cookie=$1`, in.Cookie); err != nil {
+		return nil, dbError("clearing cookie", err)
+	}
+	return &pb.LogoutReply{}, nil
+}
+
 func (s *server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetReply, error) {
 	st := time.Now()
 	requestID := uuid.New()
