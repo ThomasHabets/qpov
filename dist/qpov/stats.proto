@@ -18,6 +18,12 @@ message MachineStats {
         int64 jobs = 6;
 }
 
+message BatchStats {
+        string batch_id = 1;
+        int64 total = 2;
+        int64 done = 3;
+}
+
 message StatsOverall {
         // When these stats were calculated.
         int64 stats_timestamp = 1;
@@ -33,4 +39,6 @@ message StatsOverall {
 
         // Split out by machine type.
         repeated MachineStats machine_stats = 5;
+
+        repeated BatchStats batch_stats = 6;
 }

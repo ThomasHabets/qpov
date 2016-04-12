@@ -50,6 +50,16 @@ func (m *MachineStats) GetCpuTime() *StatsCPUTime {
 	return nil
 }
 
+type BatchStats struct {
+	BatchId string `protobuf:"bytes,1,opt,name=batch_id" json:"batch_id,omitempty"`
+	Total   int64  `protobuf:"varint,2,opt,name=total" json:"total,omitempty"`
+	Done    int64  `protobuf:"varint,3,opt,name=done" json:"done,omitempty"`
+}
+
+func (m *BatchStats) Reset()         { *m = BatchStats{} }
+func (m *BatchStats) String() string { return proto.CompactTextString(m) }
+func (*BatchStats) ProtoMessage()    {}
+
 type StatsOverall struct {
 	// When these stats were calculated.
 	StatsTimestamp int64 `protobuf:"varint,1,opt,name=stats_timestamp" json:"stats_timestamp,omitempty"`
@@ -61,6 +71,7 @@ type StatsOverall struct {
 	LeaseSeconds int64 `protobuf:"varint,4,opt,name=lease_seconds" json:"lease_seconds,omitempty"`
 	// Split out by machine type.
 	MachineStats []*MachineStats `protobuf:"bytes,5,rep,name=machine_stats" json:"machine_stats,omitempty"`
+	BatchStats   []*BatchStats   `protobuf:"bytes,6,rep,name=batch_stats" json:"batch_stats,omitempty"`
 }
 
 func (m *StatsOverall) Reset()         { *m = StatsOverall{} }
@@ -84,6 +95,13 @@ func (m *StatsOverall) GetMachineTime() *StatsCPUTime {
 func (m *StatsOverall) GetMachineStats() []*MachineStats {
 	if m != nil {
 		return m.MachineStats
+	}
+	return nil
+}
+
+func (m *StatsOverall) GetBatchStats() []*BatchStats {
+	if m != nil {
+		return m.BatchStats
 	}
 	return nil
 }

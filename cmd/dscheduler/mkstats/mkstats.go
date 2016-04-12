@@ -126,11 +126,66 @@ func sortGraphs(lineTitles []string, data [][]tsInt) ([]string, [][]tsInt) {
 	return l, d
 }
 
+func mkstatsBatch(stats *pb.StatsOverall) error {
+	rows, err := db.Query(`
+SELECT
+  a.batch_id,
+  SUM(a.count) total,
+  SUM(b.count) done
+FROM (
+  SELECT
+    orders.batch_id,
+    COUNT(orders.order_id)
+  FROM batch
+  RIGHT OUTER JOIN orders
+  ON batch.batch_id=orders.batch_id
+  GROUP BY orders.batch_id
+) a
+FULL OUTER JOIN (
+  SELECT
+    batch.batch_id,
+    COUNT(*)
+  FROM batch
+  RIGHT OUTER JOIN orders
+  ON batch.batch_id=orders.batch_id
+  JOIN leases
+  ON orders.order_id=leases.order_id
+  WHERE leases.done=TRUE
+  GROUP BY batch.batch_id
+) b
+ON a.batch_id=b.batch_id
+GROUP BY a.batch_id
+ORDER BY a.batch_id NULLS FIRST
+`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var batch sql.NullString
+		var total int64
+		var done int64
+		if err := rows.Scan(&batch, &total, &done); err != nil {
+			return err
+		}
+		stats.BatchStats = append(stats.BatchStats, &pb.BatchStats{
+			BatchId: batch.String,
+			Total:   total,
+			Done:    done,
+		})
+	}
+	return nil
+}
+
 func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 	stats := &pb.StatsOverall{
 		StatsTimestamp: int64(time.Now().Unix()),
 		CpuTime:        &pb.StatsCPUTime{},
 		MachineTime:    &pb.StatsCPUTime{},
+	}
+
+	if err := mkstatsBatch(stats); err != nil {
+		return nil, err
 	}
 
 	// Deltas.

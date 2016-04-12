@@ -290,7 +290,7 @@ func handleLease(ctx context.Context, w http.ResponseWriter, r *http.Request) (i
 	}, nil
 }
 
-func handleStats(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
+func readStatsOverall() (*pb.StatsOverall, error) {
 	f, err := os.Open(path.Join(*statsDir, "overall.pb"))
 	if err != nil {
 		return nil, err
@@ -302,6 +302,14 @@ func handleStats(ctx context.Context, w http.ResponseWriter, r *http.Request) (i
 	}
 	stats := &pb.StatsOverall{}
 	if err := proto.Unmarshal(b, stats); err != nil {
+		return nil, err
+	}
+	return stats, nil
+}
+
+func handleStats(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
+	stats, err := readStatsOverall()
+	if err != nil {
 		return nil, err
 	}
 	return &struct {
@@ -368,6 +376,10 @@ func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 	if len(errs) > 0 {
 		log.Printf("Errors: %v", errs)
 	}
+	statsOverall, err := readStatsOverall()
+	if err != nil {
+		return nil, err
+	}
 	ret := &struct {
 		Root            string
 		Stats           *pb.StatsReply
@@ -375,12 +387,14 @@ func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 		DoneLeases      []*pb.Lease
 		UnstartedOrders int64
 		Errors          []error
+		StatsOverall    *pb.StatsOverall
 	}{
-		Root:       *root,
-		Stats:      st,
-		Leases:     leases,
-		DoneLeases: doneLeases,
-		Errors:     errs,
+		Root:         *root,
+		Stats:        st,
+		Leases:       leases,
+		DoneLeases:   doneLeases,
+		Errors:       errs,
+		StatsOverall: statsOverall,
 	}
 	if st != nil {
 		ret.UnstartedOrders = st.SchedulingStats.Orders - st.SchedulingStats.DoneOrders
@@ -470,11 +484,12 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func wrap(f handleFunc, t string) *handler {
 	tmpl := template.New("blah")
 	tmpl.Funcs(template.FuncMap{
-		"fmsdate":  fmsdate,
-		"fmsuntil": fmsuntil,
-		"fmssince": fmssince,
-		"fmssub":   fmssub,
-		"fileonly": path.Base,
+		"fmtpercent": func(a, b int64) string { return fmt.Sprintf("%.2f", 100.0*float64(a)/float64(b)) },
+		"fmsdate":    fmsdate,
+		"fmsuntil":   fmsuntil,
+		"fmssince":   fmssince,
+		"fmssub":     fmssub,
+		"fileonly":   path.Base,
 	})
 	template.Must(tmpl.Parse(t))
 	return wrapTmpl(f, tmpl)

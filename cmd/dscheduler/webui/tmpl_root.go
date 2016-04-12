@@ -46,6 +46,24 @@ const rootTmpl = `
       {{end}}
     </table>
 
+    <h2>Batches</h2>
+    <table>
+      <tr>
+        <th>Batch</th>
+        <th>Done</th>
+        <th>Total</th>
+        <th>Completion</th>
+      </tr>
+      {{range .StatsOverall.BatchStats}}
+      <tr>
+        <td>{{.BatchId}}</td>
+        <td>{{.Done}}</td>
+        <td>{{.Total}}</td>
+        <td>{{fmtpercent .Done .Total}}%</td>
+      </tr>
+      {{end}}
+    </table>
+
     <h2>Finished</h2>
     <table>
       <tr>

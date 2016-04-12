@@ -46,6 +46,7 @@ It has these top-level messages:
 	ResultReply
 	StatsCPUTime
 	MachineStats
+	BatchStats
 	StatsOverall
 */
 package qpov
