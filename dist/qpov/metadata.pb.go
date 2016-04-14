@@ -21,6 +21,8 @@ It has these top-level messages:
 	LoginReply
 	LogoutRequest
 	LogoutReply
+	CheckCookieRequest
+	CheckCookieReply
 	GetRequest
 	GetReply
 	RenewRequest

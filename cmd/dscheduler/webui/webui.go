@@ -435,6 +435,19 @@ func (e *httpErr) Error() string {
 	return fmt.Sprintf("HTTP Error %d: %v", e.code, e.private)
 }
 
+func getLoggedIn(ctx context.Context) bool {
+	c, ok := ctx.Value("http.cookie").(string)
+	if !ok {
+		return false
+	}
+	_, err := cookieMonster.CheckCookie(ctx, &pb.CheckCookieRequest{Cookie: c})
+	if err != nil {
+		log.Printf("Cookie invalid: %v", err)
+		return false
+	}
+	return true
+}
+
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Strict-Transport-Security", "max-age=2592000")
@@ -467,11 +480,13 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var buf2 bytes.Buffer
 	if err := tmplDesign.Execute(&buf2, &struct {
 		OAuthClientID string
+		LoggedIn      bool
 		Root          string
 		Errors        []string
 		Content       template.HTML
 		PageTime      time.Duration
 	}{
+		LoggedIn:      getLoggedIn(ctx),
 		OAuthClientID: *oauthClientID,
 		Root:          *root,
 		Content:       template.HTML(buf.String()),

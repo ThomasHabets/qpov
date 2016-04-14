@@ -50,6 +50,21 @@ func (m *LogoutReply) Reset()         { *m = LogoutReply{} }
 func (m *LogoutReply) String() string { return proto.CompactTextString(m) }
 func (*LogoutReply) ProtoMessage()    {}
 
+type CheckCookieRequest struct {
+	Cookie string `protobuf:"bytes,1,opt,name=cookie" json:"cookie,omitempty"`
+}
+
+func (m *CheckCookieRequest) Reset()         { *m = CheckCookieRequest{} }
+func (m *CheckCookieRequest) String() string { return proto.CompactTextString(m) }
+func (*CheckCookieRequest) ProtoMessage()    {}
+
+type CheckCookieReply struct {
+}
+
+func (m *CheckCookieReply) Reset()         { *m = CheckCookieReply{} }
+func (m *CheckCookieReply) String() string { return proto.CompactTextString(m) }
+func (*CheckCookieReply) ProtoMessage()    {}
+
 type GetRequest struct {
 }
 
@@ -321,6 +336,7 @@ var _ grpc.ClientConn
 type CookieMonsterClient interface {
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginReply, error)
 	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutReply, error)
+	CheckCookie(ctx context.Context, in *CheckCookieRequest, opts ...grpc.CallOption) (*CheckCookieReply, error)
 }
 
 type cookieMonsterClient struct {
@@ -349,11 +365,21 @@ func (c *cookieMonsterClient) Logout(ctx context.Context, in *LogoutRequest, opt
 	return out, nil
 }
 
+func (c *cookieMonsterClient) CheckCookie(ctx context.Context, in *CheckCookieRequest, opts ...grpc.CallOption) (*CheckCookieReply, error) {
+	out := new(CheckCookieReply)
+	err := grpc.Invoke(ctx, "/qpov.CookieMonster/CheckCookie", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // Server API for CookieMonster service
 
 type CookieMonsterServer interface {
 	Login(context.Context, *LoginRequest) (*LoginReply, error)
 	Logout(context.Context, *LogoutRequest) (*LogoutReply, error)
+	CheckCookie(context.Context, *CheckCookieRequest) (*CheckCookieReply, error)
 }
 
 func RegisterCookieMonsterServer(s *grpc.Server, srv CookieMonsterServer) {
@@ -384,6 +410,18 @@ func _CookieMonster_Logout_Handler(srv interface{}, ctx context.Context, dec fun
 	return out, nil
 }
 
+func _CookieMonster_CheckCookie_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+	in := new(CheckCookieRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	out, err := srv.(CookieMonsterServer).CheckCookie(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 var _CookieMonster_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "qpov.CookieMonster",
 	HandlerType: (*CookieMonsterServer)(nil),
@@ -395,6 +433,10 @@ var _CookieMonster_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Logout",
 			Handler:    _CookieMonster_Logout_Handler,
+		},
+		{
+			MethodName: "CheckCookie",
+			Handler:    _CookieMonster_CheckCookie_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{},

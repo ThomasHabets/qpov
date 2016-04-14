@@ -7,6 +7,7 @@ import "metadata.proto";
 service CookieMonster {
         rpc Login (LoginRequest) returns (LoginReply) {}
         rpc Logout (LogoutRequest) returns (LogoutReply) {}
+        rpc CheckCookie (CheckCookieRequest) returns (CheckCookieReply) {}
 }
 
 message LoginRequest {
@@ -23,6 +24,12 @@ message LogoutRequest {
 }
 
 message LogoutReply {}
+
+message CheckCookieRequest {
+        string cookie = 1;
+}
+
+message CheckCookieReply {}
 
 service Scheduler {
         // Render client API.

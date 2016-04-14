@@ -211,6 +211,17 @@ func (s *server) Logout(ctx context.Context, in *pb.LogoutRequest) (*pb.LogoutRe
 	return &pb.LogoutReply{}, nil
 }
 
+func (s *server) CheckCookie(ctx context.Context, in *pb.CheckCookieRequest) (*pb.CheckCookieReply, error) {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM cookies WHERE cookie=$1`, in.Cookie).Scan(&n); err != nil {
+		return nil, dbError("searching for cookie", err)
+	}
+	if n == 0 {
+		return nil, grpc.Errorf(codes.NotFound, "unknown cookie value %q", in.Cookie)
+	}
+	return &pb.CheckCookieReply{}, nil
+}
+
 func (s *server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetReply, error) {
 	st := time.Now()
 	requestID := uuid.New()

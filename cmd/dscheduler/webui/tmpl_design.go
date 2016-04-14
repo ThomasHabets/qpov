@@ -33,13 +33,14 @@ var tmplDesign = template.Must(template.New("design").Parse(`
       }
       document.getElementById("sign-out").style.display = "inline";
       document.getElementById("profile-email").innerHTML = profile.getEmail();
-      $.post("{{$root.Root}}/login", {"jwt": googleUser.getAuthResponse().id_token},
-          function() {
-            // TODO: if we just logged in for the first time: reload.
-            // location.reload();
-            console.log("Logged in OK");
-        }
-      );
+      if ("true" !== document.getElementById("logged-in").dataset.loggedIn) {
+        $.post("{{$root.Root}}/login", {"jwt": googleUser.getAuthResponse().id_token},
+            function() {
+              console.log("Logged in OK");
+              location.reload();
+          }
+        );
+      }
     };
   </script>
 <style>
@@ -103,6 +104,7 @@ tr:nth-child(odd) {
     <span id="profile-email"></span>
   </div>
   <body>
+    <input type="hidden" id="logged-in" data-logged-in="{{.LoggedIn}}" />
     {{if .Errors}}
       <h2>Errors while rendering this page:</h2>
       <ul>
