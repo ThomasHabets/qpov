@@ -495,6 +495,7 @@ func wrap(f handleFunc, t string) *handler {
 	tmpl := template.New("blah")
 	tmpl.Funcs(template.FuncMap{
 		"fmtpercent": func(a, b int64) string { return fmt.Sprintf("%.2f", 100.0*float64(a)/float64(b)) },
+		"fsdate":     func(s string, n int64) string { return fmsdate(s, n*1000) },
 		"fmsdate":    fmsdate,
 		"fmsuntil":   fmsuntil,
 		"fmssince":   fmssince,

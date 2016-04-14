@@ -22,13 +22,15 @@ const rootTmpl = `
     <table>
       <tr>
         <th>Batch</th>
+        <th>Started</th>
         <th>Done</th>
         <th>Total</th>
         <th>Completion</th>
       </tr>
       {{range .StatsOverall.BatchStats}}
       <tr>
-        <td>{{.BatchId}}</td>
+        <td><a href="/batch/{{.BatchId}}">{{if .Comment}}{{.Comment}}{{else}}{{if .BatchId}}{{.BatchId}}{{else}}none{{end}}{{end}}</a></td>
+        <td>{{.Ctime|fsdate "2006-01-02 15:04"}}</td>
         <td>{{.Done}}</td>
         <td>{{.Total}}</td>
         <td>{{fmtpercent .Done .Total}}%</td>

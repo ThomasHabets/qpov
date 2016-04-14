@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 
 	"github.com/ThomasHabets/qpov/dist"
 	pb "github.com/ThomasHabets/qpov/dist/qpov"
@@ -130,16 +130,20 @@ func mkstatsBatch(stats *pb.StatsOverall) error {
 	rows, err := db.Query(`
 SELECT
   a.batch_id,
+  MAX(a.comment),
+  MAX(a.ctime),
   SUM(a.count) total,
   SUM(b.count) done
 FROM (
   SELECT
-    orders.batch_id,
+    batch.batch_id,
+    MAX(batch.comment) AS comment,
+    MAX(batch.ctime) AS ctime,
     COUNT(orders.order_id)
   FROM batch
   RIGHT OUTER JOIN orders
   ON batch.batch_id=orders.batch_id
-  GROUP BY orders.batch_id
+  GROUP BY batch.batch_id
 ) a
 FULL OUTER JOIN (
   SELECT
@@ -165,14 +169,22 @@ ORDER BY a.batch_id NULLS FIRST
 		var batch sql.NullString
 		var total int64
 		var done int64
-		if err := rows.Scan(&batch, &total, &done); err != nil {
+		var ctime pq.NullTime
+		var comment sql.NullString
+		if err := rows.Scan(&batch, &comment, &ctime, &total, &done); err != nil {
 			return err
 		}
-		stats.BatchStats = append(stats.BatchStats, &pb.BatchStats{
+		e := &pb.BatchStats{
 			BatchId: batch.String,
 			Total:   total,
 			Done:    done,
-		})
+			Comment: comment.String,
+		}
+		if ctime.Valid {
+			e.Ctime = int64(ctime.Time.Unix())
+		}
+		stats.BatchStats = append(stats.BatchStats, e)
+
 	}
 	return nil
 }

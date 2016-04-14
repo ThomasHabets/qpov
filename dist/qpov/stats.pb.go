@@ -54,6 +54,8 @@ type BatchStats struct {
 	BatchId string `protobuf:"bytes,1,opt,name=batch_id" json:"batch_id,omitempty"`
 	Total   int64  `protobuf:"varint,2,opt,name=total" json:"total,omitempty"`
 	Done    int64  `protobuf:"varint,3,opt,name=done" json:"done,omitempty"`
+	Comment string `protobuf:"bytes,4,opt,name=comment" json:"comment,omitempty"`
+	Ctime   int64  `protobuf:"varint,5,opt,name=ctime" json:"ctime,omitempty"`
 }
 
 func (m *BatchStats) Reset()         { *m = BatchStats{} }
