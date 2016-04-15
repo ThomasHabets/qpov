@@ -212,12 +212,12 @@ func (s *server) Logout(ctx context.Context, in *pb.LogoutRequest) (*pb.LogoutRe
 }
 
 func (s *server) CheckCookie(ctx context.Context, in *pb.CheckCookieRequest) (*pb.CheckCookieReply, error) {
-	var n int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM cookies WHERE cookie=$1`, in.Cookie).Scan(&n); err != nil {
+	var j string
+	if err := db.QueryRow(`SELECT jwt FROM cookies WHERE cookie=$1`, in.Cookie).Scan(&j); err != nil {
 		return nil, dbError("searching for cookie", err)
 	}
-	if n == 0 {
-		return nil, grpc.Errorf(codes.NotFound, "unknown cookie value %q", in.Cookie)
+	if _, _, err := oauthKeys.VerifyJWT(j); err != nil {
+		return nil, grpc.Errorf(codes.Unauthenticated, "cookie known but not valid at this time")
 	}
 	return &pb.CheckCookieReply{}, nil
 }

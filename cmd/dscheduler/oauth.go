@@ -80,10 +80,10 @@ func (o *OAuthKeys) VerifyJWT(t string) (string, string, error) {
 	token, err := parser.Parse(t, func(token *jwt.Token) (interface{}, error) {
 		return o.lookup(token.Header["kid"].(string))
 	})
-
 	if err != nil {
 		return "", "", err
 	}
+
 	if !token.Valid {
 		return "", "", fmt.Errorf("invalid token")
 	}
