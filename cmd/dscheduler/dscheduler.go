@@ -188,8 +188,9 @@ func (s *server) Login(ctx context.Context, in *pb.LoginRequest) (*pb.LoginReply
 	}
 	defer tx.Rollback()
 
+	// Reuse cookie if present and is UUID-shaped.
 	c := in.Cookie
-	if c == "" {
+	if c == "" || uuid.Parse(c) == nil {
 		c = uuid.New()
 	}
 	if _, err := tx.Exec(`DELETE FROM cookies WHERE cookie=$1`, c); err != nil {
