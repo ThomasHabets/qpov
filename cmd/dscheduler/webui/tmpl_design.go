@@ -43,7 +43,14 @@ var tmplDesign = template.Must(template.New("design").Parse(`
       }
     };
   </script>
-<style>
+    <style>
+body {
+  margin: 0;
+}
+#content {
+  margin-left: 8px;
+  margin-right: 8px;
+}
 .fixed {
   font-family: monospace;
 }
@@ -70,11 +77,15 @@ tr:nth-child(odd) {
   color: black;
   background-color: lightblue;
 }
+#nav span {
+  margin-left: 8px;
+}
 #gbuttons {
   float: right;
   display: inline-block;
 }
 #profile-email {
+  margin-top: 0.5em;
   float: right;
   font-size: 14px;
 }
@@ -88,6 +99,7 @@ tr:nth-child(odd) {
   width: 36px;
 }
 .top-button {
+  margin-right: 1em;
   float: right;
 }
 </style>
@@ -113,7 +125,7 @@ tr:nth-child(odd) {
         {{end}}
       </ul>
     {{end}}
-    {{.Content}}
+    <div id="content">{{.Content}}</div>
     <hr>
     Page server time: {{.PageTime}}
   </body>
