@@ -30,7 +30,7 @@ const rootTmpl = `
       </table>
     {{end}}
 
-    <h2>Batches (data is delayed)</h2>
+    <h2>Batches (data periodically updated)</h2>
     <table id="batches">
       <tr>
         <th>Batch</th>
