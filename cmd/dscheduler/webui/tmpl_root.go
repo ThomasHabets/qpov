@@ -3,6 +3,18 @@ package main
 
 const rootTmpl = `
 {{ $root := . }}
+<style>
+  #batches {
+    width: 100%;
+    white-space: nowrap;
+  }
+  #batches td.expand {
+    width: 90%;
+  }
+  #batches progress.expand {
+    width: calc(100% - 5em);
+  }
+</style>
 <h2>Scheduler stats</h2>
     {{if .Stats.SchedulingStats}}
       <table>
@@ -19,7 +31,7 @@ const rootTmpl = `
     {{end}}
 
     <h2>Batches (data is delayed)</h2>
-    <table>
+    <table id="batches">
       <tr>
         <th>Batch</th>
         <th>Started</th>
@@ -33,7 +45,10 @@ const rootTmpl = `
         <td>{{.Ctime|fsdate "2006-01-02 15:04"}}</td>
         <td>{{.Done}}</td>
         <td>{{.Total}}</td>
-        <td>{{fmtpercent .Done .Total}}%</td>
+        <td class="expand">
+          <span style="width: 4em; display: inline-block;">{{fmtpercent .Done .Total}}%</span>
+          <progress class="expand" value="{{fmtpercent .Done .Total}}" max="100" />
+        </td>
       </tr>
       {{end}}
     </table>
