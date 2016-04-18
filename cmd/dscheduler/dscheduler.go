@@ -128,22 +128,30 @@ func getOwnerIDByCN(cn string) (int, error) {
 	return ownerID, nil
 }
 
-// getOwnerID from the RPC channel TLS client cert.
-// Returns errNoCert if no cert is attached.
-func getOwnerID(ctx context.Context) (int, error) {
+func getPeerCert(ctx context.Context) (*x509.Certificate, error) {
 	p, ok := peer.FromContext(ctx)
 	if !ok {
-		return 0, errNoCert
+		return nil, errNoCert
 	}
 	at, ok := p.AuthInfo.(credentials.TLSInfo)
 	if !ok {
-		return 0, fmt.Errorf("auth type is not TLSInfo")
+		return nil, fmt.Errorf("auth type is not TLSInfo")
 	}
 	if len(at.State.PeerCertificates) != 1 {
-		return 0, errNoCert
+		return nil, errNoCert
 	}
 	cert := at.State.PeerCertificates[0]
+	return cert, nil
+}
 
+// getOwnerID from the RPC channel TLS client cert.
+// Returns errNoCert if no cert is attached.
+// TODO: deprecate in favour of getPeer()?
+func getOwnerID(ctx context.Context) (int, error) {
+	cert, err := getPeerCert(ctx)
+	if err != nil {
+		return 0, err
+	}
 	// If there is a cert then it was verified in the handshake as belonging to the client CA.
 	// We just need to turn the cert CommonName into a userID.
 	// TODO: Really the userID should be part of the cert instead of stored on the server side. Ugly hack for now.
@@ -171,6 +179,114 @@ func clientAddressFromContext(ctx context.Context) (string, error) {
 	}
 	client, _, _ := net.SplitHostPort(p.Addr.String())
 	return client, nil
+}
+
+type user struct {
+	userID       int
+	delegate     bool
+	comment      string
+	oauthSubject string
+	via          *user
+}
+
+func readUserByID(userID int) (*user, error) {
+	u := &user{
+		userID: userID,
+	}
+	var comment, oauthSubject sql.NullString
+	if err := db.QueryRow(`
+SELECT
+  delegate,
+  comment,
+  oauth_subject
+FROM
+  users
+WHERE
+  user_id=$1
+`, userID).Scan(&u.delegate, &comment, &oauthSubject); err != nil {
+		return nil, err
+	}
+	u.comment = comment.String
+	u.oauthSubject = oauthSubject.String
+	return u, nil
+}
+
+// Get end-user.
+// This should replace getOwner.
+func getUser(ctx context.Context) (*user, error) {
+	var u *user
+	// First use TLS credentials.
+	{
+		cert, err := getPeerCert(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		id, err := getOwnerIDByCN(cert.Subject.CommonName)
+		if err != nil {
+			return nil, err
+		}
+		u, err = readUserByID(id)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Now check if it's just delegated.
+	if u.delegate {
+		v, err := getRPCMetadata(ctx, "http.cookie")
+		if err != nil {
+			// No cookie. Act as webserver.
+			return u, nil
+		}
+		j, err := getJWTFromCookie(v)
+		if err != nil {
+			// Bad cookie. Act as webserver.
+			return u, nil
+		}
+		_, sub, err := oauthKeys.VerifyJWT(j)
+		if err != nil {
+			// Bad JWT. Act as webserver.
+			return u, nil
+		}
+		var userID int
+		if err := db.QueryRow(`SELECT user_id FROM users WHERE oauth_subject=$1`, sub).Scan(&userID); err != nil {
+			log.Printf("OAuth subject %q not in database: %v", sub, err)
+			return u, nil
+		}
+		nu, err := readUserByID(userID)
+		if err != nil {
+			return u, nil
+		}
+		nu.via = u
+		u = nu
+	}
+	return u, nil
+}
+
+func mintCert(u *user) ([]byte, error) {
+	return nil, grpc.Errorf(codes.Unimplemented, "minting certs not implemented yet")
+}
+
+func (s *server) Certificate(ctx context.Context, in *pb.CertificateRequest) (*pb.CertificateReply, error) {
+	if err := blockRestrictedAPI(ctx); err != nil {
+		return nil, err
+	}
+	user, err := getUser(ctx)
+	if err != nil {
+		log.Printf("RPC(Certificate): getUser(): %v", err)
+		return nil, grpc.Errorf(codes.Unauthenticated, "authentication required")
+	}
+	if user.delegate {
+		log.Printf("Not minting cert for webserver")
+		return nil, grpc.Errorf(codes.Unauthenticated, "authentication required")
+	}
+	b, err := mintCert(user)
+	if err != nil {
+		log.Printf("Failed to mint cert for user %d: %v", user.userID, err)
+		return nil, cleanError(err, codes.Internal, "failed to mint cert")
+	}
+	return &pb.CertificateReply{Pem: b}, nil
 }
 
 func (s *server) Login(ctx context.Context, in *pb.LoginRequest) (*pb.LoginReply, error) {

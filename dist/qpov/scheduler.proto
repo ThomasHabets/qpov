@@ -50,6 +50,13 @@ service Scheduler {
         // WebUI magic.
         // rpc UserStats (UserStatsRequest) returns (UserStatsReply) {}
         rpc Result (ResultRequest) returns (stream ResultReply) {}
+
+        rpc Certificate (CertificateRequest) returns (CertificateReply) {}
+}
+
+message CertificateRequest {}
+message CertificateReply {
+        bytes pem = 1;
 }
 
 message GetRequest {}

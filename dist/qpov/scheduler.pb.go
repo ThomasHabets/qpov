@@ -65,6 +65,21 @@ func (m *CheckCookieReply) Reset()         { *m = CheckCookieReply{} }
 func (m *CheckCookieReply) String() string { return proto.CompactTextString(m) }
 func (*CheckCookieReply) ProtoMessage()    {}
 
+type CertificateRequest struct {
+}
+
+func (m *CertificateRequest) Reset()         { *m = CertificateRequest{} }
+func (m *CertificateRequest) String() string { return proto.CompactTextString(m) }
+func (*CertificateRequest) ProtoMessage()    {}
+
+type CertificateReply struct {
+	Pem []byte `protobuf:"bytes,1,opt,name=pem,proto3" json:"pem,omitempty"`
+}
+
+func (m *CertificateReply) Reset()         { *m = CertificateReply{} }
+func (m *CertificateReply) String() string { return proto.CompactTextString(m) }
+func (*CertificateReply) ProtoMessage()    {}
+
 type GetRequest struct {
 }
 
@@ -460,6 +475,7 @@ type SchedulerClient interface {
 	// WebUI magic.
 	// rpc UserStats (UserStatsRequest) returns (UserStatsReply) {}
 	Result(ctx context.Context, in *ResultRequest, opts ...grpc.CallOption) (Scheduler_ResultClient, error)
+	Certificate(ctx context.Context, in *CertificateRequest, opts ...grpc.CallOption) (*CertificateReply, error)
 }
 
 type schedulerClient struct {
@@ -629,6 +645,15 @@ func (x *schedulerResultClient) Recv() (*ResultReply, error) {
 	return m, nil
 }
 
+func (c *schedulerClient) Certificate(ctx context.Context, in *CertificateRequest, opts ...grpc.CallOption) (*CertificateReply, error) {
+	out := new(CertificateReply)
+	err := grpc.Invoke(ctx, "/qpov.Scheduler/Certificate", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // Server API for Scheduler service
 
 type SchedulerServer interface {
@@ -647,6 +672,7 @@ type SchedulerServer interface {
 	// WebUI magic.
 	// rpc UserStats (UserStatsRequest) returns (UserStatsReply) {}
 	Result(*ResultRequest, Scheduler_ResultServer) error
+	Certificate(context.Context, *CertificateRequest) (*CertificateReply, error)
 }
 
 func RegisterSchedulerServer(s *grpc.Server, srv SchedulerServer) {
@@ -800,6 +826,18 @@ func (x *schedulerResultServer) Send(m *ResultReply) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _Scheduler_Certificate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+	in := new(CertificateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	out, err := srv.(SchedulerServer).Certificate(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 var _Scheduler_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "qpov.Scheduler",
 	HandlerType: (*SchedulerServer)(nil),
@@ -831,6 +869,10 @@ var _Scheduler_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Stats",
 			Handler:    _Scheduler_Stats_Handler,
+		},
+		{
+			MethodName: "Certificate",
+			Handler:    _Scheduler_Certificate_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

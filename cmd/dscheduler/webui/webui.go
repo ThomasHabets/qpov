@@ -124,6 +124,26 @@ func rpcErrorToHTTPError(err error) int {
 	return n
 }
 
+func handleCert(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(httpContext(r), time.Minute)
+	defer cancel()
+
+	// Cookie is attached to context.
+	resp, err := sched.Certificate(ctx, &pb.CertificateRequest{})
+	if err != nil {
+		log.Printf("Certificate: %v", err)
+		w.WriteHeader(rpcErrorToHTTPError(err))
+		if _, err := fmt.Fprintf(w, "Error: %v", err); err != nil {
+			log.Printf("Also failed to write that to client: %v", err)
+		}
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	if _, err := w.Write(resp.Pem); err != nil {
+		log.Printf("Failed to write pem data: %v", err)
+	}
+}
+
 func handleLogin(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(httpContext(r), time.Minute)
 	defer cancel()
@@ -609,6 +629,7 @@ func main() {
 	r.HandleFunc(path.Join("/", *root, "image/{leaseID}"), handleImage).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "lease/{leaseID}"), wrap(handleLease, leaseTmpl)).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "stats"), wrapTmpl(handleStats, dist.TmplStatsHTML)).Methods("GET", "HEAD")
+	r.HandleFunc(path.Join("/", *root, "cert"), handleCert).Methods("GET", "HEAD")
 	r.HandleFunc(path.Join("/", *root, "login"), handleLogin).Methods("POST")
 	r.HandleFunc(path.Join("/", *root, "logout"), handleLogout).Methods("POST")
 	r.Handle(path.Join("/", *root, "stats/{blaha}"), http.FileServer(http.Dir(*statsDir))).Methods("GET", "HEAD")

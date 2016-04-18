@@ -23,6 +23,8 @@ It has these top-level messages:
 	LogoutReply
 	CheckCookieRequest
 	CheckCookieReply
+	CertificateRequest
+	CertificateReply
 	GetRequest
 	GetReply
 	RenewRequest
