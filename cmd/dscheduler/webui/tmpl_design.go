@@ -12,8 +12,15 @@ var tmplDesign = template.Must(template.New("design").Parse(`
     <title>QPov</title>
     <meta name="google-signin-scope" content="email">
     <meta name="google-signin-client_id" content="{{.OAuthClientID}}">
-    <script type="text/javascript" src="//ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
-    <script src="https://apis.google.com/js/platform.js" async defer></script>
+    <!-- curl -s https://.../path.js | openssl dgst -sha384 -binary | openssl base64 -A ;echo -->
+    <script
+       type="text/javascript"
+       integrity="sha384-ECTndYny330R2jlSXBiZkdXzAVi0Z/iDXJTwV6cp39HECmalqg6+b2sFZFf/Y2m6"
+       crossorigin="anonymous"
+       src="https://ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+    <script
+       type="text/javascript"
+       src="https://apis.google.com/js/platform.js" async defer></script>
     <script>
     function signOut() {
       var auth2 = gapi.auth2.getAuthInstance();
