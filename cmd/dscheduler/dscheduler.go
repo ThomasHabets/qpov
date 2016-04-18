@@ -118,7 +118,7 @@ func getOrderByID(id string) (*pb.Order, error) {
 }
 
 func getOwnerIDByCN(cn string) (int, error) {
-	row := db.QueryRow(`SELECT users.user_id FROM users JOIN certs ON users.user_id=certs.user_id WHERE certs.cn=$1`, cn)
+	row := db.QueryRow(`SELECT user_id FROM certs WHERE cn=$1`, cn)
 	var ownerID int
 	if err := row.Scan(&ownerID); err == sql.ErrNoRows {
 		return 0, fmt.Errorf("client cert not assigned to any user")
