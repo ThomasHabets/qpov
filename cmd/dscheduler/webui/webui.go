@@ -384,7 +384,8 @@ func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 	}
 	statsOverall, err := readStatsOverall()
 	if err != nil {
-		return nil, err
+		log.Printf("Failed to read overall stats: %v", err)
+		statsOverall = &pb.StatsOverall{}
 	}
 	ret := &struct {
 		Root            string
