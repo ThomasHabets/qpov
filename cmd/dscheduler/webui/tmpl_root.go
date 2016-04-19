@@ -64,7 +64,8 @@ const rootTmpl = `
         <th>Expires</th>
         <!--  <th>Package</th> -->
         <th>File</th>
-        <th>Client</th>
+        <th>Address</th>
+        <th>Hostname</th>
       </tr>
       {{range .Leases}}
         <tr>
@@ -76,7 +77,8 @@ const rootTmpl = `
           <td nowrap>{{.ExpiresMs|fmsuntil}}</td>
           <!--  <td nowrap>{{.Order.Package|fileonly}}</td> -->
           <td nowrap>{{.Order.File}}</td>
-          <td nowrap>{{.Address}} {{.Hostname}}</td>
+          <td nowrap>{{.Address}}</td>
+          <td nowrap>{{.Hostname}}</td>
         </tr>
       {{end}}
     </table>
