@@ -64,6 +64,8 @@ var (
 		"accounts.google.com":         true,
 		"https://accounts.google.com": true,
 	}
+
+	googleCloudStorage *storage.Client
 )
 
 const (
@@ -542,9 +544,7 @@ func getMetadata(in *pb.DoneRequest) (*pb.RenderingMetadata, string, error) {
 	return stats, string(b), nil
 }
 
-var googleCloudStorage *storage.Client
-
-// Save results to Google Cloud Storage under gs://<bucket>/<leaseID>/filename.{png,meta.pb.gz}
+// Save results to Google Cloud Storage under gs://<bucket>/<type>/<leaseID>/filename.{png,meta.pb.gz}
 func (s *server) saveToCloud(ctx context.Context, in *pb.DoneRequest, realMeta *pb.RenderingMetadata, base string, batch uuid.UUID) error {
 	dir := ""
 	if batch != nil {
@@ -559,7 +559,15 @@ func (s *server) saveToCloud(ctx context.Context, in *pb.DoneRequest, realMeta *
 	var imageErr error
 	go func() {
 		defer wg.Done()
-		w := googleCloudStorage.Bucket(*uploadBucketName).Object(path.Join(dir, base+".png")).NewWriter(ctx)
+		fn := path.Join(dir, base+".png")
+		obj := googleCloudStorage.Bucket(*uploadBucketName).Object(fn)
+		if _, err := obj.Attrs(ctx); err == nil {
+			log.Printf("File already exist, skipping %q %q", *uploadBucketName, fn)
+			return
+		} else if err != storage.ErrObjectNotExist {
+			log.Printf("Failed to check if %q %q already exists: %v", err)
+		}
+		w := obj.NewWriter(ctx)
 		defer func() {
 			if imageErr == nil {
 				imageErr = w.Close()
@@ -573,7 +581,15 @@ func (s *server) saveToCloud(ctx context.Context, in *pb.DoneRequest, realMeta *
 	var metaErr error
 	go func() {
 		defer wg.Done()
-		w := googleCloudStorage.Bucket(*uploadBucketName).Object(path.Join(dir, base+".meta.pb.gz")).NewWriter(ctx)
+		fn := path.Join(dir, base+".meta.pb.gz")
+		obj := googleCloudStorage.Bucket(*uploadBucketName).Object(fn)
+		if _, err := obj.Attrs(ctx); err == nil {
+			log.Printf("File already exist, skipping %q %q", *uploadBucketName, fn)
+			return
+		} else if err != storage.ErrObjectNotExist {
+			log.Printf("Failed to check if %q %q already exists: %v", err)
+		}
+		w := obj.NewWriter(ctx)
 		defer func() {
 			if metaErr == nil {
 				metaErr = w.Close()
