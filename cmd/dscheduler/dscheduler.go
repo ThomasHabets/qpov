@@ -349,18 +349,27 @@ func (s *server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetReply, erro
 	}
 	defer tx.Rollback()
 
-	// TODO: Hand out expired and failed leases too.
-	row := tx.QueryRow(`
-SELECT orders.order_id, orders.definition
-FROM   orders
-LEFT OUTER JOIN leases ON orders.order_id=leases.order_id
-WHERE leases.lease_id IS NULL
-OR    (FALSE AND leases.expires < NOW() AND leases.done = FALSE)
-ORDER BY RANDOM()
-LIMIT 1`)
-
 	var orderID, def string
-	if err := row.Scan(&orderID, &def); err == sql.ErrNoRows {
+	// TODO: Hand out expired and failed leases too.
+	// TODO: Currently using batch.ctime() as priority. Should have separate thing?
+	if err := tx.QueryRow(`
+SELECT
+  orders.order_id,
+  orders.definition
+FROM
+  orders
+JOIN (
+  SELECT          CAST(MIN(CAST(orders.order_id AS TEXT)) AS UUID) AS order_id
+  FROM            orders
+  LEFT OUTER JOIN batch  ON orders.batch_id=batch.batch_id
+  LEFT OUTER JOIN leases ON orders.order_id=leases.order_id
+  WHERE           leases.done IS NULL
+  GROUP BY        batch.batch_id
+  ORDER BY        batch.ctime
+  LIMIT 1
+) a
+ON a.order_id=orders.order_id
+`).Scan(&orderID, &def); err == sql.ErrNoRows {
 		return nil, grpc.Errorf(codes.NotFound, "nothing to do")
 	} else if err != nil {
 		return nil, dbError("Scanning order", err)
