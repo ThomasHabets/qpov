@@ -114,7 +114,8 @@ func getLeases(ctx context.Context, done bool) ([]*pb.Lease, error) {
 
 func rpcErrorToHTTPError(err error) int {
 	m := map[codes.Code]int{
-		codes.NotFound: http.StatusNotFound,
+		codes.NotFound:        http.StatusNotFound,
+		codes.Unauthenticated: http.StatusUnauthorized,
 	}
 	n, found := m[grpc.Code(err)]
 	if !found {
