@@ -31,7 +31,6 @@ import (
 	"google.golang.org/grpc/credentials"
 	grpcmetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
-	"google.golang.org/grpc/transport"
 
 	"github.com/ThomasHabets/qpov/dist"
 	pb "github.com/ThomasHabets/qpov/dist/qpov"
@@ -1107,36 +1106,13 @@ func blockRestrictedUser(ctx context.Context) error {
 	return nil
 }
 
-func blockRestrictedAPIInternal(ctx context.Context) error {
-	t, ok := transport.StreamFromContext(ctx)
-	if !ok {
-		return internalError("no stream context", "no stream context")
-	}
-	if false {
-		st := t.ServerTransport()
-		log.Printf("Called from %v", st.RemoteAddr())
-	}
-	p, ok := peer.FromContext(ctx)
-	if !ok {
-		return grpc.Errorf(codes.Unauthenticated, "no peer?")
-	}
-	at, ok := p.AuthInfo.(credentials.TLSInfo)
-	if !ok {
-		return internalError("auth type is not TLSInfo", "auth type is not TLSInfo")
-	}
-	if len(at.State.PeerCertificates) != 1 {
-		return grpc.Errorf(codes.Unauthenticated, "no certificate attached")
-	}
-	return nil
-}
-
 // Verify certificate info and return nil or error suitable for sending to user.
-// This blocks RPCs completely, and thus does not consider web oauth `delegation`.
+// This blocks RPCs completely from a peer, and thus does not consider web oauth `delegation`.
 // For that, see `blockRestrictedUser`.
 func blockRestrictedAPI(ctx context.Context) error {
-	if err := blockRestrictedAPIInternal(ctx); err != nil {
-		log.Printf("Restricted API: %v", err)
-		return grpc.Errorf(grpc.Code(err), "restricted API called without valid credentials")
+	if _, err := getPeerCert(ctx); err != nil {
+		log.Printf("Restricted API called: %v", err)
+		return grpc.Errorf(codes.Unauthenticated, "restricted API called without valid credentials")
 	}
 	return nil
 }
