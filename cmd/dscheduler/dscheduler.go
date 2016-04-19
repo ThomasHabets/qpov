@@ -68,8 +68,6 @@ var (
 )
 
 const (
-	infoSuffix = ".json"
-
 	propAddresses = "addresses"
 )
 
@@ -144,30 +142,6 @@ func getPeerCert(ctx context.Context) (*x509.Certificate, error) {
 	return cert, nil
 }
 
-// getOwnerID from the RPC channel TLS client cert.
-// Returns errNoCert if no cert is attached.
-// TODO: deprecate in favour of getPeer()?
-func getOwnerID(ctx context.Context) (int, error) {
-	cert, err := getPeerCert(ctx)
-	if err != nil {
-		return 0, err
-	}
-	// If there is a cert then it was verified in the handshake as belonging to the client CA.
-	// We just need to turn the cert CommonName into a userID.
-	// TODO: Really the userID should be part of the cert instead of stored on the server side. Ugly hack for now.
-	ownerID, err := getOwnerIDByCN(cert.Subject.CommonName)
-	if err == nil {
-		return ownerID, nil
-	}
-	aa := strings.Split(cert.Subject.CommonName, ":")
-	if len(aa) == 2 {
-		if ownerID, err := getOwnerIDByCN(aa[0]); err == nil {
-			return ownerID, nil
-		}
-	}
-	return 0, err
-}
-
 type server struct {
 	rpcLog *rpclog.Logger
 }
@@ -183,27 +157,37 @@ func clientAddressFromContext(ctx context.Context) (string, error) {
 
 type user struct {
 	userID       int
-	delegate     bool
 	comment      string
 	oauthSubject string
+	adding       bool
+	delegate     bool
+	addresses    bool
 	via          *user
 }
 
 func readUserByID(userID int) (*user, error) {
-	u := &user{
-		userID: userID,
-	}
+	return readUserBySomething("user_id", userID)
+}
+func readUserByOAuth(sub string) (*user, error) {
+	return readUserBySomething("oauth_subject", sub)
+}
+
+func readUserBySomething(column string, value interface{}) (*user, error) {
+	u := &user{}
 	var comment, oauthSubject sql.NullString
-	if err := db.QueryRow(`
+	if err := db.QueryRow(fmt.Sprintf(`
 SELECT
+  user_id,
   delegate,
+  addresses,
+  adding,
   comment,
   oauth_subject
 FROM
   users
 WHERE
-  user_id=$1
-`, userID).Scan(&u.delegate, &comment, &oauthSubject); err != nil {
+  %s=$1
+`, column), value).Scan(&u.userID, &u.delegate, &u.addresses, &u.adding, &comment, &oauthSubject); err != nil {
 		return nil, err
 	}
 	u.comment = comment.String
@@ -211,11 +195,17 @@ WHERE
 	return u, nil
 }
 
-// Get end-user.
-// This should replace getOwner.
+// Get end-user and any intermediary (webserver).
+//
+// TODO: This is 4-6 SQL queries for every call.
+// * One for TLS cert
+// * One for TLS user
+// * Cookie lookup
+// * SELECT/UPDATE/SELECT for cookied user if they're not in the database.
 func getUser(ctx context.Context) (*user, error) {
 	var u *user
 	// First use TLS credentials.
+	// No TLS credentials -> not authenticated.
 	{
 		cert, err := getPeerCert(ctx)
 		if err != nil {
@@ -244,24 +234,40 @@ func getUser(ctx context.Context) (*user, error) {
 			// Bad cookie. Act as webserver.
 			return u, nil
 		}
-		_, sub, err := oauthKeys.VerifyJWT(j)
+		email, sub, err := oauthKeys.VerifyJWT(j)
 		if err != nil {
 			// Bad JWT. Act as webserver.
 			return u, nil
 		}
-		var userID int
-		if err := db.QueryRow(`SELECT user_id FROM users WHERE oauth_subject=$1`, sub).Scan(&userID); err != nil {
-			log.Printf("OAuth subject %q not in database: %v", sub, err)
-			return u, nil
-		}
-		nu, err := readUserByID(userID)
+		nu, err := readUserByOAuth(sub)
 		if err != nil {
-			return u, nil
+			// OAuth subject valid but unknown. Associate with email if possible.
+			if err := setUserOAuthByEmail(email, sub); err != nil {
+				// Logged in but not as anyone in the database.
+				return u, nil
+			}
+		}
+		nu, err = readUserByOAuth(sub)
+		if err != nil {
+			// Not in database. Fill in what we can.
+			nu = &user{
+				oauthSubject: sub,
+			}
 		}
 		nu.via = u
 		u = nu
 	}
 	return u, nil
+}
+
+func setUserOAuthByEmail(email, sub string) error {
+	_, err := db.Exec(`
+UPDATE users
+SET    oauth_subject=$2
+WHERE  email=$1
+AND    oauth_subject IS NULL
+`, email, sub)
+	return err
 }
 
 func mintCert(u *user) ([]byte, error) {
@@ -376,10 +382,10 @@ ON a.order_id=orders.order_id
 	}
 
 	var ownerID *int
-	if o, err := getOwnerID(ctx); err == nil {
-		ownerID = &o
+	if user, err := getUser(ctx); err == nil {
+		ownerID = &user.userID
 	} else if err != errNoCert {
-		log.Printf("Getting owner ID: %v", err)
+		log.Printf("Getting user ID: %v", err)
 	}
 
 	lease := uuid.New()
@@ -1008,8 +1014,11 @@ ORDER BY %s`, metadataCol, ordering)
 	defer rows.Close()
 	logRet := &pb.LeasesReply{}
 
-	userPropertyAddresses := userProperty(ctx, propAddresses)
-	userCanSeeLease := blockRestrictedUser(ctx) == nil
+	user, err := getUser(ctx)
+	if err != nil {
+		log.Printf("Getting user: %v", err)
+		return fmt.Errorf("error getting user")
+	}
 	for rows.Next() {
 		if ctx.Err() != nil {
 			return err
@@ -1041,14 +1050,13 @@ ORDER BY %s`, metadataCol, ordering)
 				Order:     order,
 			},
 		}
-		if done || userCanSeeLease {
-			// Only set some fields for some users.
+		if done {
 			e.Lease.LeaseId = leaseID
+			// Only set some fields for some users.
 		}
-		if userPropertyAddresses {
+		if user.addresses {
 			e.Lease.Address = client.String
-		}
-		if userPropertyAddresses {
+			e.Lease.LeaseId = leaseID
 			e.Lease.Hostname = clientHostname.String
 		}
 		if userID != nil {
@@ -1088,8 +1096,13 @@ func getJWTFromCookie(v string) (string, error) {
 // Block access for end-users that don't have the right cookie set.
 // TODO: remove this function since it just calls another?
 func blockRestrictedUser(ctx context.Context) error {
-	if !userProperty(ctx, "addresses") {
-		return grpc.Errorf(codes.Unauthenticated, "need per-user credentials for this resource")
+	nope := grpc.Errorf(codes.Unauthenticated, "need per-user credentials for this resource")
+	user, err := getUser(ctx)
+	if err != nil {
+		return nope
+	}
+	if !user.addresses {
+		return nope
 	}
 	return nil
 }
@@ -1128,104 +1141,19 @@ func blockRestrictedAPI(ctx context.Context) error {
 	return nil
 }
 
-func userProperty(ctx context.Context, p string) bool {
-	// Check if RPC endpoint can just do this.
-	{
-		ownerID, err := getOwnerID(ctx)
-		if err == nil {
-			row := db.QueryRow(fmt.Sprintf(`SELECT %s FROM users WHERE user_id=$1`, p), ownerID)
-			var v bool
-			if err := row.Scan(&v); err != nil {
-				log.Printf("Looking up user %v: %v", ownerID, err)
-			} else if v {
-				return true
-			}
-		}
-	}
-
-	var prop bool
-	// Take HTTP cookie into account, if present.
-	func() {
-		md, ok := grpcmetadata.FromContext(ctx)
-		if !ok {
-			return
-		}
-
-		v, _ := md["http.cookie"]
-		if len(v) == 0 {
-			return
-		}
-
-		j, err := getJWTFromCookie(v[0])
-		if err != nil {
-			log.Printf("Failed to get JWT from cookie %q: %v", v[0], err)
-			return
-		}
-
-		email, sub, err := oauthKeys.VerifyJWT(j)
-		if err != nil {
-			log.Printf("Failed to verify JWT: %v", err)
-			return
-		}
-
-		getBySub := func() (bool, error) {
-			row := db.QueryRow(fmt.Sprintf(`SELECT email,%s FROM users WHERE oauth_subject=$1`, p), sub)
-			var v bool
-			var dbEmail string
-			if err := row.Scan(&dbEmail, &v); err != nil {
-				return false, err
-			}
-			if dbEmail != email {
-				log.Printf("Warning! oauth subject %q has changed email. database says %q, oauth says %q", sub, dbEmail, email)
-			}
-			return v, nil
-		}
-		if prop, err = getBySub(); err == nil {
-			return
-		} else if err != sql.ErrNoRows {
-			return
-		}
-		// Subject not found. Update oauth_subject for any user with that email.
-		// Don't allow "stealing" email addresses.
-		// Email addresses should ONLY be added manually
-		// and ONLY used on first login to connect the DB entry to the oauth subject.
-		if _, err := db.Exec(`
-UPDATE users
-SET    oauth_subject=$2
-WHERE  email=$1
-AND    oauth_subject IS NULL
-`, email, sub); err != nil {
-			return
-		}
-		// Then try again.
-		prop, _ = getBySub()
-	}()
-	return prop
-}
-
 func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, error) {
 	st := time.Now()
 	requestID := uuid.New()
-	ownerID, err := getOwnerID(ctx)
+	user, err := getUser(ctx)
 	if err != nil {
-		log.Printf("RPC(Add): %v", err)
+		log.Printf("RPC(Add): Looking up user: %v", err)
 		return nil, grpc.Errorf(codes.Unauthenticated, "authentication required")
 	}
 
 	// Look up permission to add.
-	// TODO: put this in getOwnerID()
-	{
-		row := db.QueryRow(`SELECT adding FROM users WHERE user_id=$1`, ownerID)
-		var adding bool
-		if err := row.Scan(&adding); err == sql.ErrNoRows {
-			return nil, internalError("failed looking up user", "failed looking up user")
-		} else if err != nil {
-			return nil, dbError(fmt.Sprintf("Looking up user %v", ownerID), err)
-		}
-		if !adding {
-			log.Printf("User not allowed to add orders")
-			return nil, grpc.Errorf(codes.PermissionDenied, "user not allowed to add orders")
-		}
+	if !user.adding {
+		log.Printf("RPC(Add): User not allowed to add orders")
+		return nil, grpc.Errorf(codes.PermissionDenied, "user not allowed to add orders")
 	}
 
 	id := uuid.New()
@@ -1241,7 +1169,7 @@ VALUES(
     NOW(),
     $2,
     $3
-)`, id, ownerID, in.OrderDefinition); err != nil {
+)`, id, user.userID, in.OrderDefinition); err != nil {
 		return nil, dbError("Inserting order", err)
 	}
 	log.Printf("RPC(Add): Order: %q", id)
