@@ -33,6 +33,7 @@ set xdata time
 set ylabel "{{.Meta.YAxisLabel}}"
 set format x "%Y-%m-%d"
 set xrange [ "{{.Meta.From}}":"{{.Meta.To}}" ]
+set key below
 
 set terminal svg size 800,300
 # set terminal png size 800,300 truecolor
