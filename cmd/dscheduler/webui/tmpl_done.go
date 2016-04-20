@@ -24,7 +24,7 @@ const doneTmpl = `
     <td nowrap class="fixed"><a href="{{$root.Root}}/lease/{{.LeaseId}}">{{.LeaseId}}</a></td>
     <td nowrap>{{.CreatedMs|fmsdate "2006-01-02 15:04"}}</td>
     <td nowrap>{{.UpdatedMs|fmsdate "2006-01-02 15:04"}}</td>
-    <td nowrap>{{.CreatedMs|fmssub .UpdatedMs}}</td>
+    <td nowrap class="fixed">{{.CreatedMs|fmssub .UpdatedMs}}</td>
     <td nowrap><a href="{{$root.Root}}/image/{{.LeaseId}}">Image</a></td>
     <!--  <td nowrap>{{.Order.Package|fileonly}}</td> -->
     <td nowrap>{{.Order.File}}</td>

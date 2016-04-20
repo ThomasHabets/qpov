@@ -77,18 +77,16 @@ func fmsdate(s string, ms int64) string {
 
 // take two milliseconds, subtract them as time.Duration and return as string.
 func fmssub(a, b int64) string {
-	return time.Unix(a/1000, 0).Sub(time.Unix(b/1000, 0)).String()
+	return dist.FmtSecondDuration((a - b) / 1000)
 }
 
 // time from now until `ms`.
 func fmsuntil(ms int64) string {
-	now := time.Now().UnixNano() / 1000000000
-	return time.Unix(ms/1000, 0).Sub(time.Unix(now, 0)).String()
+	return dist.FmtSecondDuration((ms - time.Now().UnixNano()/1000000) / 1000)
 }
 
 func fmssince(ms int64) string {
-	now := time.Now().UnixNano() / 1000000000
-	return time.Unix(now, 0).Sub(time.Unix(ms/1000, 0)).String()
+	return dist.FmtSecondDuration((time.Now().UnixNano()/1000000 - ms) / 1000)
 }
 
 func getLeases(ctx context.Context, done bool) ([]*pb.Lease, error) {

@@ -63,6 +63,7 @@ body {
 }
 .fixed {
   font-family: monospace;
+  white-space: pre;
 }
 table {
   border-collapse: collapse;

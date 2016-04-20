@@ -2,6 +2,7 @@ package dist
 
 import (
 	"fmt"
+	"strings"
 	"text/template"
 	"time"
 
@@ -35,27 +36,41 @@ var (
 		"div6432": func(b int32, a int64) int64 { return a / int64(b) },
 		"div6464": func(b, a int64) int64 { return a / b },
 		"seconds2string": func(s int64) string {
-			return fmtSecondDuration(s)
+			return FmtSecondDuration(s)
 		},
 		"cputime2string": func(c *pb.StatsCPUTime) string {
-			return fmtSecondDuration(c.UserSeconds + c.SystemSeconds)
+			return FmtSecondDuration(c.UserSeconds + c.SystemSeconds)
 		},
 	}
 )
 
-func formatDuration(t time.Duration) string {
+func FormatDuration(t time.Duration) string {
 	h, m, s := int(t.Hours()), int(t.Minutes()), int(t.Seconds())
+	var ret []string
 	d := h / 24
 	y := d / 365
 	d %= 365
 	h %= 24
 	m %= 60
 	s %= 60
-	return fmt.Sprintf("%4dy %3dd %2dh %2dm %2ds", y, d, h, m, s)
+	if y > 0 {
+		ret = append(ret, fmt.Sprintf("%4dy", y))
+	}
+	if len(ret) > 0 || d > 0 {
+		ret = append(ret, fmt.Sprintf("%3dd", d))
+	}
+	if len(ret) > 0 || h > 0 {
+		ret = append(ret, fmt.Sprintf("%2dh", h))
+	}
+	if len(ret) > 0 || m > 0 {
+		ret = append(ret, fmt.Sprintf("%2dm", m))
+	}
+	ret = append(ret, fmt.Sprintf("%2ds", s))
+	return strings.Join(ret, " ")
 }
 
-func fmtSecondDuration(e int64) string {
-	return formatDuration(time.Second * time.Duration(e))
+func FmtSecondDuration(e int64) string {
+	return FormatDuration(time.Second * time.Duration(e))
 }
 
 func init() {
