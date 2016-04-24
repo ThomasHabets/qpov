@@ -13,7 +13,7 @@ type DBWrap interface {
 	Driver() driver.Driver
 	Exec(query string, args ...interface{}) (sql.Result, error)
 	Ping() error
-	Prepare(query string) (*sql.Stmt, error)
+	// Prepare(query string) (*sql.Stmt, error)
 	Query(query string, args ...interface{}) (*sql.Rows, error)
 	QueryRow(query string, args ...interface{}) *sql.Row
 	SetConnMaxLifetime(d time.Duration)
@@ -56,6 +56,7 @@ func (db *dbWrap) Ping() error {
 }
 
 func (db *dbWrap) Prepare(query string) (*sql.Stmt, error) {
+	// TODO: not implemented.
 	return db.backend.Prepare(query)
 }
 
@@ -88,11 +89,11 @@ func (db *dbWrap) Stats() sql.DBStats {
 type TXWrap interface {
 	Commit() error
 	Exec(query string, args ...interface{}) (sql.Result, error)
-	Prepare(query string) (*sql.Stmt, error)
+	//Prepare(query string) (*sql.Stmt, error)
 	Query(query string, args ...interface{}) (*sql.Rows, error)
 	QueryRow(query string, args ...interface{}) *sql.Row
 	Rollback() error
-	Stmt(stmt *sql.Stmt) *sql.Stmt
+	//Stmt(stmt *sql.Stmt) *sql.Stmt
 }
 
 type txWrap struct {
@@ -110,6 +111,7 @@ func (tx *txWrap) Exec(query string, args ...interface{}) (sql.Result, error) {
 }
 
 func (tx *txWrap) Prepare(query string) (*sql.Stmt, error) {
+	// TODO: not implemented.
 	return tx.backend.Prepare(query)
 }
 
@@ -128,6 +130,7 @@ func (tx *txWrap) Rollback() error {
 }
 
 func (tx *txWrap) Stmt(stmt *sql.Stmt) *sql.Stmt {
+	// TODO: not implemented.
 	return tx.backend.Stmt(stmt)
 }
 
