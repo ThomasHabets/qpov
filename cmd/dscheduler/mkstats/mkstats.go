@@ -22,7 +22,7 @@ import (
 )
 
 var (
-	db *sql.DB
+	db dist.DBWrap
 	// TODO: Ask the scheduler for the leases instead of getting them from the DB directly.
 	dbConnect = flag.String("db", "", "Database connect string.")
 	outDir    = flag.String("out", ".", "Directory to write stats files to.")
@@ -380,12 +380,15 @@ func main() {
 	log.Printf("Running mkstats")
 	// Connect to database.
 	var err error
-	db, err = sql.Open("postgres", *dbConnect)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err := db.Ping(); err != nil {
-		log.Fatalf("db ping: %v", err)
+	{
+		t, err := sql.Open("postgres", *dbConnect)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := t.Ping(); err != nil {
+			log.Fatalf("db ping: %v", err)
+		}
+		db = dist.NewDBWrap(t, log.New(os.Stderr, "", log.LstdFlags))
 	}
 
 	metaChan := make(chan *pb.RenderingMetadata)

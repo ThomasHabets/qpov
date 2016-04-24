@@ -38,7 +38,7 @@ import (
 )
 
 var (
-	db                    *sql.DB
+	db                    dist.DBWrap
 	dbConnect             = flag.String("db", "", "")
 	addr                  = flag.String("port", ":9999", "Addr to listen to.")
 	certFile              = flag.String("cert_file", "", "The TLS cert file")
@@ -47,6 +47,7 @@ var (
 	clientCAFile          = flag.String("client_ca_file", "", "The client CA file.")
 	maxConcurrentStreams  = flag.Int("max_concurrent_streams", 10000, "Max concurrent RPC streams.")
 	rpclogDir             = flag.String("rpclog_dir", ".", "RPC log directory.")
+	sqlLog                = flag.String("sql_log", "", "Log of SQL statements.")
 	minLeaseRenewTime     = flag.Duration("min_lease_renew_time", time.Hour, "Minimum lease renew time.")
 	maxLeaseRenewTime     = flag.Duration("max_lease_renew_time", 48*time.Hour, "Minimum lease renew time.")
 	defaultLeaseRenewTime = flag.Duration("default_lease_time", time.Hour, "Default lease renew time.")
@@ -1254,14 +1255,31 @@ func main() {
 		}
 	}
 
+	var sqlLogf io.Writer
+	{
+		fn := *sqlLog
+		if fn == "" {
+			fn = "/dev/null"
+		}
+		f, err := os.Create(fn)
+		if err != nil {
+			log.Fatalf("Opening sql log file %q: %v", fn, err)
+		}
+		defer f.Close()
+		sqlLogf = f
+	}
+
 	// Connect to database.
 	var err error
-	db, err = sql.Open("postgres", *dbConnect)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err := db.Ping(); err != nil {
-		log.Fatalf("db ping: %v", err)
+	{
+		t, err := sql.Open("postgres", *dbConnect)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := t.Ping(); err != nil {
+			log.Fatalf("db ping: %v", err)
+		}
+		db = dist.NewDBWrap(t, log.New(sqlLogf, "", log.LstdFlags))
 	}
 
 	// Listen to RPC port.
