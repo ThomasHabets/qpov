@@ -20,8 +20,8 @@ const doneTmpl = `
   </tr>
   {{range .DoneLeases}}
   <tr>
-    <td nowrap class="fixed">{{.OrderId}}</td>
-    <td nowrap class="fixed"><a href="{{$root.Root}}/lease/{{.LeaseId}}">{{.LeaseId}}</a></td>
+    <td nowrap class="fixed"><a href="{{$root.Root}}/order/{{.OrderId}}">Order</a></td>
+    <td nowrap class="fixed"><a href="{{$root.Root}}/lease/{{.LeaseId}}">Lease</a></td>
     <td nowrap>{{.CreatedMs|fmsdate "2006-01-02 15:04"}}</td>
     <td nowrap>{{.UpdatedMs|fmsdate "2006-01-02 15:04"}}</td>
     <td nowrap class="fixed">{{.CreatedMs|fmssub .UpdatedMs}}</td>

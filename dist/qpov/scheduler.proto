@@ -44,6 +44,7 @@ service Scheduler {
         // Stats API. Restricted.
         rpc Lease (LeaseRequest) returns (LeaseReply) {}
         rpc Leases (LeasesRequest) returns (stream LeasesReply) {}
+        rpc Order (OrderRequest) returns (OrderReply) {}
         rpc Orders (OrdersRequest) returns (stream OrdersReply) {}
         rpc Stats (StatsRequest) returns (StatsReply) {}
 
@@ -121,6 +122,13 @@ message LeaseRequest {
 }
 message LeaseReply {
         Lease lease = 1;
+}
+
+message OrderRequest {
+        repeated string order_id = 1;
+}
+message OrderReply {
+        repeated Order order = 1;
 }
 
 message LeasesRequest {

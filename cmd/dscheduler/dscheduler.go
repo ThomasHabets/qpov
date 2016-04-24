@@ -113,7 +113,12 @@ func getOrderByID(id string) (*pb.Order, error) {
 	if err := row.Scan(&def); err != nil {
 		return nil, err
 	}
-	return def2Order(def)
+	ret, err := def2Order(def)
+	if err != nil {
+		return nil, err
+	}
+	ret.OrderId = id
+	return ret, nil
 }
 
 func getOwnerIDByCN(cn string) (int, error) {
@@ -791,6 +796,27 @@ func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) 
 	return nil
 }
 
+func (s *server) Order(ctx context.Context, in *pb.OrderRequest) (*pb.OrderReply, error) {
+	st := time.Now()
+	requestID := uuid.New()
+	if len(in.OrderId) != 1 {
+		return nil, grpc.Errorf(codes.Unimplemented, "getting multiple orders not implemented yet")
+	}
+	o, err := getOrderByID(in.OrderId[0])
+	if err == sql.ErrNoRows {
+		return nil, grpc.Errorf(codes.NotFound, "order not found")
+	} else if err != nil {
+		return nil, dbError("getting order", err)
+	}
+
+	ret := &pb.OrderReply{Order: []*pb.Order{o}}
+	log.Printf("RPC(Order) %s", in.OrderId)
+	s.rpcLog.Log(ctx, requestID, "dscheduler.Order", st,
+		"github.com/ThomasHabets/qpov/dist/qpov/OrderRequest", in,
+		nil, "github.com/ThomasHabets/qpov/dist/qpov/OrderReply", ret)
+	return ret, nil
+}
+
 func (s *server) Orders(in *pb.OrdersRequest, stream pb.Scheduler_OrdersServer) error {
 	st := time.Now()
 	requestID := uuid.New()
@@ -809,6 +835,7 @@ func (s *server) Orders(in *pb.OrdersRequest, stream pb.Scheduler_OrdersServer) 
 		having = append(having, "(COUNT(activeleases.lease_id)=0 AND COUNT(doneleases.lease_id)=0)")
 	}
 	rows, err := db.Query(fmt.Sprintf(`
+-- Presentation query.
 SELECT
    orders.order_id,
    COUNT(activeleases.lease_id) active,
@@ -816,6 +843,7 @@ SELECT
 FROM
   orders
 
+-- Active leases.
 LEFT OUTER JOIN (
   SELECT
     order_id,
@@ -825,6 +853,7 @@ LEFT OUTER JOIN (
 ) AS activeleases
 ON orders.order_id=activeleases.order_id
 
+-- Done leases.
 LEFT OUTER JOIN (
   SELECT
     order_id,

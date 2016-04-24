@@ -37,6 +37,13 @@ const (
 <h1>Lease {{.Lease.LeaseId}}</h1>
 <pre>{{.Ascii}}</pre>
 `
+
+	orderTmpl = `
+{{range .Order}}
+<h1>Order {{.OrderId}}</h1>
+{{end}}
+<pre>{{.Ascii}}</pre>
+`
 )
 
 var (
@@ -411,6 +418,31 @@ func handleJoin(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 	return nil, nil
 }
 
+func handleOrder(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
+	ctx, cancel := context.WithTimeout(httpContext(r), 10*time.Second)
+	defer cancel()
+
+	// Get order.
+	order, ok := mux.Vars(r)["orderID"]
+	if !ok {
+		log.Printf("orderID not passed in to handleOrder")
+		return nil, fmt.Errorf("no order provided")
+	}
+	reply, err := sched.Order(ctx, &pb.OrderRequest{OrderId: []string{order}})
+	if err != nil {
+		return nil, err
+	}
+	return &struct {
+		Root  string
+		Order []*pb.Order
+		Ascii string
+	}{
+		Root:  *root,
+		Order: reply.Order,
+		Ascii: proto.MarshalTextString(reply),
+	}, nil
+}
+
 func handleDone(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
 	var errs []error
 
@@ -632,6 +664,7 @@ func main() {
 	r.Handle(path.Join("/", *root, "done"), wrap(handleDone, doneTmpl)).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "join"), wrap(handleJoin, joinTmpl)).Methods("GET", "HEAD")
 	r.HandleFunc(path.Join("/", *root, "image/{leaseID}"), handleImage).Methods("GET", "HEAD")
+	r.Handle(path.Join("/", *root, "order/{orderID}"), wrap(handleOrder, orderTmpl)).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "lease/{leaseID}"), wrap(handleLease, leaseTmpl)).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "stats"), wrapTmpl(handleStats, dist.TmplStatsHTML)).Methods("GET", "HEAD")
 	r.HandleFunc(path.Join("/", *root, "cert"), handleCert).Methods("GET", "HEAD")

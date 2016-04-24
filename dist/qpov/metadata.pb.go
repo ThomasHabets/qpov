@@ -38,6 +38,8 @@ It has these top-level messages:
 	Lease
 	LeaseRequest
 	LeaseReply
+	OrderRequest
+	OrderReply
 	LeasesRequest
 	LeasesReply
 	OrdersRequest
