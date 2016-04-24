@@ -407,6 +407,10 @@ func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 	return ret, nil
 }
 
+func handleJoin(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
+	return nil, nil
+}
+
 func handleDone(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
 	var errs []error
 
@@ -626,6 +630,7 @@ func main() {
 	r := mux.NewRouter()
 	r.Handle(*root+"/", wrap(handleRoot, rootTmpl)).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "done"), wrap(handleDone, doneTmpl)).Methods("GET", "HEAD")
+	r.Handle(path.Join("/", *root, "join"), wrap(handleJoin, joinTmpl)).Methods("GET", "HEAD")
 	r.HandleFunc(path.Join("/", *root, "image/{leaseID}"), handleImage).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "lease/{leaseID}"), wrap(handleLease, leaseTmpl)).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "stats"), wrapTmpl(handleStats, dist.TmplStatsHTML)).Methods("GET", "HEAD")

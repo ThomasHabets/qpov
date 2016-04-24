@@ -119,6 +119,7 @@ tr:nth-child(odd) {
     <span><a href="{{$root.Root}}/">QPov</a></span>
     <span><a href="{{$root.Root}}/stats">Stats</a></span>
     <span><a href="{{$root.Root}}/done">Done</a></span>
+    <span><a href="{{$root.Root}}/join">Join the fun!</a></span>
     <div id="gbuttons">
       <div class="g-signin2" data-onsuccess="onSignIn" data-theme="dark"></div>
     </div>
