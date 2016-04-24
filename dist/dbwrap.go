@@ -32,6 +32,7 @@ func (db *dbWrap) Begin() (TXWrap, error) {
 	if err != nil {
 		return nil, err
 	}
+	db.log.Printf("SQL:Begin")
 	return &txWrap{
 		backend: tx,
 		log:     db.log,
@@ -52,6 +53,7 @@ func (db *dbWrap) Exec(query string, args ...interface{}) (sql.Result, error) {
 }
 
 func (db *dbWrap) Ping() error {
+	db.log.Printf("SQL:Ping")
 	return db.backend.Ping()
 }
 
@@ -102,11 +104,12 @@ type txWrap struct {
 }
 
 func (tx *txWrap) Commit() error {
+	tx.log.Printf("SQL:TX:Commit")
 	return tx.backend.Commit()
 }
 
 func (tx *txWrap) Exec(query string, args ...interface{}) (sql.Result, error) {
-	tx.log.Printf("SQL:Exec> %q %q", query, args)
+	tx.log.Printf("SQL:TX:Exec> %q %q", query, args)
 	return tx.backend.Exec(query, args...)
 }
 
@@ -116,16 +119,17 @@ func (tx *txWrap) Prepare(query string) (*sql.Stmt, error) {
 }
 
 func (tx *txWrap) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	tx.log.Printf("SQL:Query> %q %q", query, args)
+	tx.log.Printf("SQL:TX:Query> %q %q", query, args)
 	return tx.backend.Query(query, args...)
 }
 
 func (tx *txWrap) QueryRow(query string, args ...interface{}) *sql.Row {
-	tx.log.Printf("SQL:QueryRow> %q %q", query, args)
+	tx.log.Printf("SQL:TX:QueryRow> %q %q", query, args)
 	return tx.backend.QueryRow(query, args...)
 }
 
 func (tx *txWrap) Rollback() error {
+	tx.log.Printf("SQL:TX:Rollback")
 	return tx.backend.Rollback()
 }
 
