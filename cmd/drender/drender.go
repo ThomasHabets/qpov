@@ -31,7 +31,7 @@ var (
 	refreshTime    = flag.Duration("lease", 30*time.Minute, "Lease time.")
 	failWait       = flag.Duration("fail_wait", time.Minute, "Time to pause if rendering fails before trying next order.")
 	expiredRenewal = flag.Duration("lease_expired_renewal", time.Minute, "If lease expires, treat lease as living this long.")
-	root           = flag.String("wd", "root", "Working directory")
+	root           = flag.String("wd", "wd", "Working directory")
 	schedtool      = flag.String("schedtool", "/usr/bin/schedtool", "Path to schedtool.")
 	concurrency    = flag.Int("concurrency", 1, "Run this many povrays in parallel. <=0 means set to number of CPUs.")
 	idle           = flag.Bool("idle", true, "Use idle priority.")
