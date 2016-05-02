@@ -21,6 +21,13 @@ import (
 var (
 	queueName = flag.String("queue", "", "Name of SQS queue.")
 	schedAddr = flag.String("scheduler", "", "Scheduler address.")
+
+	commands = map[string]func([]string){
+		"leases": cmdLeases,
+		"orders": cmdOrders,
+		"stats":  cmdStats,
+		"add":    cmdAdd,
+	}
 )
 
 type scheduler interface {
@@ -286,28 +293,32 @@ OK (y/N)?
 	}
 }
 
+func usage() {
+	fmt.Fprintf(os.Stderr, "Usage: %s [global options] command [options]\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Commands:\n")
+	for k := range commands {
+		fmt.Fprintf(os.Stderr, "  %s\n", k)
+	}
+	fmt.Fprintf(os.Stderr, "Global options:\n")
+	flag.PrintDefaults()
+}
+
 func main() {
+	flag.Usage = usage
 	flag.Parse()
 
 	if len(flag.Args()) == 0 {
-		log.Fatalf("Must supply subcommand")
+		usage()
+		log.Fatalf("Must supply command.")
 	}
 
 	if *schedAddr == "" && *queueName == "" {
 		log.Fatalf("Must supply -queue or -scheduler")
 	}
 
-	switch flag.Arg(0) {
-	case "leases":
-		cmdLeases(flag.Args()[1:])
-	case "orders":
-		cmdOrders(flag.Args()[1:])
-	case "stats":
-		cmdStats(flag.Args()[1:])
-	case "add":
-		cmdAdd(flag.Args()[1:])
-	default:
+	f, found := commands[flag.Arg(0)]
+	if !found {
 		log.Fatalf("Unknown command %q", flag.Arg(0))
 	}
-
+	f(flag.Args()[1:])
 }
