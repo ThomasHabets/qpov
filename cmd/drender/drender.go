@@ -347,18 +347,20 @@ func makeStats(order *dist.Order, cmd *exec.Cmd, startTime time.Time) *pb.Render
 
 func handle(n int, order *dist.Order) (*pb.RenderingMetadata, error) {
 	// Sanity check order.
-	bucket, dir, fn, err := dist.S3Parse(order.Destination)
-	if err != nil {
-		return nil, fmt.Errorf("destination %q is not an s3 dir path", order.Destination)
-	}
-	if bucket == "" {
-		return nil, fmt.Errorf("destination bucket is empty slash, was %q", order.Destination)
-	}
-	if dir == "" {
-		return nil, fmt.Errorf("refusing to put results in bucket root: %q", order.Destination)
-	}
-	if fn != "" {
-		return nil, fmt.Errorf("destination must end with slash, was %q", order.Destination)
+	if order.Destination != "" {
+		bucket, dir, fn, err := dist.S3Parse(order.Destination)
+		if err != nil {
+			return nil, fmt.Errorf("destination %q is not an s3 dir path", order.Destination)
+		}
+		if bucket == "" {
+			return nil, fmt.Errorf("destination bucket is empty slash, was %q", order.Destination)
+		}
+		if dir == "" {
+			return nil, fmt.Errorf("refusing to put results in bucket root: %q", order.Destination)
+		}
+		if fn != "" {
+			return nil, fmt.Errorf("destination must end with slash, was %q", order.Destination)
+		}
 	}
 
 	// Run it.
