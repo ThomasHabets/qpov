@@ -200,14 +200,14 @@ func cmdAdd(args []string) {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] add [options] <povray args...>\n", os.Args[0])
 		fs.PrintDefaults()
 	}
-	pkg := fs.String("package", "", "S3 path to rar file containing all resources.")
+	pkg := fs.String("package", "", "URL path to rar/tgz file containing all resources.")
 	batch := fs.String("batch", "", "Batch this belongs to.")
 	dir := fs.String("dir", "", "Directory in package to use as CWD.")
 	file := fs.String("file", "", "POV file to render.")
-	dst := fs.String("destination", "", "S3 directory to store results in.")
+	dst := fs.String("destination", "", "If using AWS, the S3 directory to store results in.")
 	dryRun := fs.Bool("dry_run", false, "Don't actually enqueue.")
 	var frames Range
-	fs.Var(&frames, "frames", "Order many frames to be rendered. In format '1-10' or '1-10+2' for only doing odd numbered frames.")
+	fs.Var(&frames, "frames", "Order many frames to be rendered. In format '1-10' or '1-10+2' for only doing odd numbered frames. Use fmt string in '-file'")
 	fs.Parse(args)
 
 	if *pkg == "" {
@@ -217,7 +217,8 @@ func cmdAdd(args []string) {
 		log.Fatalf("Must supply -file")
 	}
 	if *dst == "" {
-		log.Fatalf("Must supply -destination")
+		// Not needed with RPC scheduler.
+		//log.Fatalf("Must supply -destination")
 	}
 
 	var q scheduler
