@@ -5,6 +5,10 @@ import "metadata.proto";
 message StatsCPUTime {
         int64 user_seconds = 2;
         int64 system_seconds = 3;
+
+        // Standardized compute core-seconds.
+        // Baseline CPU: One core from a "Core(TM)2 Quad CPU Q6600 @ 2.40GHz".
+        int64 compute_seconds = 4;
 }
 
 message MachineStats {
@@ -20,10 +24,12 @@ message MachineStats {
 
 message BatchStats {
         string batch_id = 1;
-        int64 total = 2;
-        int64 done = 3;
+        int64 total = 2;  // Number of orders.
+        int64 done = 3;   // Completed orders.
         string comment = 4;
         int64 ctime = 5;
+
+        StatsCPUTime cpu_time = 6;
 }
 
 message StatsOverall {

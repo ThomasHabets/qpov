@@ -41,8 +41,8 @@ func (a byTime) Len() int           { return len(a) }
 func (a byTime) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a byTime) Less(i, j int) bool { return a[i].time.Before(a[j].time) }
 
-// Return descriptive specs, short name, and core count
-func getMachine(cloud *pb.Cloud, cpuinfo string) (string, string, int) {
+// Return descriptive specs, model, short name, and core count
+func getMachine(cloud *pb.Cloud, cpuinfo string) (string, string, string, int) {
 	cNamePrefix := ""
 	if cloud != nil {
 		t := proto.Clone(cloud).(*pb.Cloud)
@@ -56,9 +56,9 @@ func getMachine(cloud *pb.Cloud, cpuinfo string) (string, string, int) {
 	spacesRE := regexp.MustCompile(`\s+`)
 	m := cpuRE.FindAllStringSubmatch(cpuinfo, -1)
 	if len(m) != 0 {
-		name := m[0][1]
+		name := spacesRE.ReplaceAllString(m[0][1], " ")
 		num := len(m)
-		desc := spacesRE.ReplaceAllString(fmt.Sprintf("%s%d x %s", cNamePrefix, num, name), " ")
+		desc := fmt.Sprintf("%s%d x %s", cNamePrefix, num, name)
 		short, _ := map[string]string{
 			// Yes, the order here is correct. Pi2 has 5, Pi3 has 4.
 			`1 x ARMv6-compatible processor rev 7 (v6l)`: "Raspberry Pi 1",
@@ -66,9 +66,9 @@ func getMachine(cloud *pb.Cloud, cpuinfo string) (string, string, int) {
 			`4 x ARMv7 Processor rev 4 (v7l)`:            "Raspberry Pi 3",
 			`2 x ARMv7 Processor rev 4 (v7l)`:            "Banana Pi",
 		}[desc]
-		return desc, short, num
+		return desc, name, short, num
 	}
-	return "unknown", "", 0
+	return "unknown", "unknown", "", 0
 }
 
 func streamMeta(metaChan chan<- *pb.RenderingMetadata) error {
@@ -126,7 +126,46 @@ func sortGraphs(lineTitles []string, data [][]tsInt) ([]string, [][]tsInt) {
 	return l, d
 }
 
+// return mapping from order to slice of leases.
+func getAllMetas() (map[string][]pb.Lease, error) {
+	ret := make(map[string][]pb.Lease)
+	rows, err := db.Query(`
+SELECT batch.batch_id, lease_id, leases.metadata
+FROM batch
+JOIN orders ON batch.batch_id=orders.batch_id
+JOIN leases ON orders.order_id=leases.order_id
+WHERE metadata IS NOT NULL`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var batch string
+		var lease string
+		var metas string
+		if err := rows.Scan(&batch, &lease, &metas); err != nil {
+			return nil, err
+		}
+		p := pb.Lease{
+			Metadata: &pb.RenderingMetadata{},
+		}
+		if err := json.Unmarshal([]byte(metas), p.Metadata); err != nil {
+			return nil, err
+		}
+		ret[batch] = append(ret[batch], p)
+	}
+	if rows.Err() != nil {
+		return nil, err
+	}
+	return ret, nil
+
+}
+
 func mkstatsBatch(stats *pb.StatsOverall) error {
+	metas, err := getAllMetas()
+	if err != nil {
+		return err
+	}
 	rows, err := db.Query(`
 SELECT
   a.batch_id,
@@ -179,14 +218,58 @@ ORDER BY ctime NULLS FIRST
 			Total:   total,
 			Done:    done,
 			Comment: comment.String,
+			CpuTime: &pb.StatsCPUTime{},
 		}
 		if ctime.Valid {
 			e.Ctime = int64(ctime.Time.Unix())
 		}
+		var user, sys, compute float64
+		for _, l := range metas[batch.String] {
+			user += float64(l.Metadata.UserMs) / 1000.0
+			sys += float64(l.Metadata.SystemMs) / 1000.0
+			compute += computeSeconds(&l)
+		}
+		e.CpuTime.UserSeconds = int64(user)
+		e.CpuTime.SystemSeconds = int64(sys)
+		e.CpuTime.ComputeSeconds = int64(compute)
 		stats.BatchStats = append(stats.BatchStats, e)
 
 	}
 	return nil
+}
+
+func computeSeconds(lease *pb.Lease) float64 {
+	t := float64(lease.Metadata.UserMs+lease.Metadata.UserMs) / 1000.0
+
+	_, model, short, _ := getMachine(lease.Metadata.Cloud, lease.Metadata.Cpuinfo)
+
+	// Map well-known machines.
+	// Calculated from average CPU time for rendering compared to reference.
+	if mult, found := map[string]float64{
+		"Raspberry Pi 1": 0.053754376708303145,
+		"Raspberry Pi 2": 0.14210898167050498,
+		"Raspberry Pi 3": 0.20090175794013015,
+		"Banana Pi":      0.16817860869808196,
+	}[short]; found {
+		return t * mult
+	}
+
+	// Map well-known CPUs.
+	// Calculated from average CPU time for rendering compared to reference.
+	if mult, found := map[string]float64{
+		"Intel(R) Core(TM) i7-2600 CPU @ 3.40GHz":     0.9839319678702234,
+		"Intel(R) Core(TM)2 Duo CPU P8600 @ 2.40GHz":  1.0777118930049654,
+		"Intel(R) Core(TM)2 Duo CPU T7700 @ 2.40GHz":  0.9075024501702071,
+		"Intel(R) Core(TM)2 Quad CPU Q6600 @ 2.40GHz": 1,
+		"Intel(R) Xeon(R) CPU E5-2420 0 @ 1.90GHz":    0.6615457783320475,
+		"Intel(R) Xeon(R) CPU E5-2630 v3 @ 2.40GHz":   0.987832553206935,
+		"Intel(R) Xeon(R) CPU E5-2630L v2 @ 2.40GHz":  1.1992535654892824,
+		"Intel(R) Xeon(R) CPU E5-2666 v3 @ 2.90GHz":   1.161253218756725,
+	}[model]; found {
+		return t * mult
+	}
+	log.Printf("Could not map %q, defaulting to reference multiplier", model)
+	return t
 }
 
 func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
@@ -209,7 +292,7 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 	machine2userTime := make(map[string]int64)
 	machine2systemTime := make(map[string]int64)
 	for meta := range metaChan {
-		machine, name, cores := getMachine(meta.Cloud, meta.Cpuinfo)
+		machine, _, name, cores := getMachine(meta.Cloud, meta.Cpuinfo)
 		if name != "" {
 			machine = fmt.Sprintf("%s: %s", name, machine)
 		}

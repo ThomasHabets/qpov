@@ -39,6 +39,7 @@ const tmplsStatsHTML = `
     <td class="left">{{.ArchSummary}}</td>
     <td class="right">{{.Jobs}}</td>
     <td class="fixed">{{.CpuTime|sumcpu|div6432 .NumCpu|seconds2string}}</td>
+    <td class="fixed">{{.CpuTime|sumcpu|div6432 .NumCpu}}</td>
   </tr>
   {{end}}
 </table>
@@ -50,6 +51,7 @@ const tmplsStatsHTML = `
     <td class="left">{{.ArchSummary}}</td>
     <td class="right">{{.Jobs}}</td>
     <td class="fixed">{{.CpuTime|cputime2string}}</td>
+    <td class="fixed">{{.CpuTime|sumcpu}}</td>
   </tr>
   {{end}}
 </table>
@@ -61,6 +63,7 @@ const tmplsStatsHTML = `
     <td class="left">{{.ArchSummary}}
     <td class="right">{{.Jobs}}</td>
     <td class="fixed">{{.CpuTime|sumcpu|div6432 .NumCpu|div6464 .Jobs|seconds2string}}</td>
+    <td class="fixed">{{.CpuTime|sumcpu|div6432 .NumCpu|div6464 .Jobs}}</td>
   </tr>
   {{end}}
 </table>
@@ -72,6 +75,7 @@ const tmplsStatsHTML = `
     <td class="left">{{.ArchSummary}}</td>
     <td class="right">{{.Jobs|sprintf "%4d"}}</td>
     <td class="fixed">{{.CpuTime|sumcpu|div6464 .Jobs|seconds2string}}</td>
+    <td class="fixed">{{.CpuTime|sumcpu|div6464 .Jobs}}</td>
   </tr>
   {{end}}
 </table>
