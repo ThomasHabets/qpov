@@ -514,6 +514,10 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		code := http.StatusInternalServerError
 		msg := "Internal error"
+		if grpc.Code(err) != codes.Unknown {
+			code = rpcErrorToHTTPError(err)
+			msg = err.Error()
+		}
 		e2, ok := err.(*httpErr)
 		if ok {
 			code = e2.code
