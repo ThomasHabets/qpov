@@ -85,7 +85,7 @@ AND metadata IS NOT NULL
 	for rows.Next() {
 		var metas sql.NullString
 		if err := rows.Scan(&metas); err != nil {
-			return err
+			return fmt.Errorf("getting all metadata: %v", err)
 		}
 		meta := &pb.RenderingMetadata{}
 		if err := json.Unmarshal([]byte(metas.String), &meta); err != nil {
@@ -130,10 +130,10 @@ func mkstatsBatch(stats *pb.StatsOverall) error {
 	rows, err := db.Query(`
 SELECT
   a.batch_id,
-  MAX(a.comment),
-  MAX(a.ctime),
-  SUM(a.count) total,
-  SUM(b.count) done
+  MAX(a.comment) AS comment,
+  MAX(a.ctime) AS ctime,
+  SUM(a.count) AS total,
+  COALESCE(SUM(b.count), 0) AS done
 FROM (
   SELECT
     batch.batch_id,
@@ -159,7 +159,7 @@ FULL OUTER JOIN (
 ) b
 ON a.batch_id=b.batch_id
 GROUP BY a.batch_id
-ORDER BY a.batch_id NULLS FIRST
+ORDER BY ctime NULLS FIRST
 `)
 	if err != nil {
 		return err
@@ -172,7 +172,7 @@ ORDER BY a.batch_id NULLS FIRST
 		var ctime pq.NullTime
 		var comment sql.NullString
 		if err := rows.Scan(&batch, &comment, &ctime, &total, &done); err != nil {
-			return err
+			return fmt.Errorf("scanning in mkStatsBatch: %v", err)
 		}
 		e := &pb.BatchStats{
 			BatchId: batch.String,
