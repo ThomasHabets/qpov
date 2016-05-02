@@ -104,6 +104,11 @@ Assuming 30fps and QDQr recam:
 
 * https://blog.habets.se/2015/03/Raytracing-Quake-demos
 
+## General tips
+
+* When experimenting with light settings (`-light_fade_distance` and `-light_fade_power`)
+  it's useful to add options `+RP5 +RS9` to hop around a bit as the frame is rendering.
+
 ### Interesting links
 
 * https://www.quaddicted.com/engines/software_vs_glquake
