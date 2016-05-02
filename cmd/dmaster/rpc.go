@@ -58,19 +58,22 @@ func newRPCScheduler(addr string) (*rpcScheduler, error) {
 	if ok := cp.AppendCertsFromPEM([]byte(caStr)); !ok {
 		return nil, fmt.Errorf("failed to add root CAs")
 	}
-	cert, err := tls.LoadX509KeyPair(*certFile, *keyFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load client keypair %q/%q: %v", *certFile, *keyFile, err)
-	}
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to split host/port out of %q", addr)
 	}
-	cr := credentials.NewTLS(&tls.Config{
-		ServerName:   host,
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      cp,
-	})
+	tlsConfig := tls.Config{
+		ServerName: host,
+		RootCAs:    cp,
+	}
+	if *certFile != "" {
+		cert, err := tls.LoadX509KeyPair(*certFile, *keyFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load client keypair %q/%q: %v", *certFile, *keyFile, err)
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
+	cr := credentials.NewTLS(&tlsConfig)
 	conn, err := grpc.Dial(addr,
 		grpc.WithTimeout(*connectTimeout),
 		grpc.WithBlock(),
