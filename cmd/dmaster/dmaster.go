@@ -230,7 +230,7 @@ func cmdAdd(args []string) {
 
 	if *dst == "" {
 		// For backwards compatability with clients that try to parse this destination path.
-		*dest = "s3://dummy/dummy/dummy/"
+		*dst = "s3://dummy/dummy/dummy/"
 	}
 
 	if frames.Skip == 0 {
