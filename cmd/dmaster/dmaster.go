@@ -228,6 +228,11 @@ func cmdAdd(args []string) {
 	}
 	defer q.close()
 
+	if *dst == "" {
+		// For backwards compatability with clients that try to parse this destination path.
+		*dest = "s3://dummy/dummy/dummy/"
+	}
+
 	if frames.Skip == 0 {
 		// Just one.
 		order, err := json.Marshal(&dist.Order{
