@@ -95,7 +95,8 @@ message FailedReply {}
 
 message AddRequest {
         string order_definition = 1;
-        // string destination = 2; // Directory to store the results as <file>.png and <file>.proto.
+        // string destination = 2; // DEPRECATED: Directory to store the results as <file>.png and <file>.proto.
+        string batch_id = 3; // Optional.
 }
 
 message AddReply {

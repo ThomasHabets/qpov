@@ -12,7 +12,7 @@ type sqsScheduler struct {
 	q *sqs.Queue
 }
 
-func (s *sqsScheduler) add(order string) error {
+func (s *sqsScheduler) add(order, batchID string) error {
 	_, err := s.q.SendMessage(string(order))
 	return err
 }

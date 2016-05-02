@@ -38,9 +38,10 @@ func (s *rpcScheduler) close() {
 	//s.conn.Close()
 }
 
-func (s *rpcScheduler) add(order string) error {
+func (s *rpcScheduler) add(order, batchID string) error {
 	_, err := s.client.Add(context.Background(), &pb.AddRequest{
 		OrderDefinition: order,
+		BatchId:         batchID,
 	})
 	return err
 }

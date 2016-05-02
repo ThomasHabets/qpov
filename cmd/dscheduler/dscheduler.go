@@ -1178,20 +1178,26 @@ func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, erro
 		return nil, grpc.Errorf(codes.PermissionDenied, "user not allowed to add orders")
 	}
 
+	var batchID *string
+	if in.BatchId != "" {
+		batchID = &in.BatchId
+	}
 	id := uuid.New()
 	if _, err := db.Exec(`
 INSERT INTO orders(
     order_id,
+    batch_id,
     created,
     owner,
     definition
 )
 VALUES(
     $1,
-    NOW(),
     $2,
-    $3
-)`, id, user.userID, in.OrderDefinition); err != nil {
+    NOW(),
+    $3,
+    $4
+)`, id, batchID, user.userID, in.OrderDefinition); err != nil {
 		return nil, dbError("Inserting order", err)
 	}
 	log.Printf("RPC(Add): Order: %q", id)

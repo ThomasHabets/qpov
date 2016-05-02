@@ -31,7 +31,7 @@ var (
 )
 
 type scheduler interface {
-	add(string) error
+	add(order, batchID string) error
 	close()
 }
 
@@ -201,6 +201,7 @@ func cmdAdd(args []string) {
 		fs.PrintDefaults()
 	}
 	pkg := fs.String("package", "", "S3 path to rar file containing all resources.")
+	batch := fs.String("batch", "", "Batch this belongs to.")
 	dir := fs.String("dir", "", "Directory in package to use as CWD.")
 	file := fs.String("file", "", "POV file to render.")
 	dst := fs.String("destination", "", "S3 directory to store results in.")
@@ -244,7 +245,7 @@ func cmdAdd(args []string) {
 		if *dryRun {
 			log.Printf("Would have scheduled %v", string(order))
 		} else {
-			if err := q.add(string(order)); err != nil {
+			if err := q.add(string(order), *batch); err != nil {
 				log.Fatalf("Failed to enqueue: %v", err)
 			}
 		}
@@ -285,7 +286,7 @@ OK (y/N)?
 			if *dryRun {
 				log.Printf("Would have scheduled %v", string(order))
 			} else {
-				if err := q.add(string(order)); err != nil {
+				if err := q.add(string(order), *batch); err != nil {
 					log.Fatalf("Failed to enqueue: %v", err)
 				}
 			}
