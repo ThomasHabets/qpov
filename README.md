@@ -75,7 +75,6 @@ dmaster \
     -package https://foo/bar.tar.gz \
     -dir balcony \
     -file balcony.pov \
-    -destination s3://mybucket/balcony/ \
     +Q11 +A0.3 +R4 +W3840 +H2160
 ```
 
