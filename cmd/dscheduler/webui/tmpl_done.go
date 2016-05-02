@@ -27,7 +27,7 @@ const doneTmpl = `
     <td nowrap class="fixed">{{.CreatedMs|fmssub .UpdatedMs}}</td>
     <td nowrap><a href="{{$root.Root}}/image/{{.LeaseId}}">Image</a></td>
     <!--  <td nowrap>{{.Order.Package|fileonly}}</td> -->
-    <td nowrap>{{.Order.File}}</td>
+    <td nowrap><a href="/batch/{{.Order.BatchId}}">&hellip;{{.Order.BatchId|tailchar 3}}</a> {{.Order.File}}</td>
     <td nowrap>{{.Address}}</td>
     <td nowrap>{{.Hostname}}</td>
     <!--  <td nowrap>{{.Order.Args}}</td> -->
