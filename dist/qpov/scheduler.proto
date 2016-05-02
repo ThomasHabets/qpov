@@ -152,6 +152,7 @@ message OrderStat {
         string order_id = 1;
         bool done = 2;
         bool active = 3;
+        string batch_id = 4;
 }
 
 message OrdersReply {

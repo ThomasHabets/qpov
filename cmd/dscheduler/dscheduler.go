@@ -109,9 +109,10 @@ func def2Order(def string) (*pb.Order, error) {
 }
 
 func getOrderByID(id string) (*pb.Order, error) {
-	row := db.QueryRow(`SELECT definition FROM orders WHERE order_id=$1`, id)
+	row := db.QueryRow(`SELECT batch_id,definition FROM orders WHERE order_id=$1`, id)
 	var def string
-	if err := row.Scan(&def); err != nil {
+	var batchID sql.NullString
+	if err := row.Scan(&batchID, &def); err != nil {
 		return nil, err
 	}
 	ret, err := def2Order(def)
@@ -119,6 +120,7 @@ func getOrderByID(id string) (*pb.Order, error) {
 		return nil, err
 	}
 	ret.OrderId = id
+	ret.BatchId = batchID.String
 	return ret, nil
 }
 
@@ -839,6 +841,7 @@ func (s *server) Orders(in *pb.OrdersRequest, stream pb.Scheduler_OrdersServer) 
 -- Presentation query.
 SELECT
    orders.order_id,
+   orders.batch_id,
    COUNT(activeleases.lease_id) active,
    COUNT(doneleases.lease_id) done
 FROM
@@ -883,13 +886,16 @@ ORDER BY
 		e := &pb.OrdersReply{
 			Order: &pb.OrderStat{},
 		}
+		var batchID sql.NullString
 		if err := rows.Scan(
 			&e.Order.OrderId,
+			&batchID,
 			&e.Order.Active,
 			&e.Order.Done,
 		); err != nil {
 			return dbError("Scanning orders", err)
 		}
+		e.Order.BatchId = batchID.String
 		if err := stream.Send(e); err != nil {
 			return internalError("failed to stream results", "failed to stream results: %v", err)
 		}
@@ -1037,6 +1043,7 @@ func (s *server) Leases(in *pb.LeasesRequest, stream pb.Scheduler_LeasesServer) 
 	q := fmt.Sprintf(`
 SELECT
   orders.order_id,
+  orders.batch_id,
   orders.definition,
   lease_id,
   user_id,
@@ -1069,13 +1076,14 @@ ORDER BY %s`, metadataCol, ordering)
 			return err
 		}
 		var orderID, leaseID string
+		var batchID sql.NullString
 		var userID *int
 		var created, updated, expires time.Time
 		var metadata *string
 		var def string
 		var client, clientHostname sql.NullString
 		var done bool
-		if err := rows.Scan(&orderID, &def, &leaseID, &userID, &created, &updated, &expires, &client, &clientHostname, &done, &metadata); err != nil {
+		if err := rows.Scan(&orderID, &batchID, &def, &leaseID, &userID, &created, &updated, &expires, &client, &clientHostname, &done, &metadata); err != nil {
 			return dbError("Scanning leases", err)
 		}
 		var order *pb.Order
@@ -1084,6 +1092,8 @@ ORDER BY %s`, metadataCol, ordering)
 			order, err = def2Order(def)
 			if err != nil {
 				log.Printf("Getting order %q: %v", orderID, err)
+			} else {
+				order.BatchId = batchID.String
 			}
 		}
 		e := &pb.LeasesReply{

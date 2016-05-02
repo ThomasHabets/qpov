@@ -7,4 +7,5 @@ message Order {
         string file = 3; // File in package and dir to render.
         repeated string args = 4; // POV-Ray args.
         string order_id = 5;
+        string batch_id = 6;
 }

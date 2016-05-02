@@ -80,7 +80,7 @@ const rootTmpl = `
           <td nowrap class="fixed">{{.UpdatedMs|fmssince}}</td>
           <td nowrap class="fixed">{{.ExpiresMs|fmsuntil}}</td>
           <!--  <td nowrap>{{.Order.Package|fileonly}}</td> -->
-          <td nowrap>{{.Order.File}}</td>
+          <td><a href="/batch/{{.Order.BatchId}}">&hellip;{{.Order.BatchId|tailchar 3}}</a> {{.Order.File}}</td>
           <td nowrap>{{.Address}}</td>
           <td nowrap>{{.Hostname}}</td>
         </tr>

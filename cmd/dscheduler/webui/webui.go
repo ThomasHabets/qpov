@@ -573,11 +573,17 @@ func wrap(f handleFunc, t string) *handler {
 		"fsdate":         func(s string, n int64) string { return fmsdate(s, n*1000) },
 		"sumcpu":         func(c *pb.StatsCPUTime) int64 { return c.UserSeconds + c.SystemSeconds },
 		"seconds2string": func(s int64) string { return dist.FmtSecondDuration(s) },
-		"fmsdate":        fmsdate,
-		"fmsuntil":       fmsuntil,
-		"fmssince":       fmssince,
-		"fmssub":         fmssub,
-		"fileonly":       path.Base,
+		"tailchar": func(i int, s string) string {
+			if len(s) < i {
+				return s
+			}
+			return s[len(s)-i:]
+		},
+		"fmsdate":  fmsdate,
+		"fmsuntil": fmsuntil,
+		"fmssince": fmssince,
+		"fmssub":   fmssub,
+		"fileonly": path.Base,
 	})
 	template.Must(tmpl.Parse(t))
 	return wrapTmpl(f, tmpl)
