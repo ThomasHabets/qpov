@@ -569,13 +569,15 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func wrap(f handleFunc, t string) *handler {
 	tmpl := template.New("blah")
 	tmpl.Funcs(template.FuncMap{
-		"fmtpercent": func(a, b int64) string { return fmt.Sprintf("%.2f", 100.0*float64(a)/float64(b)) },
-		"fsdate":     func(s string, n int64) string { return fmsdate(s, n*1000) },
-		"fmsdate":    fmsdate,
-		"fmsuntil":   fmsuntil,
-		"fmssince":   fmssince,
-		"fmssub":     fmssub,
-		"fileonly":   path.Base,
+		"fmtpercent":     func(a, b int64) string { return fmt.Sprintf("%.2f", 100.0*float64(a)/float64(b)) },
+		"fsdate":         func(s string, n int64) string { return fmsdate(s, n*1000) },
+		"sumcpu":         func(c *pb.StatsCPUTime) int64 { return c.UserSeconds + c.SystemSeconds },
+		"seconds2string": func(s int64) string { return dist.FmtSecondDuration(s) },
+		"fmsdate":        fmsdate,
+		"fmsuntil":       fmsuntil,
+		"fmssince":       fmssince,
+		"fmssub":         fmssub,
+		"fileonly":       path.Base,
 	})
 	template.Must(tmpl.Parse(t))
 	return wrapTmpl(f, tmpl)

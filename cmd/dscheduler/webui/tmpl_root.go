@@ -35,6 +35,7 @@ const rootTmpl = `
       <tr>
         <th>Batch</th>
         <th>Started</th>
+        <th>CPU time</th>
         <th>Computrons</th>
         <th>Done</th>
         <th>Total</th>
@@ -44,6 +45,7 @@ const rootTmpl = `
       <tr>
         <td><a href="/batch/{{.BatchId}}">{{if .Comment}}{{.Comment}}{{else}}{{if .BatchId}}{{.BatchId}}{{else}}none{{end}}{{end}}</a></td>
         <td>{{.Ctime|fsdate "2006-01-02 15:04"}}</td>
+        <td>{{.CpuTime|sumcpu|seconds2string}}</td>
         <td>{{.CpuTime.ComputeSeconds}}</td>
         <td>{{.Done}}</td>
         <td>{{.Total}}</td>
