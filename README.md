@@ -67,6 +67,14 @@ mkdir qpov-wd
 drender -scheduler=addr-of-dscheduler:12345 -wd=qpov-wd
 ```
 
+#### Running a render node docker image
+
+```shell
+docker create thomashabets/qpov
+docker ps -a
+docker start the_id_from_previous_command
+```
+
 ### Scheduling render work
 
 ```shell
