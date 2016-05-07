@@ -59,10 +59,13 @@ type state struct {
 }
 
 const (
-	amazonCloud        = "Amazon"
-	googleCloud        = "Google"
-	digitalOceanCloud  = "DigitalOcean"
-	gceInstanceTypeURL = "http://metadata.google.internal./computeMetadata/v1/instance/machine-type"
+	amazonCloud       = "Amazon"
+	googleCloud       = "Google"
+	digitalOceanCloud = "DigitalOcean"
+
+	// These should be the same, but the latter doesn't rely on DNS.
+	//gceInstanceTypeURL = "http://metadata.google.internal./computeMetadata/v1/instance/machine-type"
+	gceInstanceTypeURL = "http://169.254.169.254/computeMetadata/v1/instance/machine-type"
 
 	doneRetryTimer = 10 * time.Second
 
