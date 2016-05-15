@@ -61,7 +61,6 @@ const rootTmpl = `
     <table>
       <tr>
         <th>Order</th>
-        <th>Lease</th>
         <th>Created</th>
         <th>Lifetime</th>
         <th>Updated</th>
@@ -73,14 +72,15 @@ const rootTmpl = `
       </tr>
       {{range .Leases}}
         <tr>
-          <td nowrap class="fixed"><a href="{{$root.Root}}/order/{{.OrderId}}">Order</a></td>
-          <td nowrap class="fixed">{{if .LeaseId}}<a href="{{$root.Root}}/lease/{{.LeaseId}}">Lease</a>{{end}}</td>
+          <td nowrap class="fixed"><a href="{{$root.Root}}/order/{{.OrderId}}">Order</a>
+{{if .LeaseId}}<a href="{{$root.Root}}/lease/{{.LeaseId}}">Lease</a>{{end}}</td>
           <td nowrap class="fixed">{{.CreatedMs|fmsdate "2006-01-02 15:04"}}</td>
           <td nowrap class="fixed">{{.CreatedMs|fmssince}}</td>
           <td nowrap class="fixed">{{.UpdatedMs|fmssince}}</td>
           <td nowrap class="fixed">{{.ExpiresMs|fmsuntil}}</td>
           <!--  <td nowrap>{{.Order.Package|fileonly}}</td> -->
-          <td><a href="/batch/{{.Order.BatchId}}">&hellip;{{.Order.BatchId|tailchar 3}}</a> {{.Order.File}}</td>
+          <td nowrap class="fixed"><a href="/batch/{{.Order.BatchId}}">&hellip;{{.Order.BatchId|tailchar 3}}</a>
+{{.Order.File}}</td>
           <td nowrap>{{.Address}}</td>
           <td nowrap>{{.Hostname}}</td>
         </tr>
