@@ -365,7 +365,6 @@ func (s *server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetReply, erro
 	defer tx.Rollback()
 
 	var orderID, def string
-	// TODO: Hand out expired and failed leases too.
 	// TODO: Currently using batch.ctime() as priority. Should have separate thing?
 	if err := tx.QueryRow(`
 SELECT
@@ -377,13 +376,19 @@ JOIN (
   SELECT          CAST(MIN(CAST(orders.order_id AS TEXT)) AS UUID) AS order_id
   FROM            orders
   LEFT OUTER JOIN batch  ON orders.batch_id=batch.batch_id
-  LEFT OUTER JOIN leases ON orders.order_id=leases.order_id
-  WHERE           leases.done IS NULL
+  LEFT OUTER JOIN (
+    SELECT DISTINCT order_id, MAX(CAST(done AS INT))>0 AS done, MAX(expires) AS expires
+    FROM            leases
+    GROUP BY        order_id
+  ) active_or_done
+    ON            orders.order_id=active_or_done.order_id
+  WHERE           active_or_done.order_id IS NULL        -- Not attempted at all yet.
+  OR              (active_or_done.done = FALSE AND active_or_done.expires < NOW()) -- Not done and none is already active.
   GROUP BY        batch.batch_id
   ORDER BY        batch.ctime
   LIMIT 1
-) a
-ON a.order_id=orders.order_id
+) next_order
+ON next_order.order_id=orders.order_id
 `).Scan(&orderID, &def); err == sql.ErrNoRows {
 		return nil, grpc.Errorf(codes.NotFound, "nothing to do")
 	} else if err != nil {
