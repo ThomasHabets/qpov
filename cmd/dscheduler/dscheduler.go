@@ -1225,6 +1225,7 @@ VALUES(
 }
 
 func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.LUTC)
 	flag.Parse()
 	if flag.NArg() > 0 {
 		log.Fatalf("Got extra args on cmdline: %q", flag.Args())

@@ -569,6 +569,7 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.LUTC)
 	flag.Parse()
 	if len(flag.Args()) != 0 {
 		log.Fatalf("Got extra args on cmdline: %q", flag.Args())
