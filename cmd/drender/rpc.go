@@ -6,11 +6,13 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net"
 	"time"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 
 	"github.com/ThomasHabets/qpov/dist"
@@ -64,6 +66,10 @@ func (s *rpcScheduler) done(id string, img, stdout, stderr []byte, meta *pb.Rend
 		Stderr:   stderr,
 		Metadata: meta,
 	})
+	if grpc.Code(err) == codes.AlreadyExists {
+		log.Printf("Server says %q already done. Moving on...", id)
+		return nil
+	}
 	return err
 }
 
