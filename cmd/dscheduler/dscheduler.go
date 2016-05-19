@@ -52,6 +52,7 @@ var (
 	maxLeaseRenewTime     = flag.Duration("max_lease_renew_time", 48*time.Hour, "Minimum lease renew time.")
 	defaultLeaseRenewTime = flag.Duration("default_lease_time", time.Hour, "Default lease renew time.")
 	oauthClientID         = flag.String("oauth_client_id", "", "Google OAuth Client ID.")
+	doRPCLog              = flag.Bool("rpclog", false, "Log all RPCs.")
 
 	// Cloud config.
 	cloudCredentials    = flag.String("cloud_credentials", "", "Path to JSON file containing credentials.")
@@ -1337,16 +1338,21 @@ func main() {
 	}
 
 	// Set up RPC logger.
-	now := time.Now()
-	fin, err := os.Create(path.Join(*rpclogDir, fmt.Sprintf("rpclog.%d.in.gob", now.Unix())))
-	if err != nil {
-		log.Fatalf("Opening rpclog: %v", err)
+	var l *rpclog.Logger
+	if *doRPCLog {
+		now := time.Now()
+		fin, err := os.Create(path.Join(*rpclogDir, fmt.Sprintf("rpclog.%d.in.gob", now.Unix())))
+		if err != nil {
+			log.Fatalf("Opening rpclog: %v", err)
+		}
+		fout, err := os.Create(path.Join(*rpclogDir, fmt.Sprintf("rpclog.%d.out.gob", now.Unix())))
+		if err != nil {
+			log.Fatalf("Opening rpclog: %v", err)
+		}
+		l = rpclog.New(fin, fout)
+	} else {
+		l = rpclog.New(ioutil.Discard, ioutil.Discard)
 	}
-	fout, err := os.Create(path.Join(*rpclogDir, fmt.Sprintf("rpclog.%d.out.gob", now.Unix())))
-	if err != nil {
-		log.Fatalf("Opening rpclog: %v", err)
-	}
-	l := rpclog.New(fin, fout)
 
 	// Create RPC server.
 	s := grpc.NewServer(opts...)
