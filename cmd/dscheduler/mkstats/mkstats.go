@@ -26,6 +26,9 @@ var (
 	// TODO: Ask the scheduler for the leases instead of getting them from the DB directly.
 	dbConnect = flag.String("db", "", "Database connect string.")
 	outDir    = flag.String("out", ".", "Directory to write stats files to.")
+
+	// from order to slice of leases.
+	metas map[string][]pb.Lease
 )
 
 type event struct {
@@ -42,18 +45,20 @@ func (a byTime) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a byTime) Less(i, j int) bool { return a[i].time.Before(a[j].time) }
 
 // Return descriptive specs, model, short name, and core count
+var cpuRE = regexp.MustCompile(`(?m)^model name\s+:\s+(.*)$`)
+var spacesRE = regexp.MustCompile(`\s+`)
+
 func getMachine(cloud *pb.Cloud, cpuinfo string) (string, string, string, int) {
 	cNamePrefix := ""
 	if cloud != nil {
-		t := proto.Clone(cloud).(*pb.Cloud)
+		t := cloud
 		if t.Provider == "Amazon" && t.InstanceType == "unavailable\n" {
+			t = proto.Clone(cloud).(*pb.Cloud)
 			t.Provider = "DigitalOcean"
 			t.InstanceType = "unknown"
 		}
 		cNamePrefix = strings.TrimSpace(fmt.Sprintf("%s/%s", t.Provider, t.InstanceType)) + " "
 	}
-	cpuRE := regexp.MustCompile(`(?m)^model name\s+:\s+(.*)$`)
-	spacesRE := regexp.MustCompile(`\s+`)
 	m := cpuRE.FindAllStringSubmatch(cpuinfo, -1)
 	if len(m) != 0 {
 		name := spacesRE.ReplaceAllString(m[0][1], " ")
@@ -69,35 +74,6 @@ func getMachine(cloud *pb.Cloud, cpuinfo string) (string, string, string, int) {
 		return desc, name, short, num
 	}
 	return "unknown", "unknown", "", 0
-}
-
-func streamMeta(metaChan chan<- *pb.RenderingMetadata) error {
-	rows, err := db.Query(`
-SELECT metadata
-FROM leases
-WHERE done=TRUE
-AND metadata IS NOT NULL
-`)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var metas sql.NullString
-		if err := rows.Scan(&metas); err != nil {
-			return fmt.Errorf("getting all metadata: %v", err)
-		}
-		meta := &pb.RenderingMetadata{}
-		if err := json.Unmarshal([]byte(metas.String), &meta); err != nil {
-			log.Printf("Parsing %q: %v", metas.String, err)
-			continue
-		}
-		metaChan <- meta
-	}
-	if rows.Err() != nil {
-		return err
-	}
-	return nil
 }
 
 type sortGraphsT struct {
@@ -161,11 +137,8 @@ WHERE metadata IS NOT NULL`)
 
 }
 
-func mkstatsBatch(stats *pb.StatsOverall) error {
-	metas, err := getAllMetas()
-	if err != nil {
-		return err
-	}
+func mkstatsBatch() ([]*pb.BatchStats, error) {
+	var ret []*pb.BatchStats
 	rows, err := db.Query(`
 SELECT
   a.batch_id,
@@ -201,7 +174,7 @@ GROUP BY a.batch_id
 ORDER BY ctime NULLS FIRST
 `)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -211,7 +184,7 @@ ORDER BY ctime NULLS FIRST
 		var ctime pq.NullTime
 		var comment sql.NullString
 		if err := rows.Scan(&batch, &comment, &ctime, &total, &done); err != nil {
-			return fmt.Errorf("scanning in mkStatsBatch: %v", err)
+			return nil, fmt.Errorf("scanning in mkStatsBatch: %v", err)
 		}
 		e := &pb.BatchStats{
 			BatchId: batch.String,
@@ -227,15 +200,18 @@ ORDER BY ctime NULLS FIRST
 		for _, l := range metas[batch.String] {
 			user += float64(l.Metadata.UserMs) / 1000.0
 			sys += float64(l.Metadata.SystemMs) / 1000.0
-			compute += computeSeconds(&l)
+			// TODO: when we calculate computrons.
+			//compute += computeSeconds(&l)
 		}
 		e.CpuTime.UserSeconds = int64(user)
 		e.CpuTime.SystemSeconds = int64(sys)
 		e.CpuTime.ComputeSeconds = int64(compute)
-		stats.BatchStats = append(stats.BatchStats, e)
-
+		ret = append(ret, e)
 	}
-	return nil
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return ret, nil
 }
 
 func computeSeconds(lease *pb.Lease) float64 {
@@ -279,9 +255,14 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 		MachineTime:    &pb.StatsCPUTime{},
 	}
 
-	if err := mkstatsBatch(stats); err != nil {
-		return nil, err
-	}
+	batchCh := make(chan []*pb.BatchStats)
+	go func() {
+		s, err := mkstatsBatch()
+		if err != nil {
+			log.Fatalf("mkstatsBatch: %v", err)
+		}
+		batchCh <- s
+	}()
 
 	// Deltas.
 	var events []event
@@ -317,7 +298,6 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 		machine2userTime[machine] += meta.Rusage.Utime
 		machine2systemTime[machine] += meta.Rusage.Stime
 	}
-
 	for _, k := range sortedMapKeysSI(machine2jobs) {
 		stats.MachineTime.UserSeconds += int64(machine2userTime[k]) / 1000000 / int64(machine2numcpu[k])
 		stats.MachineTime.UserSeconds += int64(machine2systemTime[k]) / 1000000 / int64(machine2numcpu[k])
@@ -424,6 +404,7 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 			return nil, err
 		}
 	}
+	stats.BatchStats = <-batchCh
 	return stats, nil
 }
 
@@ -475,18 +456,22 @@ func main() {
 		db = dist.NewDBWrap(t, log.New(os.Stderr, "", log.LstdFlags))
 	}
 
-	metaChan := make(chan *pb.RenderingMetadata)
-	streamErr := make(chan error, 1)
-	go func() {
-		defer close(metaChan)
-		defer close(streamErr)
-		streamErr <- streamMeta(metaChan)
-	}()
-	stats, err := mkstats(metaChan)
+	metas, err = getAllMetas()
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := <-streamErr; err != nil {
+
+	metaChan := make(chan *pb.RenderingMetadata)
+	go func() {
+		defer close(metaChan)
+		for _, leases := range metas {
+			for _, l := range leases {
+				metaChan <- l.Metadata
+			}
+		}
+	}()
+	stats, err := mkstats(metaChan)
+	if err != nil {
 		log.Fatal(err)
 	}
 
