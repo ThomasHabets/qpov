@@ -187,7 +187,7 @@ FROM (
 FULL OUTER JOIN (
   SELECT
     batch.batch_id,
-    COUNT(*)
+    COUNT(DISTINCT leases.order_id)
   FROM batch
   RIGHT OUTER JOIN orders
   ON batch.batch_id=orders.batch_id
