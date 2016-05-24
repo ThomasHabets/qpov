@@ -4,10 +4,12 @@ package main
 
 import (
 	"archive/zip"
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -32,21 +34,26 @@ var (
 	cloudCredentials    = flag.String("cloud_credentials", "", "Path to JSON file containing credentials.")
 	downloadBucketNames = flag.String("cloud_download_buckets", "", "Google cloud storage bucket name to read from.")
 	batchID             = flag.String("batch", "", "Batch to download.")
+	dryRun              = flag.Bool("dry_run", false, "Put fake data in zip file instead of downloading from cloud.")
 
 	db                 dist.DBWrap
 	googleCloudStorage *storage.Client
 )
 
+func replaceExt(fn, n string) string {
+	return fn[0:len(fn)-len(path.Ext(fn))] + n
+}
+
 func getLeases() ([]string, error) {
 	rows, err := db.Query(`
 SELECT
   orders.definition,
-  CAST(MIN(CAST(orders.order_id AS TEXT)) AS UUID)
+  CAST(MIN(CAST(leases.lease_id AS TEXT)) AS UUID)
 FROM leases
 JOIN  orders ON leases.order_id=orders.order_id
 WHERE orders.batch_id=$1
 AND   leases.done=TRUE
-GROUP BY orders.order_id,orders.definition
+GROUP BY leases.lease_id,orders.definition
 `, *batchID)
 	if err != nil {
 		return nil, err
@@ -63,8 +70,9 @@ GROUP BY orders.order_id,orders.definition
 		if err := json.Unmarshal([]byte(def), &p); err != nil {
 			return nil, err
 		}
-		t[p.File] = leaseID
-		files = append(files, p.File)
+		fn := replaceExt(p.File, ".png")
+		t[fn] = leaseID
+		files = append(files, fn)
 	}
 	if rows.Err() != nil {
 		return nil, err
@@ -77,12 +85,22 @@ GROUP BY orders.order_id,orders.definition
 	return ps, nil
 }
 
-func tryDownload(f, bucketName string) ([]byte, error) {
-	// TODO: actually download them.
-	return []byte("hello"), nil
+func tryDownload(ctx context.Context, f, bucketName string) ([]byte, error) {
+	if *dryRun {
+		return []byte("hello"), nil
+	}
+	r, err := googleCloudStorage.Bucket(bucketName).Object(path.Join("batch", *batchID, f)).NewReader(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
-func ddownload(o *zip.Writer) error {
+func ddownload(ctx context.Context, o *zip.Writer) error {
 	leases, err := getLeases()
 	if err != nil {
 		return err
@@ -94,7 +112,7 @@ func ddownload(o *zip.Writer) error {
 			log.Printf("  Downloading %s...", f)
 			for {
 				for _, bucketName := range strings.Split(*downloadBucketNames, ",") {
-					buf, err := tryDownload(f, bucketName)
+					buf, err := tryDownload(ctx, f, bucketName)
 					if err != nil {
 						log.Printf("Failed to download %q from %q: %v", f, bucketName, err)
 						continue
@@ -108,7 +126,7 @@ func ddownload(o *zip.Writer) error {
 					}
 					continue leaseLoop
 				}
-				log.Printf("Failed to download %q from all buckets, sleeping a bit")
+				log.Printf("Failed to download %q from all buckets, sleeping a bit", f)
 				time.Sleep(time.Minute)
 				log.Printf("Trying again")
 			}
@@ -125,6 +143,10 @@ func main() {
 	flag.Parse()
 	if flag.NArg() > 0 {
 		log.Fatalf("Got extra args on cmdline: %q", flag.Args())
+	}
+
+	if *downloadBucketNames == "" {
+		log.Fatalf("-cloud_download_buckets is mandatory")
 	}
 
 	fo, err := os.Create(*out)
@@ -176,7 +198,7 @@ func main() {
 		}
 	}
 
-	if err := ddownload(fz); err != nil {
+	if err := ddownload(ctx, fz); err != nil {
 		log.Fatal(err)
 	}
 }
