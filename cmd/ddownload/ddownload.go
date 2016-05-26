@@ -53,7 +53,7 @@ FROM leases
 JOIN  orders ON leases.order_id=orders.order_id
 WHERE orders.batch_id=$1
 AND   leases.done=TRUE
-GROUP BY leases.lease_id,orders.definition
+GROUP BY orders.definition
 `, *batchID)
 	if err != nil {
 		return nil, err
