@@ -320,6 +320,10 @@ func (s *server) Login(ctx context.Context, in *pb.LoginRequest) (*pb.LoginReply
 	}
 	defer tx.Rollback()
 
+	if _, err := db.Exec("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"); err != nil {
+		return nil, dbError("set isolation level serializable", err)
+	}
+
 	// Reuse cookie if present and is UUID-shaped.
 	c := in.Cookie
 	if c == "" || uuid.Parse(c) == nil {
@@ -364,6 +368,10 @@ func (s *server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetReply, erro
 		return nil, dbError("begin transaction", err)
 	}
 	defer tx.Rollback()
+
+	if _, err := db.Exec("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"); err != nil {
+		return nil, dbError("set isolation level serializable", err)
+	}
 
 	var orderID, def string
 	// TODO: Currently using batch.ctime() as priority. Should have separate thing?
