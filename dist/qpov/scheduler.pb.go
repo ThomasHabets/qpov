@@ -443,7 +443,7 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion2
+const _ = grpc.SupportPackageIsVersion3
 
 // Client API for CookieMonster service
 
@@ -571,7 +571,8 @@ var _CookieMonster_serviceDesc = grpc.ServiceDesc{
 			Handler:    _CookieMonster_CheckCookie_Handler,
 		},
 	},
-	Streams: []grpc.StreamDesc{},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: fileDescriptor2,
 }
 
 // Client API for Scheduler service
@@ -1090,7 +1091,10 @@ var _Scheduler_serviceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
+	Metadata: fileDescriptor2,
 }
+
+func init() { proto.RegisterFile("scheduler.proto", fileDescriptor2) }
 
 var fileDescriptor2 = []byte{
 	// 1160 bytes of a gzipped FileDescriptorProto
