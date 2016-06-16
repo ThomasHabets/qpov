@@ -30,7 +30,7 @@ const (
 )
 
 type rpcScheduler struct {
-	conn   grpc.Conn
+	conn   *grpc.ClientConn
 	client pb.SchedulerClient
 }
 
