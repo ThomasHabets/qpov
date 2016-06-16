@@ -80,27 +80,34 @@ func (o *OAuthKeys) VerifyJWT(t string) (string, string, error) {
 	token, err := parser.Parse(t, func(token *jwt.Token) (interface{}, error) {
 		return o.lookup(token.Header["kid"].(string))
 	})
+
+	if err := token.Claims.Valid(); err != nil {
+		return "", "", fmt.Errorf("invalid token: %v", err)
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", "", fmt.Errorf("internal error: wrong type of JWT claims")
+	}
+
 	if err != nil {
 		return "", "", err
 	}
 
-	if !token.Valid {
-		return "", "", fmt.Errorf("invalid token")
-	}
-	if t, _ := token.Claims["email_verified"].(bool); !t {
+	if t, _ := claims["email_verified"].(bool); !t {
 		return "", "", fmt.Errorf("email not verified")
 	}
-	if t, _ := token.Claims["aud"].(string); t == "" || t != *oauthClientID {
-		return "", "", fmt.Errorf("incorrect client ID %q", t)
+	if aud, _ := claims["aud"].(string); aud != *oauthClientID {
+		return "", "", fmt.Errorf("incorrect client ID %q", aud)
 	}
-	if t, _ := token.Claims["iss"].(string); !validOAuthIssuers[t] {
+	if t, _ := claims["iss"].(string); !validOAuthIssuers[t] {
 		return "", "", fmt.Errorf("invalid issuer ID %q", t)
 	}
-	email, ok := token.Claims["email"].(string)
+	email, ok := claims["email"].(string)
 	if !ok || email == "" {
 		return "", "", fmt.Errorf("missing email")
 	}
-	oauthSubject, ok := token.Claims["sub"].(string)
+	oauthSubject, ok := claims["sub"].(string)
 	if !ok || oauthSubject == "" {
 		return "", "", fmt.Errorf("missing oauthSubject")
 	}
