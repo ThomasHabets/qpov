@@ -136,6 +136,7 @@ message LeasesRequest {
         bool done = 1;
         bool order = 2;
         bool metadata = 3;
+        int64 since = 4; // Updated more recently than X seconds since 1970.
 }
 
 message LeasesReply {

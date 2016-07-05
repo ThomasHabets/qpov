@@ -100,6 +100,7 @@ func getLeases(ctx context.Context, done bool) ([]*pb.Lease, error) {
 	stream, err := sched.Leases(ctx, &pb.LeasesRequest{
 		Done:  done,
 		Order: true,
+		Since: time.Now().Add(-24 * 7 * time.Hour).Unix(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("Leases RPC: %v", err)

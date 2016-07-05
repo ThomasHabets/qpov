@@ -1072,8 +1072,9 @@ FROM leases
 JOIN orders ON orders.order_id=leases.order_id
 WHERE done=$1
 AND   ($1=TRUE OR expires > NOW())
+AND   leases.updated > $2
 ORDER BY %s`, metadataCol, ordering)
-	rows, err := db.Query(q, in.Done)
+	rows, err := db.Query(q, in.Done, time.Unix(in.Since, 0))
 	if err != nil {
 		return dbError("Listing leases", err)
 	}
@@ -1147,7 +1148,7 @@ ORDER BY %s`, metadataCol, ordering)
 		return dbError("Listing leases", err)
 	}
 
-	log.Printf("RPC(Leases)")
+	log.Printf("RPC(Leases) %v", time.Since(st))
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Leases", st,
 		"github.com/ThomasHabets/qpov/dist/qpov/LeasesRequest", in,
 		nil, "github.com/ThomasHabets/qpov/dist/qpov/LeasesReply", logRet)

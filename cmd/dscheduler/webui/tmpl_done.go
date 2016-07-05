@@ -3,7 +3,7 @@ package main
 
 const doneTmpl = `
 {{ $root := . }}
-<h2>Finished</h2>
+<h2>Recently finished</h2>
 <table>
   <tr>
     <th>Order</th>
