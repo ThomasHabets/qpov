@@ -19,7 +19,6 @@ import (
 )
 
 var (
-	queueName = flag.String("queue", "", "Name of SQS queue.")
 	schedAddr = flag.String("scheduler", "", "Scheduler address.")
 
 	commands = map[string]func([]string){
@@ -319,8 +318,8 @@ func main() {
 		log.Fatalf("Must supply command.")
 	}
 
-	if *schedAddr == "" && *queueName == "" {
-		log.Fatalf("Must supply -queue or -scheduler")
+	if *schedAddr == "" {
+		log.Fatalf("Must supply -scheduler")
 	}
 
 	f, found := commands[flag.Arg(0)]
