@@ -993,7 +993,7 @@ func (block *Block) DecodeMessage() (Message, error) {
 			a, _ := readUint8(block.buf)
 			m.Effects = &a
 			if *m.Effects&0xfd != 0 {
-				log.Fatalf("Entity %v effect %v", m.Entity, a)
+				log.Printf("Entity %v effect %v", m.Entity, a)
 			}
 		}
 		if mask&U_ORIGIN1 != 0 {
