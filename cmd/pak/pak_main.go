@@ -32,7 +32,7 @@ import (
 )
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "Usage: %s [options] <pakfiles> command [command args...]\n", os.Args[0])
+	fmt.Fprintf(os.Stdout, "Usage: %s [options] <pakfiles> command [command args...]\n", os.Args[0])
 	flag.PrintDefaults()
 }
 
