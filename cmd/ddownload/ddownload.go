@@ -18,11 +18,11 @@ import (
 	"strings"
 	"time"
 
+	cloud "cloud.google.com/go"
+	storage "cloud.google.com/go/storage"
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
-	"google.golang.org/cloud"
-	"google.golang.org/cloud/storage"
 
 	"github.com/ThomasHabets/qpov/dist"
 	pb "github.com/ThomasHabets/qpov/dist/qpov"
