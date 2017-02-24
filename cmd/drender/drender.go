@@ -38,9 +38,7 @@ var (
 	comment        = flag.String("comment", "", "Comment to record for stats, for this instance.")
 	schedAddr      = flag.String("scheduler", "", "Scheduler address.")
 
-	// DEPRECATED: AWS options.
-	queueName = flag.String("queue", "", "Name of SQS queue, if using SQS and S3.")
-	flush     = flag.Bool("flush", false, "Flush all render jobs.")
+	flush = flag.Bool("flush", false, "Flush all render jobs.")
 
 	packageMutex sync.Mutex
 	states       []state
@@ -98,13 +96,7 @@ func verifyPackage(n int, order *dist.Order) error {
 
 	// Download package.
 	var ofName string
-	if strings.HasPrefix(order.Package, "s3://") {
-		var err error
-		ofName, err = s3Download(n, order)
-		if err != nil {
-			return err
-		}
-	} else {
+	{
 		log.Printf("(%d) Downloading %q...", n, order.Package)
 		r, err := http.Get(order.Package)
 		if err != nil {
@@ -374,35 +366,6 @@ func handle(n int, order *dist.Order) (*pb.RenderingMetadata, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	if *schedAddr == "" {
-		// If SQS and not RPC.
-
-		// Write process info.
-		{
-
-			wd := path.Join(*root, path.Base(order.Package), order.Dir)
-			f, err := os.Create(path.Join(wd, order.File+infoSuffix))
-			if err != nil {
-				return nil, err
-			}
-			defer f.Close()
-			if str, err := json.Marshal(stats); err != nil {
-				return nil, err
-			} else {
-				if _, err := f.Write(str); err != nil {
-					return nil, err
-				}
-				if err := f.Close(); err != nil {
-					return nil, err
-				}
-			}
-		}
-
-		if err := upload(n, order); err != nil {
-			return nil, err
-		}
-	}
 	return stats, nil
 }
 
@@ -467,12 +430,10 @@ func handler(n int, q scheduler) {
 			states[n].Start = time.Now()
 			states[n].Order = order
 			states[n].Unlock()
-			if !*flush {
-				meta, err = handle(n, &order)
-				if err != nil {
-					log.Printf("(%d) Failed to handle order %+v: %v", n, order, err)
-					return false
-				}
+			meta, err = handle(n, &order)
+			if err != nil {
+				log.Printf("(%d) Failed to handle order %+v: %v", n, order, err)
+				return false
 			}
 			return true
 		}()
@@ -573,9 +534,6 @@ func main() {
 	flag.Parse()
 	if len(flag.Args()) != 0 {
 		log.Fatalf("Got extra args on cmdline: %q", flag.Args())
-	}
-	if *queueName != "" {
-		log.Fatalf("SQS code untested and will eventually be removed. Please use -scheduler.")
 	}
 
 	log.Printf("Starting up...")
