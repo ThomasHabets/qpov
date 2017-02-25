@@ -42,8 +42,8 @@ func replaceExt(fn, n string) string {
 	return fn[0:len(fn)-len(path.Ext(fn))] + n
 }
 
-func getLeases() ([]string, error) {
-	rows, err := db.Query(`
+func getLeases(ctx context.Context) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `
 SELECT
   orders.definition,
   CAST(MIN(CAST(leases.lease_id AS TEXT)) AS UUID)
@@ -99,7 +99,7 @@ func tryDownload(ctx context.Context, f, bucketName string) ([]byte, error) {
 }
 
 func ddownload(ctx context.Context, o *zip.Writer) error {
-	leases, err := getLeases()
+	leases, err := getLeases(ctx)
 	if err != nil {
 		return err
 	}
@@ -178,7 +178,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err := t.Ping(); err != nil {
+		if err := t.PingContext(); err != nil {
 			log.Fatalf("db ping: %v", err)
 		}
 		db = dist.NewDBWrap(t, log.New(os.Stderr, "", log.LstdFlags))

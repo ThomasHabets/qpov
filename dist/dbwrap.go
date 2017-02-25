@@ -1,6 +1,7 @@
 package dist
 
 import (
+	"context"
 	"database/sql"
 	"database/sql/driver"
 	"log"
@@ -8,14 +9,14 @@ import (
 )
 
 type DBWrap interface {
-	Begin() (TXWrap, error)
+	BeginTx(context.Context, *sql.TxOptions) (TXWrap, error)
 	Close() error
 	Driver() driver.Driver
-	Exec(query string, args ...interface{}) (sql.Result, error)
-	Ping() error
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	PingContext(ctx context.Context) error
 	// Prepare(query string) (*sql.Stmt, error)
-	Query(query string, args ...interface{}) (*sql.Rows, error)
-	QueryRow(query string, args ...interface{}) *sql.Row
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
 	SetConnMaxLifetime(d time.Duration)
 	SetMaxIdleConns(n int)
 	SetMaxOpenConns(n int)
@@ -27,12 +28,12 @@ type dbWrap struct {
 	backend *sql.DB
 }
 
-func (db *dbWrap) Begin() (TXWrap, error) {
-	tx, err := db.backend.Begin()
+func (db *dbWrap) BeginTx(ctx context.Context, o *sql.TxOptions) (TXWrap, error) {
+	tx, err := db.backend.BeginTx(ctx, o)
 	if err != nil {
 		return nil, err
 	}
-	db.log.Printf("SQL:Begin")
+	db.log.Printf("SQL:BeginTx")
 	return &txWrap{
 		backend: tx,
 		log:     db.log,
@@ -47,29 +48,29 @@ func (db *dbWrap) Driver() driver.Driver {
 	return db.backend.Driver()
 }
 
-func (db *dbWrap) Exec(query string, args ...interface{}) (sql.Result, error) {
+func (db *dbWrap) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	db.log.Printf("SQL:Exec> %q %q", query, args)
-	return db.backend.Exec(query, args...)
+	return db.backend.ExecContext(ctx, query, args...)
 }
 
-func (db *dbWrap) Ping() error {
+func (db *dbWrap) PingContext(ctx context.Context) error {
 	db.log.Printf("SQL:Ping")
-	return db.backend.Ping()
+	return db.backend.PingContext(ctx)
 }
 
-func (db *dbWrap) Prepare(query string) (*sql.Stmt, error) {
+func (db *dbWrap) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
 	// TODO: not implemented.
-	return db.backend.Prepare(query)
+	return db.backend.PrepareContext(ctx, query)
 }
 
-func (db *dbWrap) Query(query string, args ...interface{}) (*sql.Rows, error) {
+func (db *dbWrap) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	db.log.Printf("SQL:Query> %q %q", query, args)
-	return db.backend.Query(query, args...)
+	return db.backend.QueryContext(ctx, query, args...)
 }
 
-func (db *dbWrap) QueryRow(query string, args ...interface{}) *sql.Row {
+func (db *dbWrap) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	db.log.Printf("SQL:QueryRow> %q %q", query, args)
-	return db.backend.QueryRow(query, args...)
+	return db.backend.QueryRowContext(ctx, query, args...)
 }
 
 func (db *dbWrap) SetConnMaxLifetime(d time.Duration) {
@@ -90,10 +91,10 @@ func (db *dbWrap) Stats() sql.DBStats {
 
 type TXWrap interface {
 	Commit() error
-	Exec(query string, args ...interface{}) (sql.Result, error)
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 	//Prepare(query string) (*sql.Stmt, error)
-	Query(query string, args ...interface{}) (*sql.Rows, error)
-	QueryRow(query string, args ...interface{}) *sql.Row
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
 	Rollback() error
 	//Stmt(stmt *sql.Stmt) *sql.Stmt
 }
@@ -108,24 +109,24 @@ func (tx *txWrap) Commit() error {
 	return tx.backend.Commit()
 }
 
-func (tx *txWrap) Exec(query string, args ...interface{}) (sql.Result, error) {
+func (tx *txWrap) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	tx.log.Printf("SQL:TX:Exec> %q %q", query, args)
-	return tx.backend.Exec(query, args...)
+	return tx.backend.ExecContext(ctx, query, args...)
 }
 
-func (tx *txWrap) Prepare(query string) (*sql.Stmt, error) {
+func (tx *txWrap) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
 	// TODO: not implemented.
-	return tx.backend.Prepare(query)
+	return tx.backend.PrepareContext(ctx, query)
 }
 
-func (tx *txWrap) Query(query string, args ...interface{}) (*sql.Rows, error) {
+func (tx *txWrap) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	tx.log.Printf("SQL:TX:Query> %q %q", query, args)
-	return tx.backend.Query(query, args...)
+	return tx.backend.QueryContext(ctx, query, args...)
 }
 
-func (tx *txWrap) QueryRow(query string, args ...interface{}) *sql.Row {
+func (tx *txWrap) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	tx.log.Printf("SQL:TX:QueryRow> %q %q", query, args)
-	return tx.backend.QueryRow(query, args...)
+	return tx.backend.QueryRowContext(ctx, query, args...)
 }
 
 func (tx *txWrap) Rollback() error {
@@ -133,9 +134,9 @@ func (tx *txWrap) Rollback() error {
 	return tx.backend.Rollback()
 }
 
-func (tx *txWrap) Stmt(stmt *sql.Stmt) *sql.Stmt {
+func (tx *txWrap) StmtContext(ctx context.Context, stmt *sql.Stmt) *sql.Stmt {
 	// TODO: not implemented.
-	return tx.backend.Stmt(stmt)
+	return tx.backend.StmtContext(ctx, stmt)
 }
 
 func NewDBWrap(db *sql.DB, logger *log.Logger) DBWrap {
