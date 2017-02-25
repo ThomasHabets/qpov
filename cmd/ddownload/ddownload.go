@@ -187,21 +187,8 @@ func main() {
 	ctx := context.Background()
 
 	// Connect to GCS.
-	{ /*
-			jsonKey, err := ioutil.ReadFile(*cloudCredentials)
-			if err != nil {
-				log.Fatalf("Reading -cloud_credentials %q: %v", *cloudCredentials, err)
-			}
-			conf, err := google.JWTConfigFromJSON(
-				jsonKey,
-				storage.ScopeReadOnly,
-			)
-			if err != nil {
-				log.Fatal(err)
-			}
-			conf = conf
-		*/
-		googleCloudStorage, err = storage.NewClient(ctx, cloudopt.WithServiceAccountFile(*cloudCredentials)) //, cloud.WithTokenSource(conf.TokenSource(ctx)))
+	{
+		googleCloudStorage, err = storage.NewClient(ctx, cloudopt.WithServiceAccountFile(*cloudCredentials))
 		if err != nil {
 			log.Fatal(err)
 		}
