@@ -136,6 +136,7 @@ func ddownload(ctx context.Context, o *zip.Writer) error {
 }
 
 func main() {
+	ctx := context.Background()
 	log.SetFlags(log.Ldate | log.Ltime | log.LUTC)
 	log.Printf("Running ddownload")
 	flag.Parse()
@@ -178,13 +179,11 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err := t.PingContext(); err != nil {
+		if err := t.PingContext(ctx); err != nil {
 			log.Fatalf("db ping: %v", err)
 		}
 		db = dist.NewDBWrap(t, log.New(os.Stderr, "", log.LstdFlags))
 	}
-
-	ctx := context.Background()
 
 	// Connect to GCS.
 	{
