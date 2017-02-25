@@ -261,7 +261,7 @@ func cmdAdd(args []string) {
   Args:        %q
 
 OK (y/N)?
-`, c, *pkg, *dir, *file, fmt.Sprintf(*file, 1), *dst, fs.Args())
+`, c, *pkg, *dir, *file, fmt.Sprintf(*file, 1), dst, fs.Args())
 
 		var yn string
 		fmt.Scanln(&yn)
@@ -273,7 +273,7 @@ OK (y/N)?
 				Package:     *pkg,
 				Dir:         *dir,
 				File:        fmt.Sprintf(*file, i),
-				Destination: *dst,
+				Destination: dst,
 				Args:        fs.Args(),
 				//Args:        []string{"+Q11", "+A0.3", "+R4", "+W3840", "+H2160"},
 				//Args: []string{"+W320", "+H240"},
