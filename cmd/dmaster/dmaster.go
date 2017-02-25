@@ -203,7 +203,6 @@ func cmdAdd(args []string) {
 	batch := fs.String("batch", "", "Batch this belongs to.")
 	dir := fs.String("dir", "", "Directory in package to use as CWD.")
 	file := fs.String("file", "", "POV file to render.")
-	dst := fs.String("destination", "", "If using AWS, the S3 directory to store results in.")
 	dryRun := fs.Bool("dry_run", false, "Don't actually enqueue.")
 	var frames Range
 	fs.Var(&frames, "frames", "Order many frames to be rendered. In format '1-10' or '1-10+2' for only doing odd numbered frames. Use fmt string in '-file'")
@@ -215,10 +214,9 @@ func cmdAdd(args []string) {
 	if *file == "" {
 		log.Fatalf("Must supply -file")
 	}
-	if *dst == "" {
-		// Not needed with RPC scheduler.
-		//log.Fatalf("Must supply -destination")
-	}
+
+	// For backwards compatability with clients that try to parse this destination path.
+	const dst = "s3://dummy/dummy/dummy/"
 
 	var q scheduler
 	var err error
@@ -228,18 +226,13 @@ func cmdAdd(args []string) {
 	}
 	defer q.close()
 
-	if *dst == "" {
-		// For backwards compatability with clients that try to parse this destination path.
-		*dst = "s3://dummy/dummy/dummy/"
-	}
-
 	if frames.Skip == 0 {
 		// Just one.
 		order, err := json.Marshal(&dist.Order{
 			Package:     *pkg,
 			Dir:         *dir,
 			File:        *file,
-			Destination: *dst,
+			Destination: dst,
 			Args:        fs.Args(),
 			//Args:        []string{"+Q11", "+A0.3", "+R4", "+W3840", "+H2160"},
 			//Args: []string{"+W320", "+H240"},
