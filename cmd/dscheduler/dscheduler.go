@@ -19,13 +19,12 @@ import (
 	"sync"
 	"time"
 
-	cloud "cloud.google.com/go"
 	storage "cloud.google.com/go/storage"
 	"github.com/ThomasHabets/go-uuid/uuid"
 	"github.com/golang/protobuf/proto"
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
-	"golang.org/x/oauth2/google"
+	cloudopt "google.golang.org/api/option"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -1270,21 +1269,12 @@ func main() {
 
 	// Connect to GCS.
 	{
-		jsonKey, err := ioutil.ReadFile(*cloudCredentials)
+		var err error
+		googleCloudStorage, err = storage.NewClient(ctx, cloudopt.WithServiceAccountFile(*cloudCredentials))
 		if err != nil {
 			log.Fatal(err)
 		}
-		conf, err := google.JWTConfigFromJSON(
-			jsonKey,
-			storage.ScopeFullControl,
-		)
-		if err != nil {
-			log.Fatal(err)
-		}
-		googleCloudStorage, err = storage.NewClient(ctx, cloud.WithTokenSource(conf.TokenSource(ctx)))
-		if err != nil {
-			log.Fatal(err)
-		}
+		defer googleCloudStorage.Close()
 	}
 
 	var sqlLogf io.Writer

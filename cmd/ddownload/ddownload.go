@@ -10,7 +10,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path"
@@ -18,11 +17,10 @@ import (
 	"strings"
 	"time"
 
-	cloud "cloud.google.com/go"
 	storage "cloud.google.com/go/storage"
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
-	"golang.org/x/oauth2/google"
+	cloudopt "google.golang.org/api/option"
 
 	"github.com/ThomasHabets/qpov/dist"
 	pb "github.com/ThomasHabets/qpov/dist/qpov"
@@ -148,10 +146,19 @@ func main() {
 	if *downloadBucketNames == "" {
 		log.Fatalf("-cloud_download_buckets is mandatory")
 	}
+	if *cloudCredentials == "" {
+		log.Fatalf("-cloud_credentials is mandatory")
+	}
+	if *out == "" {
+		log.Fatalf("-out is mandatory")
+	}
+	if *batchID == "" {
+		log.Fatalf("-batch is mandatory")
+	}
 
 	fo, err := os.Create(*out)
 	if err != nil {
-		log.Fatalf("Failed to create %q: %v", *out, err)
+		log.Fatalf("Failed to create -out %q: %v", *out, err)
 	}
 	defer func() {
 		if err := fo.Close(); err != nil {
@@ -180,22 +187,25 @@ func main() {
 	ctx := context.Background()
 
 	// Connect to GCS.
-	{
-		jsonKey, err := ioutil.ReadFile(*cloudCredentials)
-		if err != nil {
-			log.Fatalf("Reading %q: %v", *cloudCredentials, err)
-		}
-		conf, err := google.JWTConfigFromJSON(
-			jsonKey,
-			storage.ScopeReadOnly,
-		)
+	{ /*
+			jsonKey, err := ioutil.ReadFile(*cloudCredentials)
+			if err != nil {
+				log.Fatalf("Reading -cloud_credentials %q: %v", *cloudCredentials, err)
+			}
+			conf, err := google.JWTConfigFromJSON(
+				jsonKey,
+				storage.ScopeReadOnly,
+			)
+			if err != nil {
+				log.Fatal(err)
+			}
+			conf = conf
+		*/
+		googleCloudStorage, err = storage.NewClient(ctx, cloudopt.WithServiceAccountFile(*cloudCredentials)) //, cloud.WithTokenSource(conf.TokenSource(ctx)))
 		if err != nil {
 			log.Fatal(err)
 		}
-		googleCloudStorage, err = storage.NewClient(ctx, cloud.WithTokenSource(conf.TokenSource(ctx)))
-		if err != nil {
-			log.Fatal(err)
-		}
+		defer googleCloudStorage.Close()
 	}
 
 	if err := ddownload(ctx, fz); err != nil {
