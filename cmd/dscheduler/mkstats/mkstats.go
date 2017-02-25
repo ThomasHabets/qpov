@@ -388,10 +388,11 @@ func mkstats(ctx context.Context, metaChan <-chan *pb.RenderingMetadata) (*pb.St
 			}
 			var n int64
 			for cur < len(events) && events[cur].time.Unix() < rto {
-				cur++
 				if events[cur].lease < 0 {
+					// Lease return action.
 					n++
 				}
+				cur++
 			}
 			data = append(data, tsInt{time.Unix(i, 0), n})
 		}
