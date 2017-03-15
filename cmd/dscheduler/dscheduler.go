@@ -55,6 +55,7 @@ var (
 	defaultLeaseRenewTime = flag.Duration("default_lease_time", time.Hour, "Default lease renew time.")
 	oauthClientID         = flag.String("oauth_client_id", "", "Google OAuth Client ID.")
 	doRPCLog              = flag.Bool("rpclog", false, "Log all RPCs.")
+	keepAliveDuration     = flag.Duration("keepalive", 60*time.Minute, "TCP keepalive time.")
 
 	// Cloud config.
 	cloudCredentials    = flag.String("cloud_credentials", "", "Path to JSON file containing credentials.")
@@ -1232,6 +1233,28 @@ VALUES(
 	return ret, nil
 }
 
+type keepAliveListener struct {
+	l net.Listener
+}
+
+func (k *keepAliveListener) Accept() (net.Conn, error) {
+	c, err := k.l.Accept()
+	if err == nil {
+		t := c.(*net.TCPConn)
+		t.SetKeepAlive(true)
+		t.SetKeepAlivePeriod(*keepAliveDuration)
+	}
+	return c, err
+}
+
+func (k *keepAliveListener) Close() error {
+	return k.l.Close()
+}
+
+func (k *keepAliveListener) Addr() net.Addr {
+	return k.l.Addr()
+}
+
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.LUTC)
 	flag.Parse()
@@ -1308,6 +1331,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
+	lis = &keepAliveListener{lis}
 	opts := []grpc.ServerOption{
 		grpc.MaxConcurrentStreams(uint32(*maxConcurrentStreams)),
 	}
