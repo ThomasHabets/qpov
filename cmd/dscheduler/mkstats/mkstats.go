@@ -16,6 +16,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/lib/pq"
+	"golang.org/x/net/context"
 
 	"github.com/ThomasHabets/qpov/dist"
 	pb "github.com/ThomasHabets/qpov/dist/qpov"
@@ -103,9 +104,9 @@ func sortGraphs(lineTitles []string, data [][]tsInt) ([]string, [][]tsInt) {
 }
 
 // return mapping from order to slice of leases.
-func getAllMetas() (map[string][]pb.Lease, error) {
+func getAllMetas(ctx context.Context) (map[string][]pb.Lease, error) {
 	ret := make(map[string][]pb.Lease)
-	rows, err := db.Query(`
+	rows, err := db.QueryContext(ctx, `
 SELECT batch.batch_id, lease_id, leases.metadata
 FROM batch
 JOIN orders ON batch.batch_id=orders.batch_id
@@ -137,9 +138,9 @@ WHERE metadata IS NOT NULL`)
 
 }
 
-func mkstatsBatch() ([]*pb.BatchStats, error) {
+func mkstatsBatch(ctx context.Context) ([]*pb.BatchStats, error) {
 	var ret []*pb.BatchStats
-	rows, err := db.Query(`
+	rows, err := db.QueryContext(ctx, `
 SELECT
   a.batch_id,
   MAX(a.comment) AS comment,
@@ -248,7 +249,7 @@ func computeSeconds(lease *pb.Lease) float64 {
 	return t
 }
 
-func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
+func mkstats(ctx context.Context, metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 	stats := &pb.StatsOverall{
 		StatsTimestamp: int64(time.Now().Unix()),
 		CpuTime:        &pb.StatsCPUTime{},
@@ -257,7 +258,7 @@ func mkstats(metaChan <-chan *pb.RenderingMetadata) (*pb.StatsOverall, error) {
 
 	batchCh := make(chan []*pb.BatchStats)
 	go func() {
-		s, err := mkstatsBatch()
+		s, err := mkstatsBatch(ctx)
 		if err != nil {
 			log.Fatalf("mkstatsBatch: %v", err)
 		}
@@ -438,6 +439,7 @@ func formatFloat(in float64) string {
 }
 
 func main() {
+	ctx := context.Background()
 	log.SetFlags(log.Ldate | log.Ltime | log.LUTC)
 	flag.Parse()
 	if flag.NArg() > 0 {
@@ -451,13 +453,13 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err := t.Ping(); err != nil {
+		if err := t.PingContext(ctx); err != nil {
 			log.Fatalf("db ping: %v", err)
 		}
 		db = dist.NewDBWrap(t, log.New(os.Stderr, "", log.LstdFlags))
 	}
 
-	metas, err = getAllMetas()
+	metas, err = getAllMetas(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -471,7 +473,7 @@ func main() {
 			}
 		}
 	}()
-	stats, err := mkstats(metaChan)
+	stats, err := mkstats(ctx, metaChan)
 	if err != nil {
 		log.Fatal(err)
 	}

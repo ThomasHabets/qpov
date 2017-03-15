@@ -10,7 +10,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path"
@@ -18,11 +17,10 @@ import (
 	"strings"
 	"time"
 
+	storage "cloud.google.com/go/storage"
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
-	"golang.org/x/oauth2/google"
-	"google.golang.org/cloud"
-	"google.golang.org/cloud/storage"
+	cloudopt "google.golang.org/api/option"
 
 	"github.com/ThomasHabets/qpov/dist"
 	pb "github.com/ThomasHabets/qpov/dist/qpov"
@@ -44,8 +42,8 @@ func replaceExt(fn, n string) string {
 	return fn[0:len(fn)-len(path.Ext(fn))] + n
 }
 
-func getLeases() ([]string, error) {
-	rows, err := db.Query(`
+func getLeases(ctx context.Context) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `
 SELECT
   orders.definition,
   CAST(MIN(CAST(leases.lease_id AS TEXT)) AS UUID)
@@ -101,7 +99,7 @@ func tryDownload(ctx context.Context, f, bucketName string) ([]byte, error) {
 }
 
 func ddownload(ctx context.Context, o *zip.Writer) error {
-	leases, err := getLeases()
+	leases, err := getLeases(ctx)
 	if err != nil {
 		return err
 	}
@@ -138,6 +136,7 @@ func ddownload(ctx context.Context, o *zip.Writer) error {
 }
 
 func main() {
+	ctx := context.Background()
 	log.SetFlags(log.Ldate | log.Ltime | log.LUTC)
 	log.Printf("Running ddownload")
 	flag.Parse()
@@ -148,10 +147,19 @@ func main() {
 	if *downloadBucketNames == "" {
 		log.Fatalf("-cloud_download_buckets is mandatory")
 	}
+	if *cloudCredentials == "" {
+		log.Fatalf("-cloud_credentials is mandatory")
+	}
+	if *out == "" {
+		log.Fatalf("-out is mandatory")
+	}
+	if *batchID == "" {
+		log.Fatalf("-batch is mandatory")
+	}
 
 	fo, err := os.Create(*out)
 	if err != nil {
-		log.Fatalf("Failed to create %q: %v", *out, err)
+		log.Fatalf("Failed to create -out %q: %v", *out, err)
 	}
 	defer func() {
 		if err := fo.Close(); err != nil {
@@ -171,31 +179,19 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err := t.Ping(); err != nil {
+		if err := t.PingContext(ctx); err != nil {
 			log.Fatalf("db ping: %v", err)
 		}
 		db = dist.NewDBWrap(t, log.New(os.Stderr, "", log.LstdFlags))
 	}
 
-	ctx := context.Background()
-
 	// Connect to GCS.
 	{
-		jsonKey, err := ioutil.ReadFile(*cloudCredentials)
-		if err != nil {
-			log.Fatalf("Reading %q: %v", *cloudCredentials, err)
-		}
-		conf, err := google.JWTConfigFromJSON(
-			jsonKey,
-			storage.ScopeReadOnly,
-		)
+		googleCloudStorage, err = storage.NewClient(ctx, cloudopt.WithServiceAccountFile(*cloudCredentials))
 		if err != nil {
 			log.Fatal(err)
 		}
-		googleCloudStorage, err = storage.NewClient(ctx, cloud.WithTokenSource(conf.TokenSource(ctx)))
-		if err != nil {
-			log.Fatal(err)
-		}
+		defer googleCloudStorage.Close()
 	}
 
 	if err := ddownload(ctx, fz); err != nil {

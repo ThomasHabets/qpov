@@ -1,3 +1,6 @@
+// dscheduler is the rendering job scheduler.
+//
+// It uses postgresql for metadata and stores the output on GCS.
 package main
 
 import (
@@ -19,13 +22,12 @@ import (
 	"sync"
 	"time"
 
+	storage "cloud.google.com/go/storage"
 	"github.com/ThomasHabets/go-uuid/uuid"
 	"github.com/golang/protobuf/proto"
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
-	"golang.org/x/oauth2/google"
-	"google.golang.org/cloud"
-	"google.golang.org/cloud/storage"
+	cloudopt "google.golang.org/api/option"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -68,6 +70,10 @@ var (
 	}
 
 	googleCloudStorage *storage.Client
+
+	txopts = &sql.TxOptions{
+		Isolation: sql.LevelSerializable,
+	}
 )
 
 const (
@@ -109,8 +115,8 @@ func def2Order(def string) (*pb.Order, error) {
 	}, nil
 }
 
-func getOrderByID(id string) (*pb.Order, error) {
-	row := db.QueryRow(`SELECT batch_id,definition FROM orders WHERE order_id=$1`, id)
+func getOrderByID(ctx context.Context, id string) (*pb.Order, error) {
+	row := db.QueryRowContext(ctx, `SELECT batch_id,definition FROM orders WHERE order_id=$1`, id)
 	var def string
 	var batchID sql.NullString
 	if err := row.Scan(&batchID, &def); err != nil {
@@ -125,8 +131,8 @@ func getOrderByID(id string) (*pb.Order, error) {
 	return ret, nil
 }
 
-func getOwnerIDByCN(cn string) (int, error) {
-	row := db.QueryRow(`SELECT user_id FROM certs WHERE cn=$1`, cn)
+func getOwnerIDByCN(ctx context.Context, cn string) (int, error) {
+	row := db.QueryRowContext(ctx, `SELECT user_id FROM certs WHERE cn=$1`, cn)
 	var ownerID int
 	if err := row.Scan(&ownerID); err == sql.ErrNoRows {
 		return 0, fmt.Errorf("client cert not assigned to any user")
@@ -175,17 +181,17 @@ type user struct {
 	via          *user
 }
 
-func readUserByID(userID int) (*user, error) {
-	return readUserBySomething("user_id", userID)
+func readUserByID(ctx context.Context, userID int) (*user, error) {
+	return readUserBySomething(ctx, "user_id", userID)
 }
-func readUserByOAuth(sub string) (*user, error) {
-	return readUserBySomething("oauth_subject", sub)
+func readUserByOAuth(ctx context.Context, sub string) (*user, error) {
+	return readUserBySomething(ctx, "oauth_subject", sub)
 }
 
-func readUserBySomething(column string, value interface{}) (*user, error) {
+func readUserBySomething(ctx context.Context, column string, value interface{}) (*user, error) {
 	u := &user{}
 	var comment, oauthSubject sql.NullString
-	if err := db.QueryRow(fmt.Sprintf(`
+	if err := db.QueryRowContext(ctx, fmt.Sprintf(`
 SELECT
   user_id,
   delegate,
@@ -222,11 +228,11 @@ func getUser(ctx context.Context) (*user, error) {
 			return nil, err
 		}
 
-		id, err := getOwnerIDByCN(cert.Subject.CommonName)
+		id, err := getOwnerIDByCN(ctx, cert.Subject.CommonName)
 		if err != nil {
 			return nil, err
 		}
-		u, err = readUserByID(id)
+		u, err = readUserByID(ctx, id)
 		if err != nil {
 			return nil, err
 		}
@@ -239,7 +245,7 @@ func getUser(ctx context.Context) (*user, error) {
 			// No cookie. Act as webserver.
 			return u, nil
 		}
-		j, err := getJWTFromCookie(v)
+		j, err := getJWTFromCookie(ctx, v)
 		if err != nil {
 			// Bad cookie. Act as webserver.
 			return u, nil
@@ -249,15 +255,15 @@ func getUser(ctx context.Context) (*user, error) {
 			// Bad JWT. Act as webserver.
 			return u, nil
 		}
-		nu, err := readUserByOAuth(sub)
+		nu, err := readUserByOAuth(ctx, sub)
 		if err != nil {
 			// OAuth subject valid but unknown. Associate with email if possible.
-			if err := setUserOAuthByEmail(email, sub); err != nil {
+			if err := setUserOAuthByEmail(ctx, email, sub); err != nil {
 				// Logged in but not as anyone in the database.
 				return u, nil
 			}
 		}
-		nu, err = readUserByOAuth(sub)
+		nu, err = readUserByOAuth(ctx, sub)
 		if err != nil {
 			// Not in database. Fill in what we can.
 			nu = &user{
@@ -270,8 +276,8 @@ func getUser(ctx context.Context) (*user, error) {
 	return u, nil
 }
 
-func setUserOAuthByEmail(email, sub string) error {
-	_, err := db.Exec(`
+func setUserOAuthByEmail(ctx context.Context, email, sub string) error {
+	_, err := db.ExecContext(ctx, `
 UPDATE users
 SET    oauth_subject=$2
 WHERE  email=$1
@@ -314,25 +320,21 @@ func (s *server) Login(ctx context.Context, in *pb.LoginRequest) (*pb.LoginReply
 		log.Printf("RPC(Login): %v", err)
 		return nil, fmt.Errorf("failed to verify jwt")
 	}
-	tx, err := db.Begin()
+	tx, err := db.BeginTx(ctx, txopts)
 	if err != nil {
 		return nil, dbError("begin transaction", err)
 	}
 	defer tx.Rollback()
-
-	if _, err := db.Exec("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"); err != nil {
-		return nil, dbError("set isolation level serializable", err)
-	}
 
 	// Reuse cookie if present and is UUID-shaped.
 	c := in.Cookie
 	if c == "" || uuid.Parse(c) == nil {
 		c = uuid.New()
 	}
-	if _, err := tx.Exec(`DELETE FROM cookies WHERE cookie=$1`, c); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM cookies WHERE cookie=$1`, c); err != nil {
 		return nil, dbError("clearing old cookie", err)
 	}
-	if _, err := tx.Exec(`INSERT INTO cookies(cookie, jwt) VALUES($1, $2)`, c, in.Jwt); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO cookies(cookie, jwt) VALUES($1, $2)`, c, in.Jwt); err != nil {
 		return nil, dbError("saving cookie", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -342,7 +344,7 @@ func (s *server) Login(ctx context.Context, in *pb.LoginRequest) (*pb.LoginReply
 }
 
 func (s *server) Logout(ctx context.Context, in *pb.LogoutRequest) (*pb.LogoutReply, error) {
-	if _, err := db.Exec(`DELETE FROM cookies WHERE cookie=$1`, in.Cookie); err != nil {
+	if _, err := db.ExecContext(ctx, `DELETE FROM cookies WHERE cookie=$1`, in.Cookie); err != nil {
 		return nil, dbError("clearing cookie", err)
 	}
 	return &pb.LogoutReply{}, nil
@@ -350,7 +352,7 @@ func (s *server) Logout(ctx context.Context, in *pb.LogoutRequest) (*pb.LogoutRe
 
 func (s *server) CheckCookie(ctx context.Context, in *pb.CheckCookieRequest) (*pb.CheckCookieReply, error) {
 	var j string
-	if err := db.QueryRow(`SELECT jwt FROM cookies WHERE cookie=$1`, in.Cookie).Scan(&j); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT jwt FROM cookies WHERE cookie=$1`, in.Cookie).Scan(&j); err != nil {
 		return nil, dbError("searching for cookie", err)
 	}
 	if _, _, err := oauthKeys.VerifyJWT(j); err != nil {
@@ -363,19 +365,15 @@ func (s *server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetReply, erro
 	st := time.Now()
 	requestID := uuid.New()
 
-	tx, err := db.Begin()
+	tx, err := db.BeginTx(ctx, txopts)
 	if err != nil {
 		return nil, dbError("begin transaction", err)
 	}
 	defer tx.Rollback()
 
-	if _, err := db.Exec("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"); err != nil {
-		return nil, dbError("set isolation level serializable", err)
-	}
-
 	var orderID, def string
 	// TODO: Currently using batch.ctime() as priority. Should have separate thing?
-	if err := tx.QueryRow(`
+	if err := tx.QueryRowContext(ctx, `
 SELECT
   orders.order_id,
   orders.definition
@@ -413,7 +411,7 @@ ON next_order.order_id=orders.order_id
 
 	lease := uuid.New()
 	clientAddress, _ := clientAddressFromContext(ctx)
-	if _, err := tx.Exec(`
+	if _, err := tx.ExecContext(ctx, `
 INSERT INTO leases(
   lease_id, done, order_id,
   user_id, client, hostname,
@@ -478,7 +476,7 @@ func (s *server) renew(ctx context.Context, lease, address string, secs int32) (
 	}
 
 	n := time.Now().Add(time.Duration(int64(time.Second) * int64(secs)))
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 UPDATE leases
 SET
     updated=NOW(),
@@ -518,7 +516,7 @@ func (s *server) Failed(ctx context.Context, in *pb.FailedRequest) (*pb.FailedRe
 	st := time.Now()
 	requestID := uuid.New()
 
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 UPDATE leases
 SET
   failed=TRUE,
@@ -537,8 +535,8 @@ AND   lease_id=$1`, in.LeaseId); err != nil {
 	return ret, nil
 }
 
-func leaseDone(id string) (bool, bool, error) {
-	row := db.QueryRow(`SELECT done, failed FROM leases WHERE lease_id=$1`, id)
+func leaseDone(ctx context.Context, id string) (bool, bool, error) {
+	row := db.QueryRowContext(ctx, `SELECT done, failed FROM leases WHERE lease_id=$1`, id)
 	var done, failed bool
 	if err := row.Scan(&done, &failed); err != nil {
 		return false, false, err
@@ -650,8 +648,8 @@ func (s *server) saveToCloud(ctx context.Context, in *pb.DoneRequest, realMeta *
 }
 
 // getOrderDestByLeastID returns the filename and batch ID of an order.
-func getOrderDestByLeaseID(leaseID string) (string, uuid.UUID, error) {
-	row := db.QueryRow(`
+func getOrderDestByLeaseID(ctx context.Context, leaseID string) (string, uuid.UUID, error) {
+	row := db.QueryRowContext(ctx, `
 SELECT
   orders.definition,
   orders.batch_id
@@ -685,7 +683,7 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	if _, err := s.renew(ctx, in.LeaseId, client, -1); err != nil {
 		log.Printf("RPC(Done): Failed to renew before Done'ing: %v", err)
 	}
-	isDone, isFailed, err := leaseDone(in.LeaseId)
+	isDone, isFailed, err := leaseDone(ctx, in.LeaseId)
 	if err != nil {
 		return nil, dbError(fmt.Sprintf("Failed looking up lease %q", in.LeaseId), err)
 	}
@@ -697,7 +695,7 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	}
 
 	// Fetch the order ID so we can assemble the path.
-	file, batch, err := getOrderDestByLeaseID(in.LeaseId)
+	file, batch, err := getOrderDestByLeaseID(ctx, in.LeaseId)
 	if err != nil {
 		log.Printf("RPC(Done): Can't find order with lease %q: %v", in.LeaseId, err)
 		return nil, grpc.Errorf(codes.NotFound, "unknown lease %q", in.LeaseId)
@@ -719,7 +717,7 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	}
 
 	// Mark as completed in database.
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 UPDATE leases
 SET
     done=TRUE,
@@ -794,7 +792,7 @@ func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) 
 
 	// Send data, if requested.
 	if in.Data {
-		file, batch, err := getOrderDestByLeaseID(in.LeaseId)
+		file, batch, err := getOrderDestByLeaseID(ctx, in.LeaseId)
 		if err != nil {
 			log.Printf("Can't find order with lease %q: %v", in.LeaseId, err)
 			return grpc.Errorf(codes.NotFound, "unknown lease %q", in.LeaseId)
@@ -819,7 +817,7 @@ func (s *server) Order(ctx context.Context, in *pb.OrderRequest) (*pb.OrderReply
 	if len(in.OrderId) != 1 {
 		return nil, grpc.Errorf(codes.Unimplemented, "getting multiple orders not implemented yet")
 	}
-	o, err := getOrderByID(in.OrderId[0])
+	o, err := getOrderByID(ctx, in.OrderId[0])
 	if err == sql.ErrNoRows {
 		return nil, grpc.Errorf(codes.NotFound, "order not found")
 	} else if err != nil {
@@ -851,7 +849,7 @@ func (s *server) Orders(in *pb.OrdersRequest, stream pb.Scheduler_OrdersServer) 
 	if in.Unstarted {
 		having = append(having, "(COUNT(activeleases.lease_id)=0 AND COUNT(doneleases.lease_id)=0)")
 	}
-	rows, err := db.Query(fmt.Sprintf(`
+	rows, err := db.QueryContext(ctx, fmt.Sprintf(`
 -- Presentation query.
 SELECT
    orders.order_id,
@@ -934,7 +932,7 @@ func (s *server) Stats(ctx context.Context, in *pb.StatsRequest) (*pb.StatsReply
 	ret := &pb.StatsReply{}
 	if in.SchedulingStats {
 		ret.SchedulingStats = &pb.SchedulingStats{}
-		row := db.QueryRow(`
+		row := db.QueryRowContext(ctx, `
 SELECT
   COUNT(*) total,
   (SELECT COUNT(l.order_id)
@@ -962,7 +960,7 @@ FROM orders
 			return nil, dbError("order stats", err)
 		}
 
-		row = db.QueryRow(`
+		row = db.QueryRowContext(ctx, `
 SELECT
   (SELECT COUNT(*) FROM leases) total,
   (SELECT COUNT(*) FROM leases WHERE done=FALSE AND expires > NOW()) active,
@@ -1001,7 +999,7 @@ func (s *server) Lease(ctx context.Context, in *pb.LeaseRequest) (*pb.LeaseReply
 		return nil, grpc.Errorf(codes.InvalidArgument, "%q is not a valid UUID", in.LeaseId)
 	}
 
-	row := db.QueryRow(`
+	row := db.QueryRowContext(ctx, `
 SELECT lease_id, order_id, done, failed, created, updated, expires, metadata
 FROM leases
 WHERE lease_id=$1`, in.LeaseId)
@@ -1074,7 +1072,7 @@ WHERE done=$1
 AND   ($1=TRUE OR expires > NOW())
 AND   leases.updated > $2
 ORDER BY %s`, metadataCol, ordering)
-	rows, err := db.Query(q, in.Done, time.Unix(in.Since, 0))
+	rows, err := db.QueryContext(ctx, q, in.Done, time.Unix(in.Since, 0))
 	if err != nil {
 		return dbError("Listing leases", err)
 	}
@@ -1155,9 +1153,9 @@ ORDER BY %s`, metadataCol, ordering)
 	return nil
 }
 
-func getJWTFromCookie(v string) (string, error) {
+func getJWTFromCookie(ctx context.Context, v string) (string, error) {
 	var j string
-	if err := db.QueryRow(`SELECT jwt FROM cookies WHERE cookie=$1`, v).Scan(&j); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT jwt FROM cookies WHERE cookie=$1`, v).Scan(&j); err != nil {
 		return "", err
 	}
 	return j, nil
@@ -1208,7 +1206,7 @@ func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, erro
 		batchID = &in.BatchId
 	}
 	id := uuid.New()
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 INSERT INTO orders(
     order_id,
     batch_id,
@@ -1270,21 +1268,12 @@ func main() {
 
 	// Connect to GCS.
 	{
-		jsonKey, err := ioutil.ReadFile(*cloudCredentials)
+		var err error
+		googleCloudStorage, err = storage.NewClient(ctx, cloudopt.WithServiceAccountFile(*cloudCredentials))
 		if err != nil {
 			log.Fatal(err)
 		}
-		conf, err := google.JWTConfigFromJSON(
-			jsonKey,
-			storage.ScopeFullControl,
-		)
-		if err != nil {
-			log.Fatal(err)
-		}
-		googleCloudStorage, err = storage.NewClient(ctx, cloud.WithTokenSource(conf.TokenSource(ctx)))
-		if err != nil {
-			log.Fatal(err)
-		}
+		defer googleCloudStorage.Close()
 	}
 
 	var sqlLogf io.Writer
@@ -1308,7 +1297,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err := t.Ping(); err != nil {
+		if err := t.PingContext(ctx); err != nil {
 			log.Fatalf("db ping: %v", err)
 		}
 		db = dist.NewDBWrap(t, log.New(sqlLogf, "", log.LstdFlags))
