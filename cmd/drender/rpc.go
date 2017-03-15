@@ -20,9 +20,10 @@ import (
 )
 
 var (
-	caFile   = flag.String("ca_file", "", "Server CA file.")
-	certFile = flag.String("cert_file", "", "Client cert file.")
-	keyFile  = flag.String("key_file", "", "Client key file.")
+	caFile            = flag.String("ca_file", "", "Server CA file.")
+	certFile          = flag.String("cert_file", "", "Client cert file.")
+	keyFile           = flag.String("key_file", "", "Client key file.")
+	keepAliveDuration = flag.Duration("keepalive", 60*time.Minute, "TCP keepalive time.")
 
 	forwardRPCKeys []string
 )
@@ -73,6 +74,13 @@ func (s *rpcScheduler) done(id string, img, stdout, stderr []byte, meta *pb.Rend
 	return err
 }
 
+func withKeepAliveDialer() grpc.DialOption {
+	return grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
+		d := net.Dialer{Timeout: timeout, KeepAlive: *keepAliveDuration}
+		return d.Dial("tcp", addr)
+	})
+}
+
 func newRPCScheduler(addr string) (scheduler, error) {
 	caStr := dist.CacertClass1
 	if *caFile != "" {
@@ -113,6 +121,7 @@ func newRPCScheduler(addr string) (scheduler, error) {
 		grpc.WithTransportCredentials(cr),
 		grpc.WithPerRPCCredentials(dist.NewPerRPC(forwardRPCKeys)),
 		grpc.WithUserAgent(userAgent),
+		withKeepAliveDialer(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("dialing scheduler %q: %v", addr, err)
