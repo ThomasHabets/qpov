@@ -72,8 +72,9 @@ var (
 
 	googleCloudStorage *storage.Client
 
+	// Driver doesn't support isolation levels natively.
 	txopts = &sql.TxOptions{
-		Isolation: sql.LevelSerializable,
+	//Isolation: sql.LevelSerializable,
 	}
 )
 
@@ -326,6 +327,12 @@ func (s *server) Login(ctx context.Context, in *pb.LoginRequest) (*pb.LoginReply
 		return nil, dbError("begin transaction", err)
 	}
 	defer tx.Rollback()
+	// Driver doesn't support isolation levels natively.
+	if true {
+		if _, err := db.ExecContext(ctx, "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"); err != nil {
+			return nil, dbError("set isolation level serializable", err)
+		}
+	}
 
 	// Reuse cookie if present and is UUID-shaped.
 	c := in.Cookie
@@ -371,6 +378,12 @@ func (s *server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetReply, erro
 		return nil, dbError("begin transaction", err)
 	}
 	defer tx.Rollback()
+	// Driver doesn't support isolation levels natively.
+	if true {
+		if _, err := db.ExecContext(ctx, "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"); err != nil {
+			return nil, dbError("set isolation level serializable", err)
+		}
+	}
 
 	var orderID, def string
 	// TODO: Currently using batch.ctime() as priority. Should have separate thing?
