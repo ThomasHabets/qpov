@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"runtime/pprof"
 	"sort"
 	"strings"
 	"time"
@@ -25,8 +26,9 @@ import (
 var (
 	db dist.DBWrap
 	// TODO: Ask the scheduler for the leases instead of getting them from the DB directly.
-	dbConnect = flag.String("db", "", "Database connect string.")
-	outDir    = flag.String("out", ".", "Directory to write stats files to.")
+	dbConnect  = flag.String("db", "", "Database connect string.")
+	outDir     = flag.String("out", ".", "Directory to write stats files to.")
+	cpuprofile = flag.String("cpuprofile", "", "Write cpu profile to file.")
 
 	// from order to slice of leases.
 	metas map[string][]pb.Lease
@@ -46,11 +48,37 @@ func (a byTime) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a byTime) Less(i, j int) bool { return a[i].time.Before(a[j].time) }
 
 // Return descriptive specs, model, short name, and core count
-var cpuRE = regexp.MustCompile(`(?m)^model name\s+:\s+(.*)$`)
+var cpuRE = regexp.MustCompile(`^model name\s+:\s+(.*)`)
 var spacesRE = regexp.MustCompile(`\s+`)
-var piZeroRE = regexp.MustCompile(`(?sm)^model name\s*:\s+ARMv6-compatible processor rev 7 \(v6l\)$.*^Revision\s*:\s+900093$`)
+var revisionRE = regexp.MustCompile(`^Revision\s*:\s+(\w+)$`)
 
+// Get machine type from cloud and cpuinfo data.
+// Returns machine, model, short, ncpu.
+//   machine = "X x CPU DESCRIPTION"
+//   model = "CPU DESCRIPTION"
+//   short = "Raspberry pi 3"
+//   ncpu = X
 func getMachine(cloud *pb.Cloud, cpuinfo string) (string, string, string, int) {
+	var cpuName string
+	var cpus int
+	var revision string
+	for _, l := range strings.Split(cpuinfo, "\n") {
+		if strings.HasPrefix(l, "model name") {
+			if cpus == 0 {
+				m := cpuRE.FindStringSubmatch(l)
+				cpuName = m[1]
+			}
+			cpus++
+		}
+		if strings.HasPrefix(l, "Revision") && revision == "" {
+			m := revisionRE.FindStringSubmatch(l)
+			if len(m) == 0 {
+				log.Println(l)
+			}
+			revision = m[1]
+		}
+	}
+
 	cNamePrefix := ""
 	if cloud != nil {
 		t := cloud
@@ -61,22 +89,23 @@ func getMachine(cloud *pb.Cloud, cpuinfo string) (string, string, string, int) {
 		}
 		cNamePrefix = strings.TrimSpace(fmt.Sprintf("%s/%s", t.Provider, t.InstanceType)) + " "
 	}
-	m := cpuRE.FindAllStringSubmatch(cpuinfo, -1)
-	if len(m) != 0 {
-		name := spacesRE.ReplaceAllString(m[0][1], " ")
-		num := len(m)
-		desc := fmt.Sprintf("%s%d x %s", cNamePrefix, num, name)
-		short, _ := map[string]string{
-			// Yes, the order here is correct. Pi2 has 5, Pi3 has 4.
-			`1 x ARMv6-compatible processor rev 7 (v6l)`: "Raspberry Pi 1",
-			`4 x ARMv7 Processor rev 5 (v7l)`:            "Raspberry Pi 2",
-			`4 x ARMv7 Processor rev 4 (v7l)`:            "Raspberry Pi 3",
-			`2 x ARMv7 Processor rev 4 (v7l)`:            "Banana Pi",
-		}[desc]
-		if piZeroRE.MatchString(cpuinfo) {
-			short = "Raspberry Pi Zero"
+	if cpus != 0 {
+		desc := fmt.Sprintf("%s%d x %s", cNamePrefix, cpus, cpuName)
+		short := ""
+		switch desc {
+		case `1 x ARMv6-compatible processor rev 7 (v6l)`:
+			short = "Raspberry Pi 1"
+			if revision == "900093" {
+				short = "Raspberry Pi Zero"
+			}
+		case `4 x ARMv7 Processor rev 5 (v7l)`: // Yes, the order here is correct. Pi2 has 5, Pi3 has 4.
+			short = "Raspberry Pi 2"
+		case `4 x ARMv7 Processor rev 4 (v7l)`:
+			short = "Raspberry Pi 3"
+		case `2 x ARMv7 Processor rev 4 (v7l)`:
+			short = "Banana Pi"
 		}
-		return desc, name, short, num
+		return desc, cpuName, short, cpus
 	}
 	return "unknown", "unknown", "", 0
 }
@@ -448,6 +477,14 @@ func main() {
 	flag.Parse()
 	if flag.NArg() > 0 {
 		log.Fatalf("Got extra args on cmdline: %q", flag.Args())
+	}
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatalf("Creating %q: %v", err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
 	}
 	log.Printf("Running mkstats")
 	// Connect to database.
