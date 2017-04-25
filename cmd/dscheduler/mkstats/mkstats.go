@@ -48,6 +48,7 @@ func (a byTime) Less(i, j int) bool { return a[i].time.Before(a[j].time) }
 // Return descriptive specs, model, short name, and core count
 var cpuRE = regexp.MustCompile(`(?m)^model name\s+:\s+(.*)$`)
 var spacesRE = regexp.MustCompile(`\s+`)
+var piZeroRE = regexp.MustCompile(`(?sm)^model name\s*:\s+ARMv6-compatible processor rev 7 \(v6l\)$.*^Revision\s*:\s+900093$`)
 
 func getMachine(cloud *pb.Cloud, cpuinfo string) (string, string, string, int) {
 	cNamePrefix := ""
@@ -72,6 +73,9 @@ func getMachine(cloud *pb.Cloud, cpuinfo string) (string, string, string, int) {
 			`4 x ARMv7 Processor rev 4 (v7l)`:            "Raspberry Pi 3",
 			`2 x ARMv7 Processor rev 4 (v7l)`:            "Banana Pi",
 		}[desc]
+		if piZeroRE.MatchString(cpuinfo) {
+			short = "Raspberry Pi Zero"
+		}
 		return desc, name, short, num
 	}
 	return "unknown", "unknown", "", 0
