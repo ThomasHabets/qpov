@@ -20,39 +20,7 @@ var tmplDesign = template.Must(template.New("design").Parse(`
        type="text/javascript"
        integrity="sha384-ECTndYny330R2jlSXBiZkdXzAVi0Z/iDXJTwV6cp39HECmalqg6+b2sFZFf/Y2m6"
        crossorigin="anonymous"
-       src="https://ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
-    <script
-       type="text/javascript"
-       src="https://apis.google.com/js/platform.js" async defer></script>
-    <script>
-    function signOut() {
-      var auth2 = gapi.auth2.getAuthInstance();
-      auth2.signOut().then(function () {});
-      $.post("{{$root.Root}}/logout", {},
-          function() {
-            console.log("Logged out OK");
-            location.reload();
-          }
-      );
-    }
-    function onSignIn(googleUser) {
-      var profile = googleUser.getBasicProfile();
-      var img = profile.getImageUrl();
-      if (img != undefined) {
-        document.getElementById("profile-img").innerHTML = "<img src='"+img+"'>";
-      }
-      document.getElementById("sign-out").style.display = "inline";
-      document.getElementById("profile-email").innerHTML = profile.getEmail();
-      if ("true" !== document.getElementById("logged-in").dataset.loggedIn) {
-        $.post("{{$root.Root}}/login", {"jwt": googleUser.getAuthResponse().id_token},
-            function() {
-              console.log("Logged in OK");
-              location.reload();
-          }
-        );
-      }
-    };
-  </script>
+       src="https://cdn.habets.se/js/jquery-2.0.3.min.js"></script>
     <style>
 body {
   margin: 0;
@@ -141,5 +109,37 @@ tr:nth-child(odd) {
     <hr>
     Page server time: {{.PageTime}}
   </body>
+    <script
+       type="text/javascript"
+       src="https://apis.google.com/js/platform.js" async defer></script>
+    <script>
+    function signOut() {
+      var auth2 = gapi.auth2.getAuthInstance();
+      auth2.signOut().then(function () {});
+      $.post("{{$root.Root}}/logout", {},
+          function() {
+            console.log("Logged out OK");
+            location.reload();
+          }
+      );
+    }
+    function onSignIn(googleUser) {
+      var profile = googleUser.getBasicProfile();
+      var img = profile.getImageUrl();
+      if (img != undefined) {
+        document.getElementById("profile-img").innerHTML = "<img src='"+img+"'>";
+      }
+      document.getElementById("sign-out").style.display = "inline";
+      document.getElementById("profile-email").innerHTML = profile.getEmail();
+      if ("true" !== document.getElementById("logged-in").dataset.loggedIn) {
+        $.post("{{$root.Root}}/login", {"jwt": googleUser.getAuthResponse().id_token},
+            function() {
+              console.log("Logged in OK");
+              location.reload();
+          }
+        );
+      }
+    };
+  </script>
 </html>
 `))
