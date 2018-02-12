@@ -82,19 +82,21 @@ func withKeepAliveDialer() grpc.DialOption {
 }
 
 func newRPCScheduler(addr string) (scheduler, error) {
-	caStr := dist.CacertClass1
+	var cp *x509.CertPool
 	if *caFile != "" {
+		var caStr string
+		// caStr = dist.CacertClass1
 		b, err := ioutil.ReadFile(*caFile)
 		if err != nil {
 			return nil, fmt.Errorf("reading %q: %v", *caFile, err)
 		}
 		caStr = string(b)
-	}
 
-	// Root CA.
-	cp := x509.NewCertPool()
-	if ok := cp.AppendCertsFromPEM([]byte(caStr)); !ok {
-		return nil, fmt.Errorf("failed to add root CAs")
+		// Root CA.
+		cp = x509.NewCertPool()
+		if ok := cp.AppendCertsFromPEM([]byte(caStr)); !ok {
+			return nil, fmt.Errorf("failed to add root CAs")
+		}
 	}
 
 	host, _, err := net.SplitHostPort(addr)
