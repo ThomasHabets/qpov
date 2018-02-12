@@ -597,6 +597,7 @@ func wrapTmpl(f handleFunc, tmpl *template.Template) *handler {
 func connectScheduler(addr string) error {
 	var cp *x509.CertPool
 	if *caFile != "" {
+		var caStr string
 		// caStr := dist.CacertClass1
 		b, err := ioutil.ReadFile(*caFile)
 		if err != nil {
