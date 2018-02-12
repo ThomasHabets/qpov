@@ -297,7 +297,7 @@ func handleLease(ctx context.Context, w http.ResponseWriter, r *http.Request) (i
 			msg := fmt.Sprintf("Bad request: %v", grpc.ErrorDesc(err))
 			return nil, httpError(http.StatusBadRequest, msg, msg)
 		case codes.Unauthenticated:
-			return nil, httpError(http.StatusForbidden, "Unauthenticated", "Unauthenticated")
+			return nil, httpError(http.StatusForbidden, "Unauthenticated", fmt.Sprintf("Unauthenticated: %v", err))
 		case codes.NotFound:
 			msg := fmt.Sprintf("Lease %q not found", lease)
 			return nil, httpError(http.StatusNotFound, msg, msg)

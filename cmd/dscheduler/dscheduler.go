@@ -1168,9 +1168,11 @@ func blockRestrictedUser(ctx context.Context) error {
 	nope := grpc.Errorf(codes.Unauthenticated, "need per-user credentials for this resource")
 	user, err := getUser(ctx)
 	if err != nil {
+		log.Printf("Blocked user: %v", err)
 		return nope
 	}
 	if !user.addresses {
+		log.Printf("User %+v has no right to see addresses", user)
 		return nope
 	}
 	return nil
