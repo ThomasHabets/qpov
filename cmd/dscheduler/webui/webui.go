@@ -595,19 +595,20 @@ func wrapTmpl(f handleFunc, tmpl *template.Template) *handler {
 }
 
 func connectScheduler(addr string) error {
-	caStr := dist.CacertClass1
+	var cp *x509.CertPool
 	if *caFile != "" {
+		// caStr := dist.CacertClass1
 		b, err := ioutil.ReadFile(*caFile)
 		if err != nil {
 			return fmt.Errorf("reading %q: %v", *caFile, err)
 		}
 		caStr = string(b)
-	}
 
-	// Root CA.
-	cp := x509.NewCertPool()
-	if ok := cp.AppendCertsFromPEM([]byte(caStr)); !ok {
-		return fmt.Errorf("failed to add root CAs")
+		// Root CA.
+		cp := x509.NewCertPool()
+		if ok := cp.AppendCertsFromPEM([]byte(caStr)); !ok {
+			return fmt.Errorf("failed to add root CAs")
+		}
 	}
 
 	host, _, err := net.SplitHostPort(addr)
