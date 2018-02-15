@@ -453,7 +453,7 @@ func getRPCMetadataSQL(ctx context.Context, s string) sql.NullString {
 }
 
 func getRPCMetadata(ctx context.Context, s string) (string, error) {
-	md, ok := grpcmetadata.FromContext(ctx)
+	md, ok := grpcmetadata.FromIncomingContext(ctx)
 	if !ok {
 		return "", fmt.Errorf("could not get RPC metadata")
 	}
