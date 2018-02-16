@@ -442,17 +442,17 @@ func handler(n int, q scheduler) {
 			re := regexp.MustCompile(`\.pov$`)
 			img, err := ioutil.ReadFile(path.Join(base, re.ReplaceAllString(order.File, ".png")))
 			if err != nil {
-				log.Printf("(%d) Failed to read output png: %v", err)
+				log.Printf("(%d) Failed to read output png: %v", n, err)
 				continue
 			}
 			stdout, err := ioutil.ReadFile(path.Join(base, order.File+".stdout"))
 			if err != nil {
-				log.Printf("(%d) Failed to read stdout: %v", err)
+				log.Printf("(%d) Failed to read stdout: %v", n, err)
 				continue
 			}
 			stderr, err := ioutil.ReadFile(path.Join(base, order.File+".stderr"))
 			if err != nil {
-				log.Printf("(%d) Failed to read stderr: %v", err)
+				log.Printf("(%d) Failed to read stderr: %v", n, err)
 				continue
 			}
 			for {
