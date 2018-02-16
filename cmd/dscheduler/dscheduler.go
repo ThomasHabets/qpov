@@ -586,7 +586,7 @@ func (s *server) saveToCloud(ctx context.Context, in *pb.DoneRequest, realMeta *
 			log.Printf("File already exist, skipping %q %q", *uploadBucketName, fn)
 			return
 		} else if err != storage.ErrObjectNotExist {
-			log.Printf("Failed to check if %q %q already exists: %v", err)
+			log.Printf("Failed to check if %q %q already exists: %v", *uploadBucketName, fn, err)
 		}
 		w := obj.NewWriter(ctx)
 		defer func() {
@@ -608,7 +608,7 @@ func (s *server) saveToCloud(ctx context.Context, in *pb.DoneRequest, realMeta *
 			log.Printf("File already exist, skipping %q %q", *uploadBucketName, fn)
 			return
 		} else if err != storage.ErrObjectNotExist {
-			log.Printf("Failed to check if %q %q already exists: %v", err)
+			log.Printf("Failed to check if %q %q already exists: %v", *uploadBucketName, fn, err)
 		}
 		w := obj.NewWriter(ctx)
 		defer func() {
