@@ -481,7 +481,7 @@ func main() {
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)
 		if err != nil {
-			log.Fatalf("Creating %q: %v", err)
+			log.Fatalf("Creating %q: %v", *cpuprofile, err)
 		}
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
