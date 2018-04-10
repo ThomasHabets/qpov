@@ -12,7 +12,6 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/peer"
-	"google.golang.org/grpc/transport"
 
 	pb "github.com/ThomasHabets/qpov/dist/rpclog/proto"
 )
@@ -23,11 +22,11 @@ type Logger struct {
 }
 
 func getAddr(ctx context.Context) string {
-	t, ok := transport.StreamFromContext(ctx)
+	t, ok := peer.FromContext(ctx)
 	if !ok {
 		return ""
 	}
-	return t.ServerTransport().RemoteAddr().String()
+	return t.Addr.String()
 }
 
 func getCN(ctx context.Context) string {
