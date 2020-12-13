@@ -71,6 +71,11 @@ func getMachine(cloud *pb.Cloud, cpuinfo string) (string, string, string, int) {
 			}
 			cpus++
 		}
+		if strings.Contains(l, "Raspberry Pi 4 Model") {
+			cpus = 4
+			cpuName = "RaspberryPi4"
+			break
+		}
 		if strings.HasPrefix(l, "Revision") && revision == "" {
 			m := revisionRE.FindStringSubmatch(l)
 			if len(m) == 0 {
@@ -103,6 +108,8 @@ func getMachine(cloud *pb.Cloud, cpuinfo string) (string, string, string, int) {
 			short = "Raspberry Pi 2"
 		case `4 x ARMv7 Processor rev 4 (v7l)`:
 			short = "Raspberry Pi 3"
+		case `4 x RaspberryPi4`:
+			short = "Raspberry Pi 4"
 		case `2 x ARMv7 Processor rev 4 (v7l)`:
 			short = "Banana Pi"
 		}
