@@ -410,11 +410,11 @@ func mkstats(ctx context.Context, metaChan <-chan *pb.RenderingMetadata) (*pb.St
 		for i := int64(from.Unix()) % 86400; i < int64(to.Unix()); i += 86400 {
 			rfrom := i - 86400
 			rto := i
-			for cur > 0 && events[cur].time.Unix() > rfrom {
+			for cur > 0 && (events[cur].time.Unix() > rfrom) {
 				cur--
 			}
 			// backed one too many.
-			if events[cur].time.Unix() < rfrom {
+			if events[cur].time.Unix() < rfrom && len(events) > cur+1 {
 				cur++
 			}
 			var n int64
