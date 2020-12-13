@@ -30,8 +30,9 @@ var (
 	outDir     = flag.String("out", ".", "Directory to write stats files to.")
 	cpuprofile = flag.String("cpuprofile", "", "Write cpu profile to file.")
 
-	// from order to slice of leases.
-	metas map[string][]pb.Lease
+	// cpu usage.
+	batch2user = make(map[string]float64)
+	batch2sys  = make(map[string]float64)
 )
 
 type event struct {
@@ -137,8 +138,7 @@ func sortGraphs(lineTitles []string, data [][]tsInt) ([]string, [][]tsInt) {
 }
 
 // return mapping from order to slice of leases.
-func getAllMetas(ctx context.Context) (map[string][]pb.Lease, error) {
-	ret := make(map[string][]pb.Lease)
+func getAllMetas(ctx context.Context, metaChan chan<- *pb.RenderingMetadata) error {
 	rows, err := db.QueryContext(ctx, `
 SELECT batch.batch_id, lease_id, leases.metadata
 FROM batch
@@ -146,7 +146,7 @@ JOIN orders ON batch.batch_id=orders.batch_id
 JOIN leases ON orders.order_id=leases.order_id
 WHERE metadata IS NOT NULL`)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -154,20 +154,23 @@ WHERE metadata IS NOT NULL`)
 		var lease string
 		var metas string
 		if err := rows.Scan(&batch, &lease, &metas); err != nil {
-			return nil, err
+			return err
 		}
 		p := pb.Lease{
 			Metadata: &pb.RenderingMetadata{},
 		}
 		if err := json.Unmarshal([]byte(metas), p.Metadata); err != nil {
-			return nil, err
+			return err
 		}
-		ret[batch] = append(ret[batch], p)
+		//ret[batch] = append(ret[batch], p)
+		batch2sys[batch] += float64(p.Metadata.SystemMs) / 1000.0
+		batch2user[batch] += float64(p.Metadata.UserMs) / 1000.0
+		metaChan <- p.Metadata
 	}
 	if rows.Err() != nil {
-		return nil, err
+		return err
 	}
-	return ret, nil
+	return nil
 
 }
 
@@ -230,13 +233,10 @@ ORDER BY ctime NULLS FIRST
 		if ctime.Valid {
 			e.Ctime = int64(ctime.Time.Unix())
 		}
-		var user, sys, compute float64
-		for _, l := range metas[batch.String] {
-			user += float64(l.Metadata.UserMs) / 1000.0
-			sys += float64(l.Metadata.SystemMs) / 1000.0
-			// TODO: when we calculate computrons.
-			//compute += computeSeconds(&l)
-		}
+		user := batch2user[batch.String]
+		sys := batch2sys[batch.String]
+		// TODO: when we calculate computrons.
+		compute := float64(0) // computeSeconds(&l)
 		e.CpuTime.UserSeconds = int64(user)
 		e.CpuTime.SystemSeconds = int64(sys)
 		e.CpuTime.ComputeSeconds = int64(compute)
@@ -288,15 +288,6 @@ func mkstats(ctx context.Context, metaChan <-chan *pb.RenderingMetadata) (*pb.St
 		CpuTime:        &pb.StatsCPUTime{},
 		MachineTime:    &pb.StatsCPUTime{},
 	}
-
-	batchCh := make(chan []*pb.BatchStats)
-	go func() {
-		s, err := mkstatsBatch(ctx)
-		if err != nil {
-			log.Fatalf("mkstatsBatch: %v", err)
-		}
-		batchCh <- s
-	}()
 
 	// Deltas.
 	var events []event
@@ -439,7 +430,12 @@ func mkstats(ctx context.Context, metaChan <-chan *pb.RenderingMetadata) (*pb.St
 			return nil, err
 		}
 	}
-	stats.BatchStats = <-batchCh
+
+	s, err := mkstatsBatch(ctx)
+	if err != nil {
+		log.Fatalf("mkstatsBatch: %v", err)
+	}
+	stats.BatchStats = s
 	return stats, nil
 }
 
@@ -500,18 +496,11 @@ func main() {
 		db = dist.NewDBWrap(t, log.New(os.Stderr, "", log.LstdFlags))
 	}
 
-	metas, err = getAllMetas(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	metaChan := make(chan *pb.RenderingMetadata)
 	go func() {
 		defer close(metaChan)
-		for _, leases := range metas {
-			for _, l := range leases {
-				metaChan <- l.Metadata
-			}
+		if err := getAllMetas(ctx, metaChan); err != nil {
+			log.Fatal(err)
 		}
 	}()
 	stats, err := mkstats(ctx, metaChan)
