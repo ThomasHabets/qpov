@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
-	"os"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -26,7 +25,7 @@ var (
 	keyFile        = flag.String("key_file", "", "Client key file.")
 	connectTimeout = flag.Duration("connect_timeout", 5*time.Second, "Dial timout.")
 
-	verbose = flag.Bool("rpc_verbose", false, "Print verbose RPC info.")
+	verbose = flag.Int("rpc_verbose", 0, "Print verbose RPC info.")
 )
 
 const (
@@ -88,10 +87,27 @@ func (s *RPCScheduler) Done(ctx context.Context, id string, img, stdout, stderr 
 	return err
 }
 
+type rpcLogger struct {
+	level int
+}
+
+func (rpcLogger) Info(args ...interface{})                    { log.Info(args...) }
+func (rpcLogger) Infof(format string, args ...interface{})    { log.Infof(format, args...) }
+func (rpcLogger) Infoln(args ...interface{})                  { log.Infoln(args...) }
+func (rpcLogger) Warning(args ...interface{})                 { log.Warning(args...) }
+func (rpcLogger) Warningf(format string, args ...interface{}) { log.Warningf(format, args...) }
+func (rpcLogger) Warningln(args ...interface{})               { log.Warningln(args...) }
+func (rpcLogger) Error(args ...interface{})                   { log.Error(args...) }
+func (rpcLogger) Errorf(format string, args ...interface{})   { log.Errorf(format, args...) }
+func (rpcLogger) Errorln(args ...interface{})                 { log.Errorln(args...) }
+func (rpcLogger) Fatal(args ...interface{})                   { log.Fatal(args...) }
+func (rpcLogger) Fatalf(format string, args ...interface{})   { log.Fatalf(format, args...) }
+func (rpcLogger) Fatalln(args ...interface{})                 { log.Fatalln(args...) }
+func (r rpcLogger) V(l int) bool                              { return l >= r.level }
+
 func NewScheduler(ctx context.Context, addr string) (*RPCScheduler, error) {
-	if *verbose {
-		log.Infof("Setting GRPC verbose mode")
-		grpclog.SetLoggerV2(grpclog.NewLoggerV2WithVerbosity(os.Stderr, os.Stderr, os.Stderr, 99))
+	if *verbose > 0 {
+		grpclog.SetLoggerV2(rpcLogger{level: *verbose})
 	}
 
 	host, _, err := net.SplitHostPort(addr)
