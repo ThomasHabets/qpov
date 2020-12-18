@@ -3,13 +3,13 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"html/template"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -21,8 +21,11 @@ import (
 	"syscall"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/ThomasHabets/qpov/pkg/dist"
 	pb "github.com/ThomasHabets/qpov/pkg/dist/qpov"
+	"github.com/ThomasHabets/qpov/pkg/dist/rpcclient"
 )
 
 var (
@@ -36,7 +39,7 @@ var (
 	concurrency    = flag.Int("concurrency", 1, "Run this many povrays in parallel. <=0 means set to number of CPUs.")
 	idle           = flag.Bool("idle", true, "Use idle priority.")
 	comment        = flag.String("comment", "", "Comment to record for stats, for this instance.")
-	schedAddr      = flag.String("scheduler", "", "Scheduler address.")
+	schedAddr      = flag.String("scheduler", "qpov.retrofitta.se:9999", "Scheduler address.")
 
 	flush = flag.Bool("flush", false, "Flush all render jobs.")
 
@@ -45,9 +48,9 @@ var (
 )
 
 type scheduler interface {
-	get() (string, string, error)
-	renew(id string, dur time.Duration) (time.Time, error)
-	done(id string, img, stdout, stderr []byte, meta *pb.RenderingMetadata) error
+	Get(ctx context.Context) (string, string, error)
+	Renew(ctx context.Context, id string, dur time.Duration) (time.Time, error)
+	Done(ctx context.Context, id string, img, stdout, stderr []byte, meta *pb.RenderingMetadata) error
 }
 
 type state struct {
@@ -89,7 +92,7 @@ func verifyPackage(n int, order *dist.Order) error {
 			if !st.IsDir() {
 				return fmt.Errorf("(%d) working dir %q exists, but is not a directory", n, wd)
 			}
-			log.Printf("(%d) Package already downloaded", n)
+			log.Infof("(%d) Package already downloaded", n)
 			return nil
 		}
 	}
@@ -97,7 +100,7 @@ func verifyPackage(n int, order *dist.Order) error {
 	// Download package.
 	var ofName string
 	{
-		log.Printf("(%d) Downloading %q...", n, order.Package)
+		log.Infof("(%d) Downloading %q...", n, order.Package)
 		r, err := http.Get(order.Package)
 		if err != nil {
 			return err
@@ -123,7 +126,7 @@ func verifyPackage(n int, order *dist.Order) error {
 		if err != nil && !os.IsExist(err) {
 			return fmt.Errorf("creating working dir %q: %v", wd, err)
 		}
-		log.Printf("(%d) Unpacking %q into %q...", n, order.Package, wd)
+		log.Infof("(%d) Unpacking %q into %q...", n, order.Package, wd)
 		cmd := exec.Command("rar", "x", ofName)
 		cmd.Dir = wd
 		if err := cmd.Run(); err != nil {
@@ -137,7 +140,7 @@ func verifyPackage(n int, order *dist.Order) error {
 		if err != nil && !os.IsExist(err) {
 			return fmt.Errorf("creating working dir %q: %v", wd, err)
 		}
-		log.Printf("(%d) Unpacking %q into %q...", n, order.Package, wd)
+		log.Infof("(%d) Unpacking %q into %q...", n, order.Package, wd)
 		cmd := exec.Command("tar", "xzf", ofName)
 		cmd.Dir = wd
 		if err := cmd.Run(); err != nil {
@@ -159,7 +162,7 @@ func verifyPackage(n int, order *dist.Order) error {
 // * pov.stdout
 // * pov<.infoSuffix>
 func render(n int, order *dist.Order) (*pb.RenderingMetadata, error) {
-	log.Printf("(%d) Rendering...", n)
+	log.Infof("(%d) Rendering...", n)
 	wd := path.Join(*root, path.Base(order.Package), order.Dir)
 	pov := order.File
 
@@ -212,7 +215,7 @@ func getCloud() (string, string) {
 		}
 		req, err := http.NewRequest("GET", gceInstanceTypeURL, nil)
 		if err != nil {
-			log.Printf("Failed to create GCE request: %v", err)
+			log.Errorf("Failed to create GCE request: %v", err)
 		}
 		req.Header.Add("Metadata-Flavor", "Google")
 		if resp, err := client.Do(req); err == nil && resp.StatusCode == http.StatusOK {
@@ -369,7 +372,7 @@ func handle(n int, order *dist.Order) (*pb.RenderingMetadata, error) {
 	return stats, nil
 }
 
-func refresh(q scheduler, id string, refreshCh, doneCh chan struct{}) {
+func refresh(ctx context.Context, q scheduler, id string, refreshCh, doneCh chan struct{}) {
 	defer close(doneCh)
 	nextTimeout := time.Now().Add(*refreshTime)
 	t := time.NewTimer(nextTimeout.Sub(time.Now()) / 2)
@@ -379,9 +382,9 @@ func refresh(q scheduler, id string, refreshCh, doneCh chan struct{}) {
 		case <-refreshCh:
 			return
 		case <-t.C:
-			n, err := q.renew(id, *refreshTime)
+			n, err := q.Renew(ctx, id, *refreshTime)
 			if err != nil {
-				log.Printf("Failed to refresh lease: %v", err)
+				log.Warningf("Failed to refresh lease: %v", err)
 			} else {
 				nextTimeout = n
 			}
@@ -395,22 +398,22 @@ func refresh(q scheduler, id string, refreshCh, doneCh chan struct{}) {
 }
 
 // goroutine main() handling rendering.
-func handler(n int, q scheduler) {
+func handler(ctx context.Context, n int, q scheduler) {
 	for {
-		id, encodedOrder, err := q.get()
+		id, encodedOrder, err := q.Get(ctx)
 		if err != nil {
-			log.Printf("(%d) Getting order: %v", n, err)
+			log.Infof("(%d) Getting order: %v", n, err)
 			time.Sleep(1 * time.Minute)
 			continue
 		}
 		if id == "" {
-			log.Printf("(%d) Nothing to do...", n)
+			log.Infof("(%d) Nothing to do...", n)
 			time.Sleep(10 * time.Second)
 			continue
 		}
 		refreshChan := make(chan struct{})
 		doneChan := make(chan struct{})
-		go refresh(q, id, refreshChan, doneChan)
+		go refresh(ctx, q, id, refreshChan, doneChan)
 		var order dist.Order
 		var meta *pb.RenderingMetadata
 		ok := func() bool {
@@ -421,9 +424,9 @@ func handler(n int, q scheduler) {
 				<-doneChan
 			}()
 			defer close(refreshChan)
-			log.Printf("(%d) Got job: %q: %q", n, id, encodedOrder)
+			log.Infof("(%d) Got job: %q: %q", n, id, encodedOrder)
 			if err := json.Unmarshal([]byte(encodedOrder), &order); err != nil {
-				log.Printf("(%d) Failed to unmarshal message %q: %v", n, encodedOrder, err)
+				log.Errorf("(%d) Failed to unmarshal message %q: %v", n, encodedOrder, err)
 				return false
 			}
 			states[n].Lock()
@@ -432,7 +435,7 @@ func handler(n int, q scheduler) {
 			states[n].Unlock()
 			meta, err = handle(n, &order)
 			if err != nil {
-				log.Printf("(%d) Failed to handle order %+v: %v", n, order, err)
+				log.Errorf("(%d) Failed to handle order %+v: %v", n, order, err)
 				return false
 			}
 			return true
@@ -442,31 +445,31 @@ func handler(n int, q scheduler) {
 			re := regexp.MustCompile(`\.pov$`)
 			img, err := ioutil.ReadFile(path.Join(base, re.ReplaceAllString(order.File, ".png")))
 			if err != nil {
-				log.Printf("(%d) Failed to read output png: %v", n, err)
+				log.Errorf("(%d) Failed to read output png: %v", n, err)
 				continue
 			}
 			stdout, err := ioutil.ReadFile(path.Join(base, order.File+".stdout"))
 			if err != nil {
-				log.Printf("(%d) Failed to read stdout: %v", n, err)
+				log.Errorf("(%d) Failed to read stdout: %v", n, err)
 				continue
 			}
 			stderr, err := ioutil.ReadFile(path.Join(base, order.File+".stderr"))
 			if err != nil {
-				log.Printf("(%d) Failed to read stderr: %v", n, err)
+				log.Errorf("(%d) Failed to read stderr: %v", n, err)
 				continue
 			}
 			for {
 				// Retry forever. We don't want to lose work.
-				err := q.done(id, img, stdout, stderr, meta)
+				err := q.Done(ctx, id, img, stdout, stderr, meta)
 				if err == nil {
-					log.Printf("(%d) Done", n)
+					log.Infof("(%d) Done", n)
 					break
 				}
-				log.Printf("(%d) Failed to delete message %q. Retrying.", n, id)
+				log.Errorf("(%d) Failed to delete message %q. Retrying.", n, id)
 				time.Sleep(doneRetryTimer)
 			}
 		} else {
-			log.Printf("(%d) Order failed. Waiting %v", n, *failWait)
+			log.Errorf("(%d) Order failed. Waiting %v", n, *failWait)
 			time.Sleep(*failWait)
 		}
 	}
@@ -525,22 +528,21 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 		Stats:  st,
 		States: states,
 	}); err != nil {
-		log.Printf("Template rendering error: %v", err)
+		log.Errorf("Template rendering error: %v", err)
 	}
 }
 
 func main() {
-	log.SetFlags(log.Ldate | log.Ltime | log.LUTC)
 	flag.Parse()
 	if len(flag.Args()) != 0 {
 		log.Fatalf("Got extra args on cmdline: %q", flag.Args())
 	}
 
-	log.Printf("Starting up...")
-
+	log.Infof("Starting up...")
+	ctx := context.Background()
 	var s scheduler
 	var err error
-	s, err = newRPCScheduler(*schedAddr)
+	s, err = rpcclient.NewScheduler(ctx, *schedAddr)
 	if err != nil {
 		log.Fatalf("Failed to set up scheduler: %v", err)
 	}
@@ -550,7 +552,7 @@ func main() {
 
 	states = make([]state, *concurrency, *concurrency)
 	for c := 0; c < *concurrency; c++ {
-		go handler(c, s)
+		go handler(ctx, c, s)
 	}
 	http.HandleFunc("/", handleRoot)
 	log.Fatal(http.ListenAndServe(*addr, nil))

@@ -13,6 +13,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/grpclog"
 
@@ -46,6 +47,44 @@ func (s *RPCScheduler) Add(ctx context.Context, order, batchID string) error {
 		OrderDefinition: order,
 		BatchId:         batchID,
 	})
+	return err
+}
+
+func (s *RPCScheduler) Get(ctx context.Context) (string, string, error) {
+	r, err := s.Client.Get(ctx, &pb.GetRequest{})
+	if err != nil {
+		return "", "", err
+	}
+	return r.LeaseId, r.OrderDefinition, nil
+}
+
+func (s *RPCScheduler) Renew(ctx context.Context, id string, dur time.Duration) (time.Time, error) {
+	r, err := s.Client.Renew(ctx, &pb.RenewRequest{
+		LeaseId:   id,
+		ExtendSec: int32(dur.Seconds()),
+	})
+	if err != nil {
+		return time.Now(), err
+	}
+	n := time.Unix(r.NewTimeoutSec, 0)
+	if r.NewTimeoutSec == 0 {
+		n = time.Now().Add(dur) // Just assume duration renewal was accepted.
+	}
+	return n, nil
+}
+
+func (s *RPCScheduler) Done(ctx context.Context, id string, img, stdout, stderr []byte, meta *pb.RenderingMetadata) error {
+	_, err := s.Client.Done(ctx, &pb.DoneRequest{
+		LeaseId:  id,
+		Image:    img,
+		Stdout:   stdout,
+		Stderr:   stderr,
+		Metadata: meta,
+	})
+	if grpc.Code(err) == codes.AlreadyExists {
+		log.Warningf("Server says %q already done. Moving on...", id)
+		return nil
+	}
 	return err
 }
 
