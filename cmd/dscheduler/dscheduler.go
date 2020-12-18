@@ -26,6 +26,7 @@ import (
 	"github.com/ThomasHabets/go-uuid/uuid"
 	"github.com/golang/protobuf/proto"
 	_ "github.com/lib/pq"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	cloudopt "google.golang.org/api/option"
 	"google.golang.org/grpc"
@@ -33,7 +34,6 @@ import (
 	"google.golang.org/grpc/credentials"
 	grpcmetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/ThomasHabets/qpov/pkg/dist"
 	pb "github.com/ThomasHabets/qpov/pkg/dist/qpov"
@@ -931,9 +931,6 @@ ORDER BY
 func (s *server) Stats(ctx context.Context, in *pb.StatsRequest) (*pb.StatsReply, error) {
 	st := time.Now()
 	requestID := uuid.New()
-	if err := blockRestrictedAPI(ctx); err != nil {
-		return nil, err
-	}
 	ret := &pb.StatsReply{}
 	if in.SchedulingStats {
 		ret.SchedulingStats = &pb.SchedulingStats{}
