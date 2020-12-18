@@ -220,10 +220,12 @@ func cmdAdd(args []string) {
 
 	var q scheduler
 	var err error
+	log.Printf("Connecting...")
 	q, err = newRPCScheduler(*schedAddr)
 	if err != nil {
 		log.Fatalf("Connecting to scheduler %q: %v", *schedAddr, err)
 	}
+	log.Printf("... connected")
 	defer q.close()
 
 	if frames.Skip == 0 {

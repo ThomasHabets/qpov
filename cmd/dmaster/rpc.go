@@ -22,7 +22,7 @@ var (
 	caFile         = flag.String("ca_file", "", "Server CA file.")
 	certFile       = flag.String("cert_file", "", "Client cert file.")
 	keyFile        = flag.String("key_file", "", "Client key file.")
-	connectTimeout = flag.Duration("connect_timeout", 5*time.Minute, "Dial timout.")
+	connectTimeout = flag.Duration("connect_timeout", 5*time.Second, "Dial timout.")
 )
 
 const (
