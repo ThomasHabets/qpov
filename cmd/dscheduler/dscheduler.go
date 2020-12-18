@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
+	stdlog "log"
 	"net"
 	"os"
 	"path"
@@ -33,6 +33,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	grpcmetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/ThomasHabets/qpov/dist"
 	pb "github.com/ThomasHabets/qpov/dist/qpov"
@@ -87,7 +88,7 @@ func dbError(doing string, err error) error {
 }
 
 func internalError(public string, f string, a ...interface{}) error {
-	log.Printf(f, a...)
+	log.Errorf(f, a...)
 	return grpc.Errorf(codes.Internal, public)
 }
 
@@ -97,7 +98,7 @@ func cleanError(err error, code codes.Code, public string, a ...interface{}) err
 	if grpc.Code(err) != codes.Unknown {
 		return err
 	}
-	log.Printf("%v: %v", fmt.Sprintf(public, a...), err)
+	log.Warningf("%v: %v", fmt.Sprintf(public, a...), err)
 	return grpc.Errorf(code, public, a...)
 }
 
@@ -243,16 +244,19 @@ func getUser(ctx context.Context) (*user, error) {
 	if u.delegate {
 		v, err := getRPCMetadata(ctx, "http.cookie")
 		if err != nil {
+			log.Infof("No cookie. Act as webserver")
 			// No cookie. Act as webserver.
 			return u, nil
 		}
 		j, err := getJWTFromCookie(ctx, v)
 		if err != nil {
+			log.Infof("Bad cookie. Act as webserver")
 			// Bad cookie. Act as webserver.
 			return u, nil
 		}
 		email, sub, err := oauthKeys.VerifyJWT(j)
 		if err != nil {
+			log.Infof("Bad JWT. Act as webserver")
 			// Bad JWT. Act as webserver.
 			return u, nil
 		}
@@ -297,16 +301,16 @@ func (s *server) Certificate(ctx context.Context, in *pb.CertificateRequest) (*p
 	}
 	user, err := getUser(ctx)
 	if err != nil {
-		log.Printf("RPC(Certificate): getUser(): %v", err)
+		log.Infof("RPC(Certificate): getUser(): %v", err)
 		return nil, grpc.Errorf(codes.Unauthenticated, "authentication required")
 	}
 	if user.delegate {
-		log.Printf("Not minting cert for webserver")
+		log.Warningf("Not minting cert for webserver")
 		return nil, grpc.Errorf(codes.Unauthenticated, "authentication required")
 	}
 	b, err := mintCert(user)
 	if err != nil {
-		log.Printf("Failed to mint cert for user %d: %v", user.userID, err)
+		log.Errorf("Failed to mint cert for user %d: %v", user.userID, err)
 		return nil, cleanError(err, codes.Internal, "failed to mint cert")
 	}
 	return &pb.CertificateReply{Pem: b}, nil
@@ -318,7 +322,7 @@ func (s *server) Login(ctx context.Context, in *pb.LoginRequest) (*pb.LoginReply
 	}
 
 	if _, _, err := oauthKeys.VerifyJWT(in.Jwt); err != nil {
-		log.Printf("RPC(Login): %v", err)
+		log.Infof("RPC(Login): %v", err)
 		return nil, fmt.Errorf("failed to verify jwt")
 	}
 	tx, err := db.BeginTx(ctx, txopts)
@@ -407,7 +411,7 @@ ON next_order.order_id=orders.order_id
 	if user, err := getUser(ctx); err == nil {
 		ownerID = &user.userID
 	} else if err != errNoCert {
-		log.Printf("Getting user ID: %v", err)
+		log.Warningf("Getting user ID: %v", err)
 	}
 
 	lease := uuid.New()
@@ -429,7 +433,7 @@ VALUES(
 	if err := tx.Commit(); err != nil {
 		return nil, dbError("Committing transaction", err)
 	}
-	log.Printf("RPC(Get): Order: %q, Lease: %q", orderID, lease)
+	log.Infof("RPC(Get): Order: %q, Lease: %q", orderID, lease)
 	ret := &pb.GetReply{
 		LeaseId:         lease,
 		OrderDefinition: def,
@@ -444,7 +448,7 @@ func getRPCMetadataSQL(ctx context.Context, s string) sql.NullString {
 	var ret sql.NullString
 	h, err := getRPCMetadata(ctx, s)
 	if err != nil {
-		log.Printf("Couldn't get metadata %q: %v", s, err)
+		log.Warningf("Couldn't get metadata %q: %v", s, err)
 		return ret
 	}
 	ret.Valid = true
@@ -503,7 +507,7 @@ func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply
 	if err != nil {
 		return nil, cleanError(err, codes.Internal, "You got the error message for the error message, you win.")
 	}
-	log.Printf("RPC(Renew): Lease: %q until %v", in.LeaseId, n)
+	log.Infof("RPC(Renew): Lease: %q until %v", in.LeaseId, n)
 	ret := &pb.RenewReply{
 		NewTimeoutSec: n.UnixNano() / 1000000000,
 	}
@@ -528,7 +532,7 @@ AND   lease_id=$1`, in.LeaseId); err != nil {
 		return nil, dbError("Marking failed", err)
 	}
 
-	log.Printf("RPC(Failed): Lease: %q", in.LeaseId)
+	log.Warningf("RPC(Failed): Lease: %q", in.LeaseId)
 	ret := &pb.FailedReply{}
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Failed", st,
 		"github.com/ThomasHabets/qpov/dist/qpov/FailedRequest", in,
@@ -583,10 +587,10 @@ func (s *server) saveToCloud(ctx context.Context, in *pb.DoneRequest, realMeta *
 		fn := path.Join(dir, base+".png")
 		obj := googleCloudStorage.Bucket(*uploadBucketName).Object(fn)
 		if _, err := obj.Attrs(ctx); err == nil {
-			log.Printf("File already exist, skipping %q %q", *uploadBucketName, fn)
+			log.Infof("File already exist, skipping %q %q", *uploadBucketName, fn)
 			return
 		} else if err != storage.ErrObjectNotExist {
-			log.Printf("Failed to check if %q %q already exists: %v", *uploadBucketName, fn, err)
+			log.Errorf("Failed to check if %q %q already exists: %v", *uploadBucketName, fn, err)
 		}
 		w := obj.NewWriter(ctx)
 		defer func() {
@@ -605,10 +609,10 @@ func (s *server) saveToCloud(ctx context.Context, in *pb.DoneRequest, realMeta *
 		fn := path.Join(dir, base+".meta.pb.gz")
 		obj := googleCloudStorage.Bucket(*uploadBucketName).Object(fn)
 		if _, err := obj.Attrs(ctx); err == nil {
-			log.Printf("File already exist, skipping %q %q", *uploadBucketName, fn)
+			log.Infof("File already exist, skipping %q %q", *uploadBucketName, fn)
 			return
 		} else if err != storage.ErrObjectNotExist {
-			log.Printf("Failed to check if %q %q already exists: %v", *uploadBucketName, fn, err)
+			log.Errorf("Failed to check if %q %q already exists: %v", *uploadBucketName, fn, err)
 		}
 		w := obj.NewWriter(ctx)
 		defer func() {
@@ -682,7 +686,7 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 
 	// First give us time to receive the data.
 	if _, err := s.renew(ctx, in.LeaseId, client, -1); err != nil {
-		log.Printf("RPC(Done): Failed to renew before Done'ing: %v", err)
+		log.Warningf("RPC(Done): Failed to renew before Done'ing: %v", err)
 	}
 	isDone, isFailed, err := leaseDone(ctx, in.LeaseId)
 	if err != nil {
@@ -698,14 +702,14 @@ func (s *server) Done(ctx context.Context, in *pb.DoneRequest) (*pb.DoneReply, e
 	// Fetch the order ID so we can assemble the path.
 	file, batch, err := getOrderDestByLeaseID(ctx, in.LeaseId)
 	if err != nil {
-		log.Printf("RPC(Done): Can't find order with lease %q: %v", in.LeaseId, err)
+		log.Warningf("RPC(Done): Can't find order with lease %q: %v", in.LeaseId, err)
 		return nil, grpc.Errorf(codes.NotFound, "unknown lease %q", in.LeaseId)
 	}
 
 	// Create metadata to store in DB from oldJSON or proto.
 	realMeta, newStats, err := getMetadata(in)
 	if err != nil {
-		log.Printf("Warning: Failed to get metadata: %v", err)
+		log.Warningf("Warning: Failed to get metadata: %v", err)
 		// newStats defaults to being empty.
 	}
 
@@ -731,7 +735,7 @@ AND   failed=FALSE
 		return nil, dbError("Marking done", err)
 	}
 
-	log.Printf("RPC(Done): Lease: %q", in.LeaseId)
+	log.Infof("RPC(Done): Lease: %q", in.LeaseId)
 	ret := &pb.DoneReply{}
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Done", st,
 		"github.com/ThomasHabets/qpov/dist/qpov/DoneRequest", in,
@@ -795,7 +799,7 @@ func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) 
 	if in.Data {
 		file, batch, err := getOrderDestByLeaseID(ctx, in.LeaseId)
 		if err != nil {
-			log.Printf("Can't find order with lease %q: %v", in.LeaseId, err)
+			log.Warningf("Can't find order with lease %q: %v", in.LeaseId, err)
 			return grpc.Errorf(codes.NotFound, "unknown lease %q", in.LeaseId)
 		}
 
@@ -805,7 +809,7 @@ func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) 
 		}
 	}
 
-	log.Printf("RPC(Result) Lease %s", in.LeaseId)
+	log.Infof("RPC(Result) Lease %s", in.LeaseId)
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Result", st,
 		"github.com/ThomasHabets/qpov/dist/qpov/ResultRequest", in,
 		nil, "github.com/ThomasHabets/qpov/dist/qpov/ResultReply", &ret)
@@ -826,7 +830,7 @@ func (s *server) Order(ctx context.Context, in *pb.OrderRequest) (*pb.OrderReply
 	}
 
 	ret := &pb.OrderReply{Order: []*pb.Order{o}}
-	log.Printf("RPC(Order) %s", in.OrderId)
+	log.Infof("RPC(Order) %s", in.OrderId)
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Order", st,
 		"github.com/ThomasHabets/qpov/dist/qpov/OrderRequest", in,
 		nil, "github.com/ThomasHabets/qpov/dist/qpov/OrderReply", ret)
@@ -917,7 +921,7 @@ ORDER BY
 		return dbError("Listing orders", err)
 	}
 
-	log.Printf("RPC(Orders)")
+	log.Infof("RPC(Orders)")
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Orders", st,
 		"github.com/ThomasHabets/qpov/dist/qpov/OrdersRequest", in,
 		nil, "github.com/ThomasHabets/qpov/dist/qpov/OrdersReply", logRet)
@@ -975,7 +979,7 @@ SELECT
 			return nil, dbError("lease stats", err)
 		}
 	}
-	log.Printf("RPC(Stats)")
+	log.Infof("RPC(Stats)")
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Stats", st,
 		"github.com/ThomasHabets/qpov/dist/qpov/StatsRequest", in,
 		nil, "github.com/ThomasHabets/qpov/dist/qpov/StatsReply", ret)
@@ -1023,13 +1027,13 @@ WHERE lease_id=$1`, in.LeaseId)
 	if metadata != nil {
 		t := &pb.RenderingMetadata{}
 		if err := json.Unmarshal([]byte(*metadata), t); err != nil {
-			log.Printf("Failed to parse stats in db for lease %q: %v", in.LeaseId, err)
+			log.Errorf("Failed to parse stats in db for lease %q: %v", in.LeaseId, err)
 		} else {
 			ret.Lease.Metadata = t
 		}
 	}
 
-	log.Printf("RPC(Lease) %s", in.LeaseId)
+	log.Infof("RPC(Lease) %s", in.LeaseId)
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Lease", st,
 		"github.com/ThomasHabets/qpov/dist/qpov/LeaseRequest", in,
 		nil, "github.com/ThomasHabets/qpov/dist/qpov/LeaseReply", ret)
@@ -1037,7 +1041,7 @@ WHERE lease_id=$1`, in.LeaseId)
 }
 
 func (s *server) Leases(in *pb.LeasesRequest, stream pb.Scheduler_LeasesServer) error {
-	log.Printf("RPC(Leases)")
+	log.Infof("RPC(Leases)")
 	st := time.Now()
 	requestID := uuid.New()
 	ctx := stream.Context()
@@ -1051,7 +1055,7 @@ func (s *server) Leases(in *pb.LeasesRequest, stream pb.Scheduler_LeasesServer) 
 	}
 	ordering := "leases.created"
 	if in.Done {
-		ordering = "leases.updated"
+		ordering = "leases.updated DESC"
 	}
 	q := fmt.Sprintf(`
 SELECT
@@ -1082,7 +1086,7 @@ ORDER BY %s`, metadataCol, ordering)
 
 	user, err := getUser(ctx)
 	if err != nil {
-		log.Printf("Getting user: %v", err)
+		log.Warningf("Getting user: %v", err)
 		return fmt.Errorf("error getting user")
 	}
 	for rows.Next() {
@@ -1105,7 +1109,7 @@ ORDER BY %s`, metadataCol, ordering)
 			var err error
 			order, err = def2Order(def)
 			if err != nil {
-				log.Printf("Getting order %q: %v", orderID, err)
+				log.Errorf("Getting order %q: %v", orderID, err)
 			} else {
 				order.BatchId = batchID.String
 			}
@@ -1134,7 +1138,7 @@ ORDER BY %s`, metadataCol, ordering)
 		if metadata != nil {
 			t := &pb.RenderingMetadata{}
 			if err := json.Unmarshal([]byte(*metadata), t); err != nil {
-				log.Printf("Failed to unmarshal JSON stats for lease %q: %v", leaseID, err)
+				log.Errorf("Failed to unmarshal JSON stats for lease %q: %v", leaseID, err)
 			} else {
 				e.Lease.Metadata = t
 			}
@@ -1147,7 +1151,7 @@ ORDER BY %s`, metadataCol, ordering)
 		return dbError("Listing leases", err)
 	}
 
-	log.Printf("RPC(Leases) %v", time.Since(st))
+	log.Infof("RPC(Leases) %v", time.Since(st))
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Leases", st,
 		"github.com/ThomasHabets/qpov/dist/qpov/LeasesRequest", in,
 		nil, "github.com/ThomasHabets/qpov/dist/qpov/LeasesReply", logRet)
@@ -1168,11 +1172,11 @@ func blockRestrictedUser(ctx context.Context) error {
 	nope := grpc.Errorf(codes.Unauthenticated, "need per-user credentials for this resource")
 	user, err := getUser(ctx)
 	if err != nil {
-		log.Printf("Blocked user: %v", err)
+		log.Infof("Blocked user: %v", err)
 		return nope
 	}
 	if !user.addresses {
-		log.Printf("User %+v has no right to see addresses", user)
+		log.Infof("User %+v has no right to see addresses", user)
 		return nope
 	}
 	return nil
@@ -1183,7 +1187,7 @@ func blockRestrictedUser(ctx context.Context) error {
 // For that, see `blockRestrictedUser`.
 func blockRestrictedAPI(ctx context.Context) error {
 	if _, err := getPeerCert(ctx); err != nil {
-		log.Printf("Restricted API called: %v", err)
+		log.Warningf("Restricted API called: %v", err)
 		return grpc.Errorf(codes.Unauthenticated, "restricted API called without valid credentials")
 	}
 	return nil
@@ -1194,13 +1198,13 @@ func (s *server) Add(ctx context.Context, in *pb.AddRequest) (*pb.AddReply, erro
 	requestID := uuid.New()
 	user, err := getUser(ctx)
 	if err != nil {
-		log.Printf("RPC(Add): Looking up user: %v", err)
+		log.Errorf("RPC(Add): Looking up user: %v", err)
 		return nil, grpc.Errorf(codes.Unauthenticated, "authentication required")
 	}
 
 	// Look up permission to add.
 	if !user.adding {
-		log.Printf("RPC(Add): User not allowed to add orders")
+		log.Warningf("RPC(Add): User %d not allowed to add orders", user.userID)
 		return nil, grpc.Errorf(codes.PermissionDenied, "user not allowed to add orders")
 	}
 
@@ -1226,7 +1230,7 @@ VALUES(
 )`, id, batchID, user.userID, in.OrderDefinition); err != nil {
 		return nil, dbError("Inserting order", err)
 	}
-	log.Printf("RPC(Add): Order: %q", id)
+	log.Infof("RPC(Add): Order: %q", id)
 
 	ret := &pb.AddReply{OrderId: id}
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Add", st,
@@ -1258,7 +1262,6 @@ func (k *keepAliveListener) Addr() net.Addr {
 }
 
 func main() {
-	log.SetFlags(log.Ldate | log.Ltime | log.LUTC)
 	flag.Parse()
 	if flag.NArg() > 0 {
 		log.Fatalf("Got extra args on cmdline: %q", flag.Args())
@@ -1285,7 +1288,7 @@ func main() {
 			for {
 				time.Sleep(time.Hour)
 				if err := oauthKeys.Update(ctx); err != nil {
-					log.Printf("Updating OAuthKeys: %v", err)
+					log.Errorf("Updating OAuthKeys: %v", err)
 				}
 			}
 		}()
@@ -1325,7 +1328,7 @@ func main() {
 		if err := t.PingContext(ctx); err != nil {
 			log.Fatalf("db ping: %v", err)
 		}
-		db = dist.NewDBWrap(t, log.New(sqlLogf, "", log.LstdFlags))
+		db = dist.NewDBWrap(t, stdlog.New(sqlLogf, "", stdlog.LstdFlags))
 	}
 
 	// Listen to RPC port.
@@ -1385,6 +1388,6 @@ func main() {
 	pb.RegisterCookieMonsterServer(s, &serv)
 
 	// Run forever.
-	log.Printf("Running...")
+	log.Infof("Running...")
 	log.Fatal(s.Serve(lis))
 }
