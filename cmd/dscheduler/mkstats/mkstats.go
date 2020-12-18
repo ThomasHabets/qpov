@@ -19,8 +19,8 @@ import (
 	"github.com/lib/pq"
 	"golang.org/x/net/context"
 
-	"github.com/ThomasHabets/qpov/dist"
-	pb "github.com/ThomasHabets/qpov/dist/qpov"
+	"github.com/ThomasHabets/qpov/pkg/dist"
+	pb "github.com/ThomasHabets/qpov/pkg/dist/qpov"
 )
 
 var (

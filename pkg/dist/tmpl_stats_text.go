@@ -6,7 +6,7 @@ import (
 	"text/template"
 	"time"
 
-	pb "github.com/ThomasHabets/qpov/dist/qpov"
+	pb "github.com/ThomasHabets/qpov/pkg/dist/qpov"
 )
 
 const tmplsStatsText = `CPU core time: {{.CpuTime|cputime2string}}

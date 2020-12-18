@@ -30,8 +30,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ThomasHabets/qpov/mdl"
-	"github.com/ThomasHabets/qpov/pak"
+	"github.com/ThomasHabets/qpov/pkg/mdl"
+	"github.com/ThomasHabets/qpov/pkg/pak"
 )
 
 const (

@@ -28,7 +28,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ThomasHabets/qpov/pak"
+	"github.com/ThomasHabets/qpov/pkg/pak"
 )
 
 func usage() {

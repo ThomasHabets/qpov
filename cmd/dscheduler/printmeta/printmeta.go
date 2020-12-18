@@ -10,7 +10,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 
-	pb "github.com/ThomasHabets/qpov/dist/qpov"
+	pb "github.com/ThomasHabets/qpov/pkg/dist/qpov"
 )
 
 func main() {

@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/peer"
 
-	pb "github.com/ThomasHabets/qpov/dist/rpclog/proto"
+	pb "github.com/ThomasHabets/qpov/pkg/dist/rpclog/proto"
 )
 
 type Logger struct {

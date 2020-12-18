@@ -33,7 +33,7 @@ import (
 	"io"
 	"log"
 
-	"github.com/ThomasHabets/qpov/bsp"
+	"github.com/ThomasHabets/qpov/pkg/bsp"
 )
 
 const (

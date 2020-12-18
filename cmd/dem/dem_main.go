@@ -35,9 +35,9 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/ThomasHabets/qpov/bsp"
-	"github.com/ThomasHabets/qpov/dem"
-	"github.com/ThomasHabets/qpov/pak"
+	"github.com/ThomasHabets/qpov/pkg/bsp"
+	"github.com/ThomasHabets/qpov/pkg/dem"
+	"github.com/ThomasHabets/qpov/pkg/pak"
 )
 
 var (

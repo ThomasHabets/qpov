@@ -6,7 +6,7 @@ import (
 	"syscall"
 	"time"
 
-	pb "github.com/ThomasHabets/qpov/dist/qpov"
+	pb "github.com/ThomasHabets/qpov/pkg/dist/qpov"
 )
 
 type istats struct {

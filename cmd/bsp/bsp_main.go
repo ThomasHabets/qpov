@@ -31,8 +31,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ThomasHabets/qpov/bsp"
-	"github.com/ThomasHabets/qpov/pak"
+	"github.com/ThomasHabets/qpov/pkg/bsp"
+	"github.com/ThomasHabets/qpov/pkg/pak"
 )
 
 const (

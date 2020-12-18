@@ -33,7 +33,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/ThomasHabets/qpov/mdl"
+	"github.com/ThomasHabets/qpov/pkg/mdl"
 )
 
 const (

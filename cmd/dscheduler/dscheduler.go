@@ -35,9 +35,9 @@ import (
 	"google.golang.org/grpc/peer"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/ThomasHabets/qpov/dist"
-	pb "github.com/ThomasHabets/qpov/dist/qpov"
-	"github.com/ThomasHabets/qpov/dist/rpclog"
+	"github.com/ThomasHabets/qpov/pkg/dist"
+	pb "github.com/ThomasHabets/qpov/pkg/dist/qpov"
+	"github.com/ThomasHabets/qpov/pkg/dist/rpclog"
 )
 
 var (
@@ -439,8 +439,8 @@ VALUES(
 		OrderDefinition: def,
 	}
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Get", st,
-		"github.com/ThomasHabets/qpov/dist/qpov/GetRequest", in,
-		nil, "github.com/ThomasHabets/qpov/dist/qpov/GetReply", ret)
+		"github.com/ThomasHabets/qpov/pkg/dist/qpov/GetRequest", in,
+		nil, "github.com/ThomasHabets/qpov/pkg/dist/qpov/GetReply", ret)
 	return ret, nil
 }
 
@@ -512,8 +512,8 @@ func (s *server) Renew(ctx context.Context, in *pb.RenewRequest) (*pb.RenewReply
 		NewTimeoutSec: n.UnixNano() / 1000000000,
 	}
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Renew", st,
-		"github.com/ThomasHabets/qpov/dist/qpov/RenewRequest", in,
-		nil, "github.com/ThomasHabets/qpov/dist/qpov/RenewReply", ret)
+		"github.com/ThomasHabets/qpov/pkg/dist/qpov/RenewRequest", in,
+		nil, "github.com/ThomasHabets/qpov/pkg/dist/qpov/RenewReply", ret)
 	return ret, nil
 }
 
@@ -535,8 +535,8 @@ AND   lease_id=$1`, in.LeaseId); err != nil {
 	log.Warningf("RPC(Failed): Lease: %q", in.LeaseId)
 	ret := &pb.FailedReply{}
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Failed", st,
-		"github.com/ThomasHabets/qpov/dist/qpov/FailedRequest", in,
-		nil, "github.com/ThomasHabets/qpov/dist/qpov/FailedReply", ret)
+		"github.com/ThomasHabets/qpov/pkg/dist/qpov/FailedRequest", in,
+		nil, "github.com/ThomasHabets/qpov/pkg/dist/qpov/FailedReply", ret)
 	return ret, nil
 }
 
@@ -738,8 +738,8 @@ AND   failed=FALSE
 	log.Infof("RPC(Done): Lease: %q", in.LeaseId)
 	ret := &pb.DoneReply{}
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Done", st,
-		"github.com/ThomasHabets/qpov/dist/qpov/DoneRequest", in,
-		nil, "github.com/ThomasHabets/qpov/dist/qpov/DoneReply", ret)
+		"github.com/ThomasHabets/qpov/pkg/dist/qpov/DoneRequest", in,
+		nil, "github.com/ThomasHabets/qpov/pkg/dist/qpov/DoneReply", ret)
 	return ret, nil
 }
 
@@ -811,8 +811,8 @@ func (s *server) Result(in *pb.ResultRequest, stream pb.Scheduler_ResultServer) 
 
 	log.Infof("RPC(Result) Lease %s", in.LeaseId)
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Result", st,
-		"github.com/ThomasHabets/qpov/dist/qpov/ResultRequest", in,
-		nil, "github.com/ThomasHabets/qpov/dist/qpov/ResultReply", &ret)
+		"github.com/ThomasHabets/qpov/pkg/dist/qpov/ResultRequest", in,
+		nil, "github.com/ThomasHabets/qpov/pkg/dist/qpov/ResultReply", &ret)
 	return nil
 }
 
@@ -832,8 +832,8 @@ func (s *server) Order(ctx context.Context, in *pb.OrderRequest) (*pb.OrderReply
 	ret := &pb.OrderReply{Order: []*pb.Order{o}}
 	log.Infof("RPC(Order) %s", in.OrderId)
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Order", st,
-		"github.com/ThomasHabets/qpov/dist/qpov/OrderRequest", in,
-		nil, "github.com/ThomasHabets/qpov/dist/qpov/OrderReply", ret)
+		"github.com/ThomasHabets/qpov/pkg/dist/qpov/OrderRequest", in,
+		nil, "github.com/ThomasHabets/qpov/pkg/dist/qpov/OrderReply", ret)
 	return ret, nil
 }
 
@@ -923,8 +923,8 @@ ORDER BY
 
 	log.Infof("RPC(Orders)")
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Orders", st,
-		"github.com/ThomasHabets/qpov/dist/qpov/OrdersRequest", in,
-		nil, "github.com/ThomasHabets/qpov/dist/qpov/OrdersReply", logRet)
+		"github.com/ThomasHabets/qpov/pkg/dist/qpov/OrdersRequest", in,
+		nil, "github.com/ThomasHabets/qpov/pkg/dist/qpov/OrdersReply", logRet)
 	return nil
 }
 
@@ -981,8 +981,8 @@ SELECT
 	}
 	log.Infof("RPC(Stats)")
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Stats", st,
-		"github.com/ThomasHabets/qpov/dist/qpov/StatsRequest", in,
-		nil, "github.com/ThomasHabets/qpov/dist/qpov/StatsReply", ret)
+		"github.com/ThomasHabets/qpov/pkg/dist/qpov/StatsRequest", in,
+		nil, "github.com/ThomasHabets/qpov/pkg/dist/qpov/StatsReply", ret)
 	return ret, nil
 }
 
@@ -1035,8 +1035,8 @@ WHERE lease_id=$1`, in.LeaseId)
 
 	log.Infof("RPC(Lease) %s", in.LeaseId)
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Lease", st,
-		"github.com/ThomasHabets/qpov/dist/qpov/LeaseRequest", in,
-		nil, "github.com/ThomasHabets/qpov/dist/qpov/LeaseReply", ret)
+		"github.com/ThomasHabets/qpov/pkg/dist/qpov/LeaseRequest", in,
+		nil, "github.com/ThomasHabets/qpov/pkg/dist/qpov/LeaseReply", ret)
 	return ret, nil
 }
 
@@ -1153,8 +1153,8 @@ ORDER BY %s`, metadataCol, ordering)
 
 	log.Infof("RPC(Leases) %v", time.Since(st))
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Leases", st,
-		"github.com/ThomasHabets/qpov/dist/qpov/LeasesRequest", in,
-		nil, "github.com/ThomasHabets/qpov/dist/qpov/LeasesReply", logRet)
+		"github.com/ThomasHabets/qpov/pkg/dist/qpov/LeasesRequest", in,
+		nil, "github.com/ThomasHabets/qpov/pkg/dist/qpov/LeasesReply", logRet)
 	return nil
 }
 
@@ -1234,8 +1234,8 @@ VALUES(
 
 	ret := &pb.AddReply{OrderId: id}
 	s.rpcLog.Log(ctx, requestID, "dscheduler.Add", st,
-		"github.com/ThomasHabets/qpov/dist/qpov/AddRequest", in,
-		nil, "github.com/ThomasHabets/qpov/dist/qpov/AddReply", ret)
+		"github.com/ThomasHabets/qpov/pkg/dist/qpov/AddRequest", in,
+		nil, "github.com/ThomasHabets/qpov/pkg/dist/qpov/AddReply", ret)
 	return ret, nil
 }
 

@@ -14,8 +14,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	"github.com/ThomasHabets/qpov/dist"
-	pb "github.com/ThomasHabets/qpov/dist/qpov"
+	"github.com/ThomasHabets/qpov/pkg/dist"
+	pb "github.com/ThomasHabets/qpov/pkg/dist/qpov"
 )
 
 var (
