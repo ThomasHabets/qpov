@@ -70,7 +70,7 @@ func ddownload(ctx context.Context, o *zip.Writer) error {
 			return err
 		}
 
-		w, err := o.Create(path.Base(lease.Order.File))
+		w, err := o.Create(replaceExt(path.Base(lease.Order.File), ".png"))
 		if err != nil {
 			return err
 		}
