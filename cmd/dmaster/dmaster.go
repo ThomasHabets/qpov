@@ -1,18 +1,22 @@
+/*
+* dmaster is an admin interface to talk to the scheduler.
+ */
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"golang.org/x/net/context"
+	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc/grpclog"
 
 	"github.com/ThomasHabets/qpov/pkg/dist"
 	pb "github.com/ThomasHabets/qpov/pkg/dist/qpov"
@@ -20,8 +24,9 @@ import (
 
 var (
 	schedAddr = flag.String("scheduler", "", "Scheduler address.")
+	verbose   = flag.Int("v", 0, "Verbosity level.")
 
-	commands = map[string]func([]string){
+	commands = map[string]func(context.Context, []string){
 		"leases": cmdLeases,
 		"orders": cmdOrders,
 		"stats":  cmdStats,
@@ -30,7 +35,7 @@ var (
 )
 
 type scheduler interface {
-	add(order, batchID string) error
+	add(ctx context.Context, order, batchID string) error
 	close()
 }
 
@@ -76,7 +81,7 @@ func roundSecondD(t time.Duration) time.Duration {
 	return time.Duration((int64(t) / 1000000000) * 1000000000)
 }
 
-func cmdLeases(args []string) {
+func cmdLeases(ctx context.Context, args []string) {
 	fs := flag.NewFlagSet("leases", flag.ExitOnError)
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] leases [options]\n", os.Args[0])
@@ -85,12 +90,12 @@ func cmdLeases(args []string) {
 	done := fs.Bool("done", false, "List completed leases, as opposed to active.")
 	fs.Parse(args)
 
-	q, err := newRPCScheduler(*schedAddr)
+	q, err := newRPCScheduler(ctx, *schedAddr)
 	if err != nil {
 		log.Fatalf("Connecting to scheduler %q: %v", *schedAddr, err)
 	}
 	defer q.close()
-	stream, err := q.client.Leases(context.Background(), &pb.LeasesRequest{
+	stream, err := q.client.Leases(ctx, &pb.LeasesRequest{
 		Done: *done,
 	})
 	if err != nil {
@@ -127,7 +132,7 @@ func cmdLeases(args []string) {
 	}
 }
 
-func cmdOrders(args []string) {
+func cmdOrders(ctx context.Context, args []string) {
 	fs := flag.NewFlagSet("orders", flag.ExitOnError)
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] orders [options]\n", os.Args[0])
@@ -138,12 +143,12 @@ func cmdOrders(args []string) {
 	unstarted := fs.Bool("unstarted", true, "List unstarted orders.")
 	fs.Parse(args)
 
-	q, err := newRPCScheduler(*schedAddr)
+	q, err := newRPCScheduler(ctx, *schedAddr)
 	if err != nil {
 		log.Fatalf("Connecting to scheduler %q: %v", *schedAddr, err)
 	}
 	defer q.close()
-	stream, err := q.client.Orders(context.Background(), &pb.OrdersRequest{
+	stream, err := q.client.Orders(ctx, &pb.OrdersRequest{
 		Done:      *done,
 		Active:    *active,
 		Unstarted: *unstarted,
@@ -165,7 +170,7 @@ func cmdOrders(args []string) {
 	}
 }
 
-func cmdStats(args []string) {
+func cmdStats(ctx context.Context, args []string) {
 	fs := flag.NewFlagSet("stats", flag.ExitOnError)
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] stats [options]\n", os.Args[0])
@@ -173,12 +178,12 @@ func cmdStats(args []string) {
 	}
 	fs.Parse(args)
 
-	q, err := newRPCScheduler(*schedAddr)
+	q, err := newRPCScheduler(ctx, *schedAddr)
 	if err != nil {
 		log.Fatalf("Connecting to scheduler %q: %v", *schedAddr, err)
 	}
 	defer q.close()
-	res, err := q.client.Stats(context.Background(), &pb.StatsRequest{
+	res, err := q.client.Stats(ctx, &pb.StatsRequest{
 		SchedulingStats: true,
 	})
 	if err != nil {
@@ -193,7 +198,7 @@ Leases:    Total: %10d   Active: %10d    Done: %10d
 	)
 }
 
-func cmdAdd(args []string) {
+func cmdAdd(ctx context.Context, args []string) {
 	fs := flag.NewFlagSet("add", flag.ExitOnError)
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] add [options] <povray args...>\n", os.Args[0])
@@ -221,7 +226,7 @@ func cmdAdd(args []string) {
 	var q scheduler
 	var err error
 	log.Printf("Connecting...")
-	q, err = newRPCScheduler(*schedAddr)
+	q, err = newRPCScheduler(ctx, *schedAddr)
 	if err != nil {
 		log.Fatalf("Connecting to scheduler %q: %v", *schedAddr, err)
 	}
@@ -245,7 +250,7 @@ func cmdAdd(args []string) {
 		if *dryRun {
 			log.Printf("Would have scheduled %v", string(order))
 		} else {
-			if err := q.add(string(order), *batch); err != nil {
+			if err := q.add(ctx, string(order), *batch); err != nil {
 				log.Fatalf("Failed to enqueue: %v", err)
 			}
 		}
@@ -286,7 +291,7 @@ OK (y/N)?
 			if *dryRun {
 				log.Printf("Would have scheduled %v", string(order))
 			} else {
-				if err := q.add(string(order), *batch); err != nil {
+				if err := q.add(ctx, string(order), *batch); err != nil {
 					log.Fatalf("Failed to enqueue: %v", err)
 				}
 			}
@@ -307,6 +312,10 @@ func usage() {
 func main() {
 	flag.Usage = usage
 	flag.Parse()
+	if *verbose > 0 {
+		log.Infof("Setting GRPC verbose mode")
+		grpclog.SetLoggerV2(grpclog.NewLoggerV2WithVerbosity(os.Stderr, os.Stderr, os.Stderr, 99))
+	}
 
 	if len(flag.Args()) == 0 {
 		usage()
@@ -321,5 +330,5 @@ func main() {
 	if !found {
 		log.Fatalf("Unknown command %q", flag.Arg(0))
 	}
-	f(flag.Args()[1:])
+	f(context.Background(), flag.Args()[1:])
 }

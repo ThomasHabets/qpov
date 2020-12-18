@@ -1,25 +1,24 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
 	"time"
 
-	"golang.org/x/net/context"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	"github.com/ThomasHabets/qpov/pkg/dist"
 	pb "github.com/ThomasHabets/qpov/pkg/dist/qpov"
 )
 
 var (
-	caFile         = flag.String("ca_file", "", "Server CA file.")
+	caFile         = flag.String("ca_file", "", "Server CA file. Default to system pool.")
 	certFile       = flag.String("cert_file", "", "Client cert file.")
 	keyFile        = flag.String("key_file", "", "Client key file.")
 	connectTimeout = flag.Duration("connect_timeout", 5*time.Second, "Dial timout.")
@@ -38,35 +37,38 @@ func (s *rpcScheduler) close() {
 	//s.conn.Close()
 }
 
-func (s *rpcScheduler) add(order, batchID string) error {
-	_, err := s.client.Add(context.Background(), &pb.AddRequest{
+func (s *rpcScheduler) add(ctx context.Context, order, batchID string) error {
+	_, err := s.client.Add(ctx, &pb.AddRequest{
 		OrderDefinition: order,
 		BatchId:         batchID,
 	})
 	return err
 }
 
-func newRPCScheduler(addr string) (*rpcScheduler, error) {
-	caStr := dist.CacertClass1
-	if *caFile != "" {
-		b, err := ioutil.ReadFile(*caFile)
-		if err != nil {
-			return nil, fmt.Errorf("reading %q: %v", *caFile, err)
-		}
-		caStr = string(b)
-	}
-	cp := x509.NewCertPool()
-	if ok := cp.AppendCertsFromPEM([]byte(caStr)); !ok {
-		return nil, fmt.Errorf("failed to add root CAs")
-	}
+func newRPCScheduler(ctx context.Context, addr string) (*rpcScheduler, error) {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to split host/port out of %q", addr)
 	}
 	tlsConfig := tls.Config{
 		ServerName: host,
-		RootCAs:    cp,
 	}
+
+	// Load custom CA.
+	if *caFile != "" {
+		b, err := ioutil.ReadFile(*caFile)
+		if err != nil {
+			return nil, fmt.Errorf("reading %q: %v", *caFile, err)
+		}
+		caStr := string(b)
+		cp := x509.NewCertPool()
+		if ok := cp.AppendCertsFromPEM([]byte(caStr)); !ok {
+			return nil, fmt.Errorf("failed to add root CAs")
+		}
+		tlsConfig.RootCAs = cp
+	}
+
+	// Load TLS credentials.
 	if *certFile != "" {
 		cert, err := tls.LoadX509KeyPair(*certFile, *keyFile)
 		if err != nil {
@@ -75,13 +77,16 @@ func newRPCScheduler(addr string) (*rpcScheduler, error) {
 		tlsConfig.Certificates = []tls.Certificate{cert}
 	}
 	cr := credentials.NewTLS(&tlsConfig)
-	conn, err := grpc.Dial(addr,
-		grpc.WithTimeout(*connectTimeout),
+
+	// Connect.
+	ctx2, cancel := context.WithTimeout(ctx, *connectTimeout)
+	defer cancel()
+	conn, err := grpc.DialContext(ctx2, addr,
 		grpc.WithBlock(),
 		grpc.WithTransportCredentials(cr),
 		grpc.WithUserAgent(userAgent))
 	if err != nil {
-		log.Fatalf("did not connect: %v", err)
+		log.Fatalf("Failed to connect to %q: %v", addr, err)
 	}
 	return &rpcScheduler{
 		client: pb.NewSchedulerClient(conn),
