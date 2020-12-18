@@ -1,4 +1,4 @@
-package main
+package rpcclient
 
 import (
 	"context"
@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"os"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/grpclog"
 
 	pb "github.com/ThomasHabets/qpov/pkg/dist/qpov"
 )
@@ -22,30 +24,37 @@ var (
 	certFile       = flag.String("cert_file", "", "Client cert file.")
 	keyFile        = flag.String("key_file", "", "Client key file.")
 	connectTimeout = flag.Duration("connect_timeout", 5*time.Second, "Dial timout.")
+
+	verbose = flag.Bool("rpc_verbose", false, "Print verbose RPC info.")
 )
 
 const (
 	userAgent = "dmaster"
 )
 
-type rpcScheduler struct {
+type RPCScheduler struct {
 	conn   *grpc.ClientConn
-	client pb.SchedulerClient
+	Client pb.SchedulerClient
 }
 
-func (s *rpcScheduler) close() {
-	//s.conn.Close()
+func (s *RPCScheduler) Close() {
+	s.conn.Close()
 }
 
-func (s *rpcScheduler) add(ctx context.Context, order, batchID string) error {
-	_, err := s.client.Add(ctx, &pb.AddRequest{
+func (s *RPCScheduler) Add(ctx context.Context, order, batchID string) error {
+	_, err := s.Client.Add(ctx, &pb.AddRequest{
 		OrderDefinition: order,
 		BatchId:         batchID,
 	})
 	return err
 }
 
-func newRPCScheduler(ctx context.Context, addr string) (*rpcScheduler, error) {
+func NewScheduler(ctx context.Context, addr string) (*RPCScheduler, error) {
+	if *verbose {
+		log.Infof("Setting GRPC verbose mode")
+		grpclog.SetLoggerV2(grpclog.NewLoggerV2WithVerbosity(os.Stderr, os.Stderr, os.Stderr, 99))
+	}
+
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to split host/port out of %q", addr)
@@ -88,7 +97,8 @@ func newRPCScheduler(ctx context.Context, addr string) (*rpcScheduler, error) {
 	if err != nil {
 		log.Fatalf("Failed to connect to %q: %v", addr, err)
 	}
-	return &rpcScheduler{
-		client: pb.NewSchedulerClient(conn),
+	return &RPCScheduler{
+		conn:   conn,
+		Client: pb.NewSchedulerClient(conn),
 	}, nil
 }

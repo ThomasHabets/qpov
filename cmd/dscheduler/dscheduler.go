@@ -1071,10 +1071,12 @@ SELECT
 FROM leases
 JOIN orders ON orders.order_id=leases.order_id
 WHERE done=$1
+AND   ($3='' OR CAST($3 AS UUID)=orders.batch_id)
 AND   ($1=TRUE OR expires > NOW())
 AND   leases.updated > $2
 ORDER BY %s`, metadataCol, ordering)
-	rows, err := db.QueryContext(ctx, q, in.Done, time.Unix(in.Since, 0))
+	log.Info(q)
+	rows, err := db.QueryContext(ctx, q, in.Done, time.Unix(in.Since, 0), in.Batch)
 	if err != nil {
 		return dbError("Listing leases", err)
 	}

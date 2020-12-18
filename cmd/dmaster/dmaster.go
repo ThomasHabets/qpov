@@ -20,6 +20,7 @@ import (
 
 	"github.com/ThomasHabets/qpov/pkg/dist"
 	pb "github.com/ThomasHabets/qpov/pkg/dist/qpov"
+	"github.com/ThomasHabets/qpov/pkg/dist/rpcclient"
 )
 
 var (
@@ -35,8 +36,8 @@ var (
 )
 
 type scheduler interface {
-	add(ctx context.Context, order, batchID string) error
-	close()
+	Add(ctx context.Context, order, batchID string) error
+	Close()
 }
 
 type Range struct {
@@ -88,15 +89,18 @@ func cmdLeases(ctx context.Context, args []string) {
 		fs.PrintDefaults()
 	}
 	done := fs.Bool("done", false, "List completed leases, as opposed to active.")
+	batch := fs.String("batch", "", "List only this batch. If empty list all batches.")
 	fs.Parse(args)
 
-	q, err := newRPCScheduler(ctx, *schedAddr)
+	q, err := rpcclient.NewScheduler(ctx, *schedAddr)
 	if err != nil {
 		log.Fatalf("Connecting to scheduler %q: %v", *schedAddr, err)
 	}
-	defer q.close()
-	stream, err := q.client.Leases(ctx, &pb.LeasesRequest{
+	defer q.Close()
+	stream, err := q.Client.Leases(ctx, &pb.LeasesRequest{
 		Done: *done,
+		//Order: true,
+		Batch: *batch,
 	})
 	if err != nil {
 		log.Fatalf("Listing leases: %v", err)
@@ -143,12 +147,12 @@ func cmdOrders(ctx context.Context, args []string) {
 	unstarted := fs.Bool("unstarted", true, "List unstarted orders.")
 	fs.Parse(args)
 
-	q, err := newRPCScheduler(ctx, *schedAddr)
+	q, err := rpcclient.NewScheduler(ctx, *schedAddr)
 	if err != nil {
 		log.Fatalf("Connecting to scheduler %q: %v", *schedAddr, err)
 	}
-	defer q.close()
-	stream, err := q.client.Orders(ctx, &pb.OrdersRequest{
+	defer q.Close()
+	stream, err := q.Client.Orders(ctx, &pb.OrdersRequest{
 		Done:      *done,
 		Active:    *active,
 		Unstarted: *unstarted,
@@ -178,12 +182,12 @@ func cmdStats(ctx context.Context, args []string) {
 	}
 	fs.Parse(args)
 
-	q, err := newRPCScheduler(ctx, *schedAddr)
+	q, err := rpcclient.NewScheduler(ctx, *schedAddr)
 	if err != nil {
 		log.Fatalf("Connecting to scheduler %q: %v", *schedAddr, err)
 	}
-	defer q.close()
-	res, err := q.client.Stats(ctx, &pb.StatsRequest{
+	defer q.Close()
+	res, err := q.Client.Stats(ctx, &pb.StatsRequest{
 		SchedulingStats: true,
 	})
 	if err != nil {
@@ -226,12 +230,12 @@ func cmdAdd(ctx context.Context, args []string) {
 	var q scheduler
 	var err error
 	log.Printf("Connecting...")
-	q, err = newRPCScheduler(ctx, *schedAddr)
+	q, err = rpcclient.NewScheduler(ctx, *schedAddr)
 	if err != nil {
 		log.Fatalf("Connecting to scheduler %q: %v", *schedAddr, err)
 	}
 	log.Printf("... connected")
-	defer q.close()
+	defer q.Close()
 
 	if frames.Skip == 0 {
 		// Just one.
@@ -250,7 +254,7 @@ func cmdAdd(ctx context.Context, args []string) {
 		if *dryRun {
 			log.Printf("Would have scheduled %v", string(order))
 		} else {
-			if err := q.add(ctx, string(order), *batch); err != nil {
+			if err := q.Add(ctx, string(order), *batch); err != nil {
 				log.Fatalf("Failed to enqueue: %v", err)
 			}
 		}
@@ -291,7 +295,7 @@ OK (y/N)?
 			if *dryRun {
 				log.Printf("Would have scheduled %v", string(order))
 			} else {
-				if err := q.add(ctx, string(order), *batch); err != nil {
+				if err := q.Add(ctx, string(order), *batch); err != nil {
 					log.Fatalf("Failed to enqueue: %v", err)
 				}
 			}

@@ -46,6 +46,8 @@ service Scheduler {
         rpc Leases (LeasesRequest) returns (stream LeasesReply) {}
         rpc Order (OrderRequest) returns (OrderReply) {}
         rpc Orders (OrdersRequest) returns (stream OrdersReply) {}
+
+        // Stats API, unrestricted.
         rpc Stats (StatsRequest) returns (StatsReply) {}
 
         // WebUI magic.
@@ -137,6 +139,7 @@ message LeasesRequest {
         bool order = 2;
         bool metadata = 3;
         int64 since = 4; // Updated more recently than X seconds since 1970.
+        string batch = 5; // If set, only return leases from this batch;
 }
 
 message LeasesReply {
