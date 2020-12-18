@@ -9,7 +9,6 @@ import (
 	"html/template"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"net/http/fcgi"
@@ -18,9 +17,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ThomasHabets/go-uuid/uuid"
 	"github.com/golang/protobuf/proto"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -69,7 +69,7 @@ var (
 func httpContext(r *http.Request) context.Context {
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "source", "http")
-	ctx = context.WithValue(ctx, "id", uuid.New())
+	ctx = context.WithValue(ctx, "id", uuid.New().String())
 	ctx = context.WithValue(ctx, "http.remote_addr", r.RemoteAddr)
 	if c, err := r.Cookie("qpov"); err == nil {
 		ctx = context.WithValue(ctx, "http.cookie", c.Value)
@@ -125,7 +125,7 @@ func rpcErrorToHTTPError(err error) int {
 	}
 	n, found := m[grpc.Code(err)]
 	if !found {
-		log.Printf("Unmapped grpc code %v", grpc.Code(err))
+		log.Errorf("Unmapped grpc code %v", grpc.Code(err))
 		return http.StatusInternalServerError
 	}
 	return n
@@ -138,16 +138,16 @@ func handleCert(w http.ResponseWriter, r *http.Request) {
 	// Cookie is attached to context.
 	resp, err := sched.Certificate(ctx, &pb.CertificateRequest{})
 	if err != nil {
-		log.Printf("Certificate: %v", err)
+		log.Errorf("Certificate: %v", err)
 		w.WriteHeader(rpcErrorToHTTPError(err))
 		if _, err := fmt.Fprintf(w, "Error: %v", err); err != nil {
-			log.Printf("Also failed to write that to client: %v", err)
+			log.Errorf("Also failed to write that to client: %v", err)
 		}
 		return
 	}
 	w.Header().Set("Content-Type", "application/x-pem-file")
 	if _, err := w.Write(resp.Pem); err != nil {
-		log.Printf("Failed to write pem data: %v", err)
+		log.Errorf("Failed to write pem data: %v", err)
 	}
 }
 
@@ -166,7 +166,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	resp, err := cookieMonster.Login(ctx, &pb.LoginRequest{Jwt: j, Cookie: q})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("Login: failed to RPC: %v", err)
+		log.Errorf("Login: failed to RPC: %v", err)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -178,7 +178,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 	w.Header().Set("Content-Type", "text/plain")
 	if _, err := w.Write([]byte("OK\n")); err != nil {
-		log.Printf("Login: failed to write: %v", err)
+		log.Errorf("Login: failed to write: %v", err)
 	}
 }
 
@@ -193,7 +193,7 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 
 	if _, err := cookieMonster.Logout(ctx, &pb.LogoutRequest{Cookie: q}); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("Logout: failed to RPC: %v", err)
+		log.Errorf("Logout: failed to RPC: %v", err)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -205,7 +205,7 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 	})
 	w.Header().Set("Content-Type", "text/plain")
 	if _, err := w.Write([]byte("OK\n")); err != nil {
-		log.Printf("Logout: failed to write: %v", err)
+		log.Warningf("Logout: failed to write: %v", err)
 	}
 }
 
@@ -215,7 +215,7 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 
 	lease, ok := mux.Vars(r)["leaseID"]
 	if !ok {
-		log.Printf("Internal error: leaseID not passed in to handleImage")
+		log.Errorf("Internal error: leaseID not passed in to handleImage")
 		http.Error(w, "Internal error", http.StatusInternalServerError)
 		return
 	}
@@ -239,7 +239,7 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 		}()
 		for data := range ch {
 			if _, err := w.Write(data); err != nil {
-				log.Printf("Failed streaming result to client: %v", err)
+				log.Warningf("Failed streaming result to client: %v", err)
 				return
 			}
 		}
@@ -264,7 +264,7 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(rpcErrorToHTTPError(err))
 					fmt.Fprintf(w, "Failed to stream image data: %v\n", grpc.ErrorDesc(err))
 				}
-				log.Printf("Failed streaming result over RPC: %v", err)
+				log.Errorf("Failed streaming result over RPC: %v", err)
 				return
 			}
 			// Only sent on first packet.
@@ -287,7 +287,7 @@ func handleLease(ctx context.Context, w http.ResponseWriter, r *http.Request) (i
 	// Get lease.
 	lease, ok := mux.Vars(r)["leaseID"]
 	if !ok {
-		log.Printf("leaseID not passed in to handleLease")
+		log.Warningf("leaseID not passed in to handleLease")
 		return nil, fmt.Errorf("no lease provided")
 	}
 	reply, err := sched.Lease(ctx, &pb.LeaseRequest{LeaseId: lease})
@@ -302,7 +302,7 @@ func handleLease(ctx context.Context, w http.ResponseWriter, r *http.Request) (i
 			msg := fmt.Sprintf("Lease %q not found", lease)
 			return nil, httpError(http.StatusNotFound, msg, msg)
 		default:
-			log.Printf("Backend call: %v", err)
+			log.Errorf("Backend call: %v", err)
 			return nil, fmt.Errorf("backend broke :-(")
 		}
 	}
@@ -387,11 +387,11 @@ func handleRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 
 	wg.Wait()
 	if len(errs) > 0 {
-		log.Printf("Errors: %v", errs)
+		log.Errorf("Errors: %v", errs)
 	}
 	statsOverall, err := readStatsOverall()
 	if err != nil {
-		log.Printf("Failed to read overall stats: %v", err)
+		log.Errorf("Failed to read overall stats: %v", err)
 		statsOverall = &pb.StatsOverall{}
 	}
 	ret := &struct {
@@ -424,12 +424,12 @@ func handleOrder(ctx context.Context, w http.ResponseWriter, r *http.Request) (i
 	defer cancel()
 
 	// Get order.
-	order, ok := mux.Vars(r)["orderID"]
-	if !ok {
-		log.Printf("orderID not passed in to handleOrder")
-		return nil, fmt.Errorf("no order provided")
+	orderID, err := getUUID(r, "orderID")
+	if err != nil {
+		log.Warningf("orderID not passed in to handleOrder")
+		return nil, err
 	}
-	reply, err := sched.Order(ctx, &pb.OrderRequest{OrderId: []string{order}})
+	reply, err := sched.Order(ctx, &pb.OrderRequest{OrderId: []string{orderID.String()}})
 	if err != nil {
 		return nil, err
 	}
@@ -444,6 +444,33 @@ func handleOrder(ctx context.Context, w http.ResponseWriter, r *http.Request) (i
 	}, nil
 }
 
+func getUUID(r *http.Request, key string) (*uuid.UUID, error) {
+	v, ok := mux.Vars(r)[key]
+	if !ok {
+		return nil, fmt.Errorf("key %q not found in request", key)
+	}
+	u, err := uuid.Parse(v)
+	return &u, err
+}
+
+func handleBatch(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
+	ctx, cancel := context.WithTimeout(httpContext(r), 10*time.Second)
+	defer cancel()
+
+	batchID, err := getUUID(r, "batchID")
+	if err != nil {
+		return nil, err
+	}
+
+	return &struct {
+		Root    string
+		BatchID *uuid.UUID
+	}{
+		Root:    *root,
+		BatchID: batchID,
+	}, nil
+}
+
 func handleDone(ctx context.Context, w http.ResponseWriter, r *http.Request) (interface{}, error) {
 	var errs []error
 
@@ -453,7 +480,7 @@ func handleDone(ctx context.Context, w http.ResponseWriter, r *http.Request) (in
 		var err error
 		doneLeases, err = getLeases(ctx, true)
 		if err != nil {
-			log.Printf("Error: %v", err)
+			log.Errorf("Error: %v", err)
 			errs = append(errs, fmt.Errorf("getLeases(true): %v", err))
 		}
 	}
@@ -499,7 +526,7 @@ func getLoggedIn(ctx context.Context) bool {
 	}
 	_, err := cookieMonster.CheckCookie(ctx, &pb.CheckCookieRequest{Cookie: c})
 	if err != nil {
-		log.Printf("Cookie invalid: %v", err)
+		log.Warningf("Cookie invalid: %v", err)
 		return false
 	}
 	return true
@@ -526,14 +553,14 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(code)
 		fmt.Fprintf(w, "Error: %v", msg)
-		log.Printf("Error rendering page: %v", err)
+		log.Errorf("Error rendering page: %v", err)
 		return
 	}
 	var buf bytes.Buffer
 	if err := h.tmpl.Execute(&buf, data); err != nil {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("Template rendering failed: %v", err)
+		log.Errorf("Template rendering failed: %v", err)
 		fmt.Fprintf(w, "Internal error: Failed to render page")
 		return
 	}
@@ -555,13 +582,13 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("Template rendering failed: %v", err)
+		log.Errorf("Template rendering failed: %v", err)
 		fmt.Fprintf(w, "Internal error: Failed to render page")
 		return
 	}
 	if r.Method != "HEAD" {
 		if _, err := w.Write(buf2.Bytes()); err != nil {
-			log.Printf("Failed to write page to network: %v", err)
+			log.Warningf("Failed to write page to network: %v", err)
 			return
 		}
 	}
@@ -649,7 +676,6 @@ func connectScheduler(addr string) error {
 }
 
 func main() {
-	log.SetFlags(log.Ldate | log.Ltime | log.LUTC)
 	flag.Parse()
 	if flag.NArg() > 0 {
 		log.Fatalf("Got extra args on cmdline: %q", flag.Args())
@@ -684,13 +710,14 @@ func main() {
 	r.Handle(path.Join("/", *root, "join"), wrap(handleJoin, joinTmpl)).Methods("GET", "HEAD")
 	r.HandleFunc(path.Join("/", *root, "image/{leaseID}"), handleImage).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "order/{orderID}"), wrap(handleOrder, orderTmpl)).Methods("GET", "HEAD")
+	r.Handle(path.Join("/", *root, "batch/{batchID}"), wrap(handleBatch, batchTmpl)).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "lease/{leaseID}"), wrap(handleLease, leaseTmpl)).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "stats"), wrapTmpl(handleStats, dist.TmplStatsHTML)).Methods("GET", "HEAD")
 	r.HandleFunc(path.Join("/", *root, "cert"), handleCert).Methods("GET", "HEAD")
 	r.HandleFunc(path.Join("/", *root, "login"), handleLogin).Methods("POST")
 	r.HandleFunc(path.Join("/", *root, "logout"), handleLogout).Methods("POST")
 	r.Handle(path.Join("/", *root, "stats/{blaha}"), http.FileServer(http.Dir(*statsDir))).Methods("GET", "HEAD")
-	log.Printf("Running dscheduler webui...")
+	log.Infof("Running dscheduler webui...")
 	if err := fcgi.Serve(sock, r); err != nil {
 		log.Fatal("Failed to start serving fcgi: ", err)
 	}

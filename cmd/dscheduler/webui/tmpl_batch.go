@@ -1,0 +1,8 @@
+// -*- html -*-
+package main
+
+const batchTmpl = `
+{{ $root := . }}
+<h2>TODO: Show more information here</h2>
+Batch: {{.BatchID}}
+`
