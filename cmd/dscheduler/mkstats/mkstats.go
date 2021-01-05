@@ -61,18 +61,22 @@ var revisionRE = regexp.MustCompile(`^Revision\s*:\s+(\w+)$`)
 //   ncpu = X
 func getMachine(cloud *pb.Cloud, cpuinfo string) (string, string, string, int) {
 	var cpuName string
-	var cpus int
+	var models int
+	var processors int
 	var revision string
 	for _, l := range strings.Split(cpuinfo, "\n") {
 		if strings.HasPrefix(l, "model name") {
-			if cpus == 0 {
+			if models == 0 {
 				m := cpuRE.FindStringSubmatch(l)
 				cpuName = m[1]
 			}
-			cpus++
+			models++
+		}
+		if strings.HasPrefix(l, "processor\t") {
+			processors++
 		}
 		if strings.Contains(l, "Raspberry Pi 4 Model") {
-			cpus = 4
+			processors = 4
 			cpuName = "RaspberryPi4"
 			break
 		}
@@ -83,6 +87,10 @@ func getMachine(cloud *pb.Cloud, cpuinfo string) (string, string, string, int) {
 			}
 			revision = m[1]
 		}
+	}
+	cpus := models
+	if cpus == 0 {
+		cpus = processors
 	}
 
 	cNamePrefix := ""
