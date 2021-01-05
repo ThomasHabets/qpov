@@ -67,8 +67,17 @@ func FormatDuration(t time.Duration) string {
 	return strings.Join(ret, " ")
 }
 
+const (
+	secondsPerYear int64 = 86400 * 365.24
+)
+
 func FmtSecondDuration(e int64) string {
-	return FormatDuration(time.Second * time.Duration(e))
+	var years string
+	if d := secondsPerYear; e > d {
+		years = fmt.Sprintf("%dy ", e/d)
+		e %= d
+	}
+	return years + FormatDuration(time.Second*time.Duration(e))
 }
 
 func init() {
