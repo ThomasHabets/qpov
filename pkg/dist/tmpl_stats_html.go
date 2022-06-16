@@ -28,9 +28,9 @@ const tmplsStatsHTML = `
   <tr><th>Machine time</th><td>{{.Stats.MachineTime|cputime2string}}</td></tr>
 </table>
 
-<img src="{{.Root}}/stats/framerate.svg" />
-<img src="{{.Root}}/stats/cpurate.svg" />
-<img src="{{.Root}}/stats/leases.svg" />
+<img src="{{.Root}}/stats/framerate.png" />
+<img src="{{.Root}}/stats/cpurate.png" />
+<img src="{{.Root}}/stats/leases.png" />
 
 <h2>Machine CPU time</h2>
 <table>

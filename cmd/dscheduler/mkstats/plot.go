@@ -34,9 +34,11 @@ set ylabel "{{.Meta.YAxisLabel}}"
 set format x "%Y-%m-%d"
 set xrange [ "{{.Meta.From}}":"{{.Meta.To}}" ]
 set key below
+set xtics font ", 10"
+set xtics rotate by 30 right
 
-set terminal svg size 800,300
-# set terminal png size 800,300 truecolor
+#set terminal svg size 800,300
+set terminal png size 1200,300 truecolor
 set output "{{.Meta.OutputFile}}"
 plot \
 {{range enumerate .Count -}}

@@ -411,7 +411,7 @@ func mkstats(ctx context.Context, metaChan <-chan *pb.RenderingMetadata) (*pb.St
 				From:       from,
 				To:         to,
 				YAxisLabel: v.yAxisLabel,
-				OutputFile: path.Join(*outDir, fmt.Sprintf("%s.svg", k)),
+				OutputFile: path.Join(*outDir, fmt.Sprintf("%s.png", k)),
 			}); err != nil {
 				return nil, err
 			}
@@ -448,7 +448,7 @@ func mkstats(ctx context.Context, metaChan <-chan *pb.RenderingMetadata) (*pb.St
 			YAxisLabel: "Frames per day",
 			From:       from,
 			To:         to,
-			OutputFile: path.Join(*outDir, "framerate.svg"),
+			OutputFile: path.Join(*outDir, "framerate.png"),
 		}); err != nil {
 			return nil, err
 		}
