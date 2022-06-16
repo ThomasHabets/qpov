@@ -1,13 +1,3 @@
-// -*- html -*-
-package dist
-
-import (
-	"html/template"
-)
-
-var TmplStatsHTML *template.Template
-
-const tmplsStatsHTML = `
 {{ $root := . }}
 <h1>QPov stats</h1>
 <style>
@@ -79,10 +69,3 @@ const tmplsStatsHTML = `
   </tr>
   {{end}}
 </table>
-`
-
-func init() {
-	TmplStatsHTML = template.New("tmpl_stats_html")
-	TmplStatsHTML.Funcs(tmplStatsFuncs)
-	template.Must(TmplStatsHTML.Parse(tmplsStatsHTML))
-}

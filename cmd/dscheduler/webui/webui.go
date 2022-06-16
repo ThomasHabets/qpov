@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	_ "embed"
 	"flag"
 	"fmt"
 	"html/template"
@@ -16,7 +17,6 @@ import (
 	"path"
 	"sync"
 	"time"
-	_ "embed"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
@@ -65,14 +65,18 @@ var (
 
 	//go:embed root.html
 	rootTmpl string
-	tmplRoot      template.Template
+	tmplRoot template.Template
 
 	//go:embed batch.html
 	batchTmpl string
 
 	//go:embed design.html
 	tmplDesignString string
-	tmplDesign = template.Must(template.New("design").Parse(tmplDesignString))
+	tmplDesign       = template.Must(template.New("design").Parse(tmplDesignString))
+
+	//go:embed stats.html
+	tmplStatsString string
+	tmplStats       *template.Template
 
 	//go:embed done.html
 	doneTmpl string
@@ -82,6 +86,12 @@ var (
 
 	forwardRPCKeys = []string{"id", "source", "http.remote_addr", "http.cookie"}
 )
+
+func init() {
+	tmplStats = template.New("stats")
+	tmplStats.Funcs(dist.TmplStatsFuncs)
+	template.Must(tmplStats.Parse(tmplStatsString))
+}
 
 func httpContext(r *http.Request) context.Context {
 	ctx := context.Background()
@@ -730,7 +740,7 @@ func main() {
 	r.Handle(path.Join("/", *root, "order/{orderID}"), wrap(handleOrder, orderTmpl)).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "batch/{batchID}"), wrap(handleBatch, batchTmpl)).Methods("GET", "HEAD")
 	r.Handle(path.Join("/", *root, "lease/{leaseID}"), wrap(handleLease, leaseTmpl)).Methods("GET", "HEAD")
-	r.Handle(path.Join("/", *root, "stats"), wrapTmpl(handleStats, dist.TmplStatsHTML)).Methods("GET", "HEAD")
+	r.Handle(path.Join("/", *root, "stats"), wrapTmpl(handleStats, tmplStats)).Methods("GET", "HEAD")
 	r.HandleFunc(path.Join("/", *root, "cert"), handleCert).Methods("GET", "HEAD")
 	r.HandleFunc(path.Join("/", *root, "login"), handleLogin).Methods("POST")
 	r.HandleFunc(path.Join("/", *root, "logout"), handleLogout).Methods("POST")

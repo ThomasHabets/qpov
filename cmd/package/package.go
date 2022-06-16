@@ -22,16 +22,16 @@ package main
 //   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 import (
-	"flag"
-	"io"
-	"os"
-	"path"
-	"strings"
 	"archive/tar"
 	"compress/gzip"
+	"flag"
 	"fmt"
+	"io"
 	"log"
+	"os"
+	"path"
 	"path/filepath"
+	"strings"
 )
 
 var (
@@ -165,7 +165,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to open output file %q: %v", *out, err)
 	}
-	if err := func() (err error){
+	if err := func() (err error) {
 		foz, err := gzip.NewWriterLevel(fo, gzip.BestCompression)
 		if err != nil {
 			return err

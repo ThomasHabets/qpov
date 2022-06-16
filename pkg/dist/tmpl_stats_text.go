@@ -30,7 +30,7 @@ Per frame machine CPU time:
 
 var (
 	TmplStatsText  *template.Template
-	tmplStatsFuncs = map[string]interface{}{
+	TmplStatsFuncs = map[string]interface{}{
 		"sprintf":        fmt.Sprintf,
 		"sumcpu":         func(c *pb.StatsCPUTime) int64 { return c.UserSeconds + c.SystemSeconds },
 		"div6432":        func(b int32, a int64) int64 { return a / int64(b) },
@@ -82,6 +82,6 @@ func FmtSecondDuration(e int64) string {
 
 func init() {
 	TmplStatsText = template.New("tmpl_stats_text")
-	TmplStatsText.Funcs(tmplStatsFuncs)
+	TmplStatsText.Funcs(TmplStatsFuncs)
 	template.Must(TmplStatsText.Parse(tmplsStatsText))
 }
