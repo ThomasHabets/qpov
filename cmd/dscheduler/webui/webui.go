@@ -106,7 +106,7 @@ func httpContext(r *http.Request) context.Context {
 
 // Format milliseconds as a date using format string `s`.
 func fmsdate(s string, ms int64) string {
-	return time.Unix(ms/1000, 0).Format(s)
+	return time.Unix(ms/1000, 0).UTC().Format(s)
 }
 
 // take two milliseconds, subtract them as time.Duration and return as string.
