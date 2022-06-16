@@ -16,6 +16,7 @@ import (
 	"path"
 	"sync"
 	"time"
+	_ "embed"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
@@ -61,7 +62,23 @@ var (
 
 	sched         pb.SchedulerClient
 	cookieMonster pb.CookieMonsterClient
+
+	//go:embed root.html
+	rootTmpl string
 	tmplRoot      template.Template
+
+	//go:embed batch.html
+	batchTmpl string
+
+	//go:embed design.html
+	tmplDesignString string
+	tmplDesign = template.Must(template.New("design").Parse(tmplDesignString))
+
+	//go:embed done.html
+	doneTmpl string
+
+	//go:embed join.html
+	joinTmpl string
 
 	forwardRPCKeys = []string{"id", "source", "http.remote_addr", "http.cookie"}
 )
@@ -152,6 +169,7 @@ func handleCert(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleLogin(w http.ResponseWriter, r *http.Request) {
+	log.Infof("handleLogin() called")
 	ctx, cancel := context.WithTimeout(httpContext(r), time.Minute)
 	defer cancel()
 

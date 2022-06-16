@@ -1,11 +1,3 @@
-// -*- html -*-
-package main
-
-import (
-	"html/template"
-)
-
-var tmplDesign = template.Must(template.New("design").Parse(`
 {{$root := .}}
 <html>
   <head>
@@ -142,4 +134,3 @@ tr:nth-child(odd) {
     };
   </script>
 </html>
-`))
