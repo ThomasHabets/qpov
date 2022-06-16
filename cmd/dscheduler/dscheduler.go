@@ -263,8 +263,10 @@ func getUser(ctx context.Context) (*user, error) {
 		nu, err := readUserByOAuth(ctx, sub)
 		if err != nil {
 			// OAuth subject valid but unknown. Associate with email if possible.
+			log.Infof("User %q (%q) is logged in, but subjectID is not in database", email, sub)
 			if err := setUserOAuthByEmail(ctx, email, sub); err != nil {
 				// Logged in but not as anyone in the database.
+				log.Infof("Failed to insert subjectID for %q (%q) into database. Err: %v", email, sub, err)
 				return u, nil
 			}
 		}
@@ -282,13 +284,24 @@ func getUser(ctx context.Context) (*user, error) {
 }
 
 func setUserOAuthByEmail(ctx context.Context, email, sub string) error {
-	_, err := db.ExecContext(ctx, `
+	res, err := db.ExecContext(ctx, `
 UPDATE users
 SET    oauth_subject=$2
 WHERE  email=$1
 AND    oauth_subject IS NULL
 `, email, sub)
-	return err
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		// Database doesn't support it.
+		return nil
+	}
+	if n != 1 {
+		return fmt.Errorf("failed to update subjectID. Want 1, got %d", n)
+	}
+	return nil
 }
 
 func mintCert(u *user) ([]byte, error) {
@@ -1088,6 +1101,7 @@ ORDER BY %s`, metadataCol, ordering)
 		log.Warningf("Getting user: %v", err)
 		return fmt.Errorf("error getting user")
 	}
+	log.Infof("User: %+v", user)
 	for rows.Next() {
 		if ctx.Err() != nil {
 			return err
