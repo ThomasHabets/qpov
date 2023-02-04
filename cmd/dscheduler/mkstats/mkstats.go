@@ -78,6 +78,9 @@ func getMachine(cloud *pb.Cloud, cpuinfo string) (string, string, string, int) {
 			processors = 4
 			cpuName = "Raspberry Pi Zero 2"
 		}
+		if strings.Contains(l, "sifive,u74-mc") {
+			cpuName = "SiFive U74 RISC-V"
+		}
 		if strings.HasPrefix(l, "processor\t") {
 			processors++
 		}
