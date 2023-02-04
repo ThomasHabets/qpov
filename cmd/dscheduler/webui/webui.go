@@ -140,6 +140,9 @@ func getLeases(ctx context.Context, done bool) ([]*pb.Lease, error) {
 		} else if err != nil {
 			return nil, fmt.Errorf("Leases RPC stream: %v", err)
 		}
+		if r.Lease.GetHostname() == "" {
+			r.Lease.Hostname = r.Lease.GetMetadata().GetHostname()
+		}
 		leases = append(leases, r.Lease)
 	}
 	return leases, nil
