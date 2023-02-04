@@ -561,19 +561,21 @@ func main() {
 
 	// Write HTML to file.
 	{
-		fo, err := os.Create(path.Join(*outDir, "index.html"))
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer fo.Close()
-		if err := dist.TmplStatsHTML.Execute(fo, &struct {
-			Root  *string
-			Stats *pb.StatsOverall
-		}{Stats: stats}); err != nil {
-			log.Fatal(err)
-		}
-		if err := fo.Close(); err != nil {
-			log.Fatal(err)
-		}
+		/*
+			fo, err := os.Create(path.Join(*outDir, "index.html"))
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer fo.Close()
+			if err := dist.TmplStatsHTML.Execute(fo, &struct {
+				Root  *string
+				Stats *pb.StatsOverall
+			}{Stats: stats}); err != nil {
+				log.Fatal(err)
+			}
+			if err := fo.Close(); err != nil {
+				log.Fatal(err)
+			}
+		*/
 	}
 }
