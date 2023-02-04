@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"sync"
 
-	jwt "github.com/dgrijalva/jwt-go"
+	jwt "github.com/golang-jwt/jwt"
 	"golang.org/x/net/context"
 	"golang.org/x/net/context/ctxhttp"
 )
