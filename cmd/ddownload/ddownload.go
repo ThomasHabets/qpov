@@ -112,6 +112,10 @@ func main() {
 	}
 	defer sched.Close()
 
+	if _, err := os.Lstat(*out); err == nil {
+		log.Fatalf("%q already exists", *out)
+	}
+
 	fo, err := os.Create(*out)
 	if err != nil {
 		log.Fatalf("Failed to create -out %q: %v", *out, err)
