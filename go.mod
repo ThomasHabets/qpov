@@ -13,7 +13,7 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/lib/pq v1.10.9
 	github.com/sirupsen/logrus v1.9.3
-	golang.org/x/net v0.32.0
+	golang.org/x/net v0.33.0
 	google.golang.org/api v0.212.0
 	google.golang.org/grpc v1.69.0
 )
