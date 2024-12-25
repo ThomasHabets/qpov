@@ -161,8 +161,8 @@ func getPeerCert(ctx context.Context) (*x509.Certificate, error) {
 }
 
 type server struct {
-	pb.UnimplementedSchedulerServer
-	pb.UnimplementedCookieMonsterServer
+	pb.UnsafeSchedulerServer
+	pb.UnsafeCookieMonsterServer
 	rpcLog *rpclog.Logger
 }
 
