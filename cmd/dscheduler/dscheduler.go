@@ -24,7 +24,7 @@ import (
 
 	storage "cloud.google.com/go/storage"
 	"github.com/ThomasHabets/go-uuid/uuid"
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
@@ -161,6 +161,8 @@ func getPeerCert(ctx context.Context) (*x509.Certificate, error) {
 }
 
 type server struct {
+	pb.UnimplementedSchedulerServer
+	pb.UnimplementedCookieMonsterServer
 	rpcLog *rpclog.Logger
 }
 

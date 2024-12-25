@@ -1,5 +1,6 @@
 syntax = "proto3";
 package rpclog;
+option go_package = "pkg/dist/rpclog/proto";
 
 message Any {
         string type_url = 1;

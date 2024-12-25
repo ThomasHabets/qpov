@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 	"golang.org/x/net/context"
 	_ "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"

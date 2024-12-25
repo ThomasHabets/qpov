@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 	"github.com/lib/pq"
 	"golang.org/x/net/context"
 

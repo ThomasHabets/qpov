@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 
 	qpovpb "github.com/ThomasHabets/qpov/pkg/dist/qpov"
 	"github.com/ThomasHabets/qpov/pkg/dist/rpclog"

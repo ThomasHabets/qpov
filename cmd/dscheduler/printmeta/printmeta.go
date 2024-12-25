@@ -8,7 +8,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 
 	pb "github.com/ThomasHabets/qpov/pkg/dist/qpov"
 )

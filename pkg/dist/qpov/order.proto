@@ -1,5 +1,6 @@
 syntax = "proto3";
 package qpov;
+option go_package = "pkg/dist/qpov";
 
 message Order {
         string package = 1; // URL/S3 path to package.

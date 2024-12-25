@@ -1,5 +1,6 @@
 syntax = "proto3";
 package qpov;
+option go_package = "pkg/dist/qpov";
 import "order.proto";
 import "metadata.proto";
 
