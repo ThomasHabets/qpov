@@ -24,7 +24,6 @@ import (
 
 	storage "cloud.google.com/go/storage"
 	"github.com/ThomasHabets/go-uuid/uuid"
-	"google.golang.org/protobuf/proto"
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
@@ -34,6 +33,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	grpcmetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ThomasHabets/qpov/pkg/dist"
 	pb "github.com/ThomasHabets/qpov/pkg/dist/qpov"

@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"google.golang.org/protobuf/proto"
+	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"

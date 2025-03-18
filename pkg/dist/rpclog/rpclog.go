@@ -6,12 +6,12 @@ import (
 	"sync"
 	"time"
 
-	"google.golang.org/protobuf/proto"
 	"golang.org/x/net/context"
 	_ "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/protobuf/proto"
 
 	pb "github.com/ThomasHabets/qpov/pkg/dist/rpclog/proto"
 )

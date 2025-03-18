@@ -123,8 +123,9 @@ type RawEdge struct {
 // reconstruct the vectors. DistS and DistT is used to align the texture (slide it around in the plane).
 //
 // A vertex's texture coordinates can be obtained with:
-//   s = (v dot VectorS) + distS
-//   t = (v dot VectorT) + distT
+//
+//	s = (v dot VectorS) + distS
+//	t = (v dot VectorT) + distT
 //
 // I guess it's more space efficient to calculate s&t as needed from the texinfo rather than
 // to store it with the LEdges, and that's why.
@@ -226,14 +227,15 @@ func parseVertex(s string) (Vertex, error) {
 
 // Entities is a big string in the file with a list of key values per entity.
 // E.g.:
-//   {
-//     "classname" "light"
-//     "origin" "1 2 3"
-//   }
-//   {
-//     "classname" "weapon_shotgun"
-//     "origin" "4 5 6"
-//   }
+//
+//	{
+//	  "classname" "light"
+//	  "origin" "1 2 3"
+//	}
+//	{
+//	  "classname" "weapon_shotgun"
+//	  "origin" "4 5 6"
+//	}
 func parseEntities(in string) ([]Entity, error) {
 	buf := bytes.NewBuffer([]byte(in))
 	scanner := bufio.NewScanner(buf)

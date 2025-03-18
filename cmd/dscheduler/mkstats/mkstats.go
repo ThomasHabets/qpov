@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/protobuf/proto"
 	"github.com/lib/pq"
 	"golang.org/x/net/context"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ThomasHabets/qpov/pkg/dist"
 	pb "github.com/ThomasHabets/qpov/pkg/dist/qpov"
@@ -56,10 +56,11 @@ var revisionRE = regexp.MustCompile(`^Revision\s*:\s+(\w+)$`)
 
 // Get machine type from cloud and cpuinfo data.
 // Returns machine, model, short, ncpu.
-//   machine = "X x CPU DESCRIPTION"
-//   model = "CPU DESCRIPTION"
-//   short = "Raspberry pi 3"
-//   ncpu = X
+//
+//	machine = "X x CPU DESCRIPTION"
+//	model = "CPU DESCRIPTION"
+//	short = "Raspberry pi 3"
+//	ncpu = X
 func getMachine(cloud *pb.Cloud, cpuinfo string) (string, string, string, int) {
 	var cpuName string
 	var models int
