@@ -51,7 +51,7 @@ func anyText(msg *pb.Any) string {
 	if err := proto.Unmarshal(msg.Value, d); err != nil {
 		return fmt.Sprintf("%x", msg.Value)
 	}
-	return d.String()
+	return fmt.Sprint(d)
 }
 
 func main() {
