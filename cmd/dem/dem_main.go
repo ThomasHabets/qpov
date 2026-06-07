@@ -197,7 +197,16 @@ func convert(p pak.MultiPak, args ...string) {
 				}
 			} else if m, ok := msg.(*dem.MsgPlaySound); ok {
 				if false {
-					fmt.Printf("Play sound %d: %+v at %f\n", m.Sound, newState.ServerInfo.Sounds[m.Sound], newState.Time)
+					dist_clip := 1000.0 // QW/client/snd_dma.c
+					soundpos := dem.Vertex{m.X, m.Y, m.Z}
+					att := float64(m.Attenuation) / 64.0
+					dist_mult := att / dist_clip
+					distance := soundpos.Distance(&newState.Entities[newState.CameraEnt].Pos)
+					dist := distance * dist_mult
+					net_volume := (1.0 - dist) * 1.0
+					// TODO: do left/right like in
+					// QW/client/snd_dma.c
+					fmt.Printf("Play sound %d: %+v at %f volume %d attenuation %f at (%f,%f,%f) distance %f net volume %f\n", m.Sound, newState.ServerInfo.Sounds[m.Sound], newState.Time, m.Volume, att, m.X, m.Y, m.Z, distance, net_volume)
 				}
 			} else if m, ok := msg.(*dem.MsgUpdate); ok {
 				if false {
@@ -257,10 +266,10 @@ func convert(p pak.MultiPak, args ...string) {
 		var files []string
 		var delays []string
 		for _, s := range newState.Sounds {
-			files = append(files, newState.ServerInfo.Sounds[s.Sound.Sound])
-			delays = append(delays, fmt.Sprint(s.Time))
+			files = append(files, fmt.Sprintf("-v %f %s \\\n", s.Volume, newState.ServerInfo.Sounds[s.Sound.Sound]))
+			delays = append(delays, fmt.Sprintf("%f \\\n", s.Time))
 		}
-		fmt.Fprintf(fs, "sox -M %s -b 16 -c 1 -r 44100 out.wav delay %s remix -p - trim 1.5\n", strings.Join(files, " "), strings.Join(delays, " "))
+		fmt.Fprintf(fs, "sox -M \\\n %s -b 16 -c 1 -r 44100 out.wav delay \\\n%s remix -p - trim 1.5\n", strings.Join(files, " "), strings.Join(delays, " "))
 	}
 }
 

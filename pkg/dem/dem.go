@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 
 	"github.com/ThomasHabets/qpov/pkg/bsp"
 )
@@ -112,6 +113,11 @@ type Vertex struct {
 
 func (v *Vertex) String() string {
 	return fmt.Sprintf("%f,%f,%f", v.X, v.Y, v.Z)
+}
+
+func (v *Vertex) Distance(other *Vertex) float64 {
+	diff := Vertex{v.X - other.X, v.Y - other.Y, v.Z - other.Z}
+	return math.Sqrt(float64(diff.X*diff.X + diff.Y*diff.Y + diff.Z*diff.Z))
 }
 
 type Entity struct {
@@ -300,8 +306,9 @@ func readInt16(r io.Reader) (int16, error) {
 }
 
 type SoundEvent struct {
-	Time  float64
-	Sound MsgPlaySound
+	Time   float64
+	Sound  MsgPlaySound
+	Volume float64
 }
 type State struct {
 	Time       float64
@@ -502,9 +509,22 @@ type MsgPlaySound struct {
 }
 
 func (m MsgPlaySound) Apply(s *State) {
+        // TODO: use XYZ to properly set left/right channel.
+        // And use EntiteChannel to interrupt existing sounds.
+	dist_clip := 1000.0 // QW/client/snd_dma.c
+	soundpos := Vertex{m.X, m.Y, m.Z}
+	att := float64(m.Attenuation) / 64.0
+	dist_mult := att / dist_clip
+	distance := soundpos.Distance(&s.Entities[s.CameraEnt].Pos)
+	dist := distance * dist_mult
+	net_volume := (1.0 - dist) * 1.0
+	if net_volume < 0.0 {
+		return
+	}
 	s.Sounds = append(s.Sounds, SoundEvent{
-		Time:  s.Time,
-		Sound: m,
+		Time:   s.Time,
+		Sound:  m,
+		Volume: net_volume,
 	})
 }
 
@@ -579,10 +599,13 @@ func (block *Block) DecodeMessage() (Message, error) {
 	case 0x06: // Play sound.
 		snd := MsgPlaySound{}
 		mask, err := readUint8(block.buf)
+		//fmt.Println("mask", mask, err)
 		if err != nil {
 			return nil, err
 		}
 		if mask&0x1 != 0 {
+			//panic("this never happens?")
+			// TODO: is volume really never set?
 			t, err := readUint8(block.buf) // vol
 			if err != nil {
 				return nil, err
@@ -590,6 +613,7 @@ func (block *Block) DecodeMessage() (Message, error) {
 			snd.Volume = int(t)
 		}
 		if mask&0x2 != 0 {
+			// Attenuation, when set, is always 128?
 			t, err := readUint8(block.buf) // attenuation
 			if err != nil {
 				return nil, err
