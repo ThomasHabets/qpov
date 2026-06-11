@@ -411,15 +411,15 @@ func LoadRaw(r myReader) (*Raw, error) {
 		}
 		for n := range mipTexOfs {
 			// Read header.
-			if _, err := r.Seek(int64(raw.Header.Miptex.Offset+mipTexOfs[n]), 0); err != nil {
-				return nil, fmt.Errorf("seeking to miptex %v header at %v+%v=%v: %v",
-					n, raw.Header.Miptex.Offset, mipTexOfs[n], raw.Header.Miptex.Offset+mipTexOfs[n], err)
-			}
 			if mipTexOfs[n] == unusedMipTexOffset {
 				// fmt.Printf("Skipping texture near %d\n", n)
 				// Make fake texture that won't be referenced.
 				raw.MipTexData = append(raw.MipTexData, image.NewPaletted(image.Rectangle{Max: image.Point{X: 8, Y: 8}}, mdl.QuakePalette))
 				continue
+			}
+			if _, err := r.Seek(int64(raw.Header.Miptex.Offset+mipTexOfs[n]), 0); err != nil {
+				return nil, fmt.Errorf("seeking to miptex %v header at %v+%v=%v: %v",
+					n, raw.Header.Miptex.Offset, mipTexOfs[n], raw.Header.Miptex.Offset+mipTexOfs[n], err)
 			}
 			if err := binary.Read(r, binary.LittleEndian, &raw.MipTex[n]); err != nil {
 				return nil, fmt.Errorf("reading miptex %d header: %v", n, err)
