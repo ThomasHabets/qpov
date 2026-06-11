@@ -66,7 +66,7 @@ func (r *Range) Set(s string) error {
 		}
 	}
 	if r.Skip < 1 {
-		fmt.Errorf("skip must be at least 1, was %d", r.Skip)
+		return fmt.Errorf("skip must be at least 1, was %d", r.Skip)
 	}
 	return nil
 }
