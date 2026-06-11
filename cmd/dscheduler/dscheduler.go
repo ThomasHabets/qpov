@@ -89,7 +89,7 @@ func dbError(doing string, err error) error {
 
 func internalError(public string, f string, a ...interface{}) error {
 	log.Errorf(f, a...)
-	return grpc.Errorf(codes.Internal, public)
+	return grpc.Errorf(codes.Internal, "%v", public)
 }
 
 // If error is not gRPC error, log and return "clean" error.

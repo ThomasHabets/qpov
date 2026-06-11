@@ -82,7 +82,7 @@ func convert(p pak.MultiPak, args ...string) {
 					//log.Printf("Creating model subdir: %v, continuing...", err)
 				}
 			}
-			fn := fmt.Sprintf(path.Join(mf, "model.inc"))
+			fn := fmt.Sprint(path.Join(mf, "model.inc"))
 			of, err := os.Create(path.Join(*outDir, fn))
 			if err != nil {
 				log.Fatalf("Model create of %q fail: %v", fn, err)

@@ -124,7 +124,7 @@ func convert(p pak.MultiPak, args ...string) {
 			}
 
 			mkdirP(*outDir, mf)
-			fn := fmt.Sprintf(path.Join(mf, "level.inc"))
+			fn := fmt.Sprint(path.Join(mf, "level.inc"))
 			of, err := os.Create(path.Join(*outDir, fn))
 			if err != nil {
 				log.Fatalf("Model create of %q fail: %v", fn, err)
