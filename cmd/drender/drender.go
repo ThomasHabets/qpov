@@ -222,11 +222,11 @@ func getCloud() (string, string) {
 			defer resp.Body.Close()
 			b, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
-                                log.Debugf("GCE read failed: %v", err)
-                        } else {
-                                re := regexp.MustCompile(`.*/`)
-                                return googleCloud, re.ReplaceAllString(string(b), "")
-                        }
+				log.Debugf("GCE read failed: %v", err)
+			} else {
+				re := regexp.MustCompile(`.*/`)
+				return googleCloud, re.ReplaceAllString(string(b), "")
+			}
 		}
 	}
 

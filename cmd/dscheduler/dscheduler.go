@@ -496,7 +496,7 @@ func (s *server) renew(ctx context.Context, lease, address string, secs int32) (
 	}
 
 	n := time.Now().Add(time.Duration(int64(time.Second) * int64(secs)))
-	if _, err := db.ExecContext(ctx, `
+	res, err := db.ExecContext(ctx, `
 UPDATE leases
 SET
     updated=NOW(),
@@ -506,8 +506,14 @@ SET
 WHERE lease_id=$2
 AND   done=FALSE
 AND   failed=FALSE
-`, n, lease, address, getRPCMetadataSQL(ctx, "hostname")); err != nil {
+`, n, lease, address, getRPCMetadataSQL(ctx, "hostname"))
+	if err != nil {
 		return time.Now(), dbError("Updating lease", err)
+	}
+	if nrows, err := res.RowsAffected(); err != nil {
+		log.Errorf("Renewing lease: failed to get number of rows affected: %v", err)
+	} else if nrows == 0 {
+		log.Warningf("Couldn't find lease to renew. Returning success anyway")
 	}
 	return n, nil
 }
@@ -536,15 +542,21 @@ func (s *server) Failed(ctx context.Context, in *pb.FailedRequest) (*pb.FailedRe
 	st := time.Now()
 	requestID := uuid.New()
 
-	if _, err := db.ExecContext(ctx, `
+	res, err := db.ExecContext(ctx, `
 UPDATE leases
 SET
   failed=TRUE,
   updated=NOW()
 WHERE done=FALSE
 AND   failed=FALSE
-AND   lease_id=$1`, in.LeaseId); err != nil {
+AND   lease_id=$1`, in.LeaseId)
+	if err != nil {
 		return nil, dbError("Marking failed", err)
+	}
+	if nrows, err := res.RowsAffected(); err != nil {
+		log.Errorf("Marking failed, RowsAffected failed: %v", err)
+	} else if nrows == 0 {
+		log.Warningf("Couldn't find lease to mark failed. Returning success anyway")
 	}
 
 	log.Warningf("RPC(Failed): Lease: %q", in.LeaseId)
