@@ -117,7 +117,7 @@ func main() {
 	flag.Parse()
 	done := make(chan bool)
 
-	if *concurrency < 0 {
+	if *concurrency < 1 {
 		*concurrency = runtime.NumCPU()
 	}
 
