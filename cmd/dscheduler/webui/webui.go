@@ -664,7 +664,7 @@ func connectScheduler(addr string) error {
 		caStr = string(b)
 
 		// Root CA.
-		cp := x509.NewCertPool()
+		cp = x509.NewCertPool()
 		if ok := cp.AppendCertsFromPEM([]byte(caStr)); !ok {
 			return fmt.Errorf("failed to add root CAs")
 		}
