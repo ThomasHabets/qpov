@@ -204,7 +204,7 @@ func (bsp *BSP) POVTriangleMesh(prefix string, withTextures bool, flatColor stri
 
 		triangles, err := bsp.makeTriangles(modelNumber)
 		if err != nil {
-			return "", nil
+			return "", err
 		}
 		if len(triangles) == 0 {
 			ret += "#end\n"
