@@ -597,6 +597,8 @@ func getMetadata(in *pb.DoneRequest) (*pb.RenderingMetadata, string, error) {
 }
 
 // Save results to Google Cloud Storage under gs://<bucket>/<type>/<leaseID>/filename.{png,meta.pb.gz}
+//
+// Note that realMeta can be empty, if the client did not supply it.
 func (s *server) saveToCloud(ctx context.Context, in *pb.DoneRequest, realMeta *pb.RenderingMetadata, base string, batch uuid.UUID) error {
 	dir := ""
 	if batch != nil {
@@ -633,6 +635,9 @@ func (s *server) saveToCloud(ctx context.Context, in *pb.DoneRequest, realMeta *
 	var metaErr error
 	go func() {
 		defer wg.Done()
+		if realMeta == nil {
+			return
+		}
 		fn := path.Join(dir, base+".meta.pb.gz")
 		obj := googleCloudStorage.Bucket(*uploadBucketName).Object(fn)
 		if _, err := obj.Attrs(ctx); err == nil {
